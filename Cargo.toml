@@ -2,10 +2,12 @@
 name = "pymemprofile"
 version = "0.1.0"
 authors = ["Itamar Turner-Trauring <itamar@pythonspeed.com>"]
+edition = "2018"
 
 [dependencies]
 redhook = "1.0"
 libc = "0.2"
+sysinfo = "0.10.3"
 
 [lib]
 name = "pymemprofile"
