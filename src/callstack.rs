@@ -4,16 +4,16 @@ use std::cell::RefCell;
 /// Memory usage is in bytes.
 struct Call {
     name: String,
-    starting_memory: u64,
-    peak_memory: u64,
+    starting_memory: usize,
+    peak_memory: usize,
 }
 
 impl Call {
-    fn new(name: String, starting_memory: u64) -> Call {
+    fn new(name: String, starting_memory: usize) -> Call {
         Call{name, starting_memory, peak_memory: 0}
     }
 
-    fn allocated_memory(&self) -> u64 {
+    fn allocated_memory(&self) -> usize {
         if self.starting_memory > self.peak_memory {
             0
         } else {
@@ -21,7 +21,7 @@ impl Call {
         }
     }
 
-    fn update_memory_usage(&mut self, currently_used_memory: u64) {
+    fn update_memory_usage(&mut self, currently_used_memory: usize) {
         if currently_used_memory > self.peak_memory {
             self.peak_memory = currently_used_memory;
         }
@@ -38,7 +38,7 @@ impl Callstack {
         Callstack{calls: Vec::new()}
     }
 
-    fn start_call(&mut self, name: String, currently_used_memory: u64) {
+    fn start_call(&mut self, name: String, currently_used_memory: usize) {
         self.calls.push(Call::new(name, currently_used_memory));
     }
 
@@ -54,7 +54,7 @@ impl Callstack {
         }
     }
 
-    fn update_memory_usage(&mut self, currently_used_memory: u64) {
+    fn update_memory_usage(&mut self, currently_used_memory: usize) {
         for call in &mut self.calls {
             call.update_memory_usage(currently_used_memory);
         }
@@ -64,7 +64,7 @@ impl Callstack {
 thread_local!(static CALLSTACK: RefCell<Callstack> = RefCell::new(Callstack::new()));
 
 /// Add to per-thread function stack:
-fn start_call(name: String, currently_used_memory: u64) {
+pub fn start_call(name: String, currently_used_memory: usize) {
     CALLSTACK.with(|cs| {
         cs.borrow_mut().start_call(name, currently_used_memory);
     });
@@ -72,18 +72,18 @@ fn start_call(name: String, currently_used_memory: u64) {
 
 /// Finish off (and move to reporting structure) current function in function
 /// stack.
-fn finish_call() {
+pub fn finish_call() {
     CALLSTACK.with(|cs| {
         cs.borrow_mut().finish_call();
     });
 }
 
 /// Update memory usage for calls in stack:
-fn update_memory_usage(currently_used_memory: u64) {
+pub fn update_memory_usage(currently_used_memory: usize) {
     CALLSTACK.with(|cs| {
         cs.borrow_mut().update_memory_usage(currently_used_memory);
     });
 }
 /// Create flamegraph SVG from function stack:
-fn dump_functions_to_flamegraph_svg() {
+pub fn dump_functions_to_flamegraph_svg(path: String) {
 }

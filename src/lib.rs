@@ -1,4 +1,7 @@
 use std::cell::RefCell;
+use std::ffi::CStr;
+use std::os::raw::c_char;
+
 mod callstack;
 
 thread_local!(static IN_MALLOC: RefCell<bool> = RefCell::new(false));
@@ -26,7 +29,9 @@ fn update_memory_usage_while_in_malloc() {
         // library's Rust calls malloc().
         if !*in_malloc.borrow() {
             *in_malloc.borrow_mut() = true;
-            println!("Memory usage: {}", get_memory_usage());
+            let memory = get_memory_usage();
+            println!("Memory usage: {}", memory);
+            callstack::update_memory_usage(memory);
             *in_malloc.borrow_mut() = false;
         }
     });
@@ -43,4 +48,25 @@ redhook::hook! {
     }
 }
 
-// TODO expose next three callstack functions via C ABI for use by Python
+#[no_mangle]
+pub extern "C" fn pymemprofile_start_call(name: *const c_char) {
+    let name = unsafe {
+        CStr::from_ptr(name).to_str().expect(
+            "Function name wasn't UTF-8")
+    };
+    callstack::start_call(name.to_string(), get_memory_usage());
+}
+
+#[no_mangle]
+pub extern "C" fn pymemprofile_finish_call() {
+    callstack::finish_call();
+}
+
+#[no_mangle]
+pub extern "C" fn pymemprofile_dump_functions_to_flamegraph_svg(path: *const c_char) {
+    let path = unsafe {
+        CStr::from_ptr(path).to_str().expect("Path wasn't UTF-8")
+    };
+    callstack::dump_functions_to_flamegraph_svg(path.to_string());
+    // TODO: Error handling?
+}
