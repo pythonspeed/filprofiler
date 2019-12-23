@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-//use sysinfo::{ProcessExt, SystemExt};
+mod callstack;
 
 thread_local!(static IN_MALLOC: RefCell<bool> = RefCell::new(false));
 
@@ -9,7 +9,7 @@ fn get_memory_usage() -> usize {
     let result = procinfo::pid::statm_self();
     match result {
         Ok(statm) => statm.resident * page_size::get(),
-        Err(E) => {
+        Err(_) => {
             println!("Couldn't find current process?! This is a bug.");
             std::process::exit(1)
         },
@@ -33,7 +33,7 @@ fn update_memory_usage_while_in_malloc() {
 
 }
 
-/// Override functions via C ABI, for LD_PRELOAD purposes.
+// Override functions via C ABI, for LD_PRELOAD purposes.
 // TODO: add calloc, realloc, posix_memalign. Probably not mmap?
 redhook::hook! {
     unsafe fn malloc(size: libc::size_t) -> *mut libc::c_void => my_malloc {
@@ -43,18 +43,4 @@ redhook::hook! {
     }
 }
 
-// TODO name for "python function" that is more generic?
-// TODO expose next three via C ABI for use by Python
-
-/// Add to per-thread function stack:
-fn start_function(name: str) {
-}
-
-/// Finish off (and move to reporting structure) current function in function
-/// stack.
-fn finish_function() {
-}
-
-/// Create flamegraph SVG from function stack:
-fn dump_functions_to_flamegraph_svg() {
-}
+// TODO expose next three callstack functions via C ABI for use by Python
