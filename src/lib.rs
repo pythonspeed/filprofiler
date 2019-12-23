@@ -1,23 +1,13 @@
 use std::cell::RefCell;
-use sysinfo::{ProcessExt, SystemExt};
+//use sysinfo::{ProcessExt, SystemExt};
 
 thread_local!(static IN_MALLOC: RefCell<bool> = RefCell::new(false));
 
-fn get_memory_usage() -> u64 {
-    let mut system = sysinfo::System::new_with_specifics(sysinfo::RefreshKind::new());
-    let result = sysinfo::get_current_pid();
+// procinfo-based is much much faster, but Linux-only for now.
+fn get_memory_usage() -> usize {
+    let result = procinfo::pid::statm_self();
     match result {
-        Ok(pid) => {
-            system.refresh_process(pid);
-            let optional_process = system.get_process(pid);
-            match optional_process {
-                None => {
-                    println!("Couldn't find current process?! This is a bug.");
-                    std::process::exit(1)
-                },
-                Some(process) => process.memory(),
-            }
-        },
+        Ok(statm) => statm.resident * page_size::get(),
         Err(E) => {
             println!("Couldn't find current process?! This is a bug.");
             std::process::exit(1)
@@ -34,7 +24,7 @@ redhook::hook! {
             // library's Rust calls malloc().
             if !*in_malloc.borrow() {
                 *in_malloc.borrow_mut() = true;
-                get_memory_usage();
+                println!("ALLOCATED: {}", get_memory_usage());
                 *in_malloc.borrow_mut() = false;
             }
         });

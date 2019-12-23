@@ -7,7 +7,9 @@ edition = "2018"
 [dependencies]
 redhook = "1.0"
 libc = "0.2"
-sysinfo = "0.10.3"
+#sysinfo = "0.10.3"
+procinfo = "0.4"
+page_size = "0.4"
 
 [lib]
 name = "pymemprofile"
