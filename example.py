@@ -12,7 +12,7 @@ def _tracer(frame, event, arg):
         pymemprofile.pymemprofile_start_call(name.encode("utf-8"))
     elif event == "return":
         pymemprofile.pymemprofile_finish_call()
-
+    return _tracer
 
 def start_tracing():
     sys.settrace(_tracer)
@@ -25,7 +25,7 @@ def g():
     h()
 
 def h():
-    s = "s" * (1024 * 1024)
+    s = "s" * (1024 * 1024 * 10)
     del s
 
 def demo():

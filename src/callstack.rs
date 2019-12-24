@@ -55,8 +55,9 @@ impl Callstack {
     }
 
     fn update_memory_usage(&mut self, currently_used_memory: usize) {
-        for call in &mut self.calls {
-            call.update_memory_usage(currently_used_memory);
+        let items = self.calls.len();
+        if items > 0 {
+            self.calls[items-1].update_memory_usage(currently_used_memory);
         }
     }
 }
