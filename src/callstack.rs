@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::cmp;
 
 /// A function call in Python (or other languages wrapping this library).
 /// Memory usage is in bytes.
@@ -39,7 +40,13 @@ impl Callstack {
     }
 
     fn start_call(&mut self, name: String, currently_used_memory: usize) {
-        self.calls.push(Call::new(name, currently_used_memory));
+        let num_calls = self.calls.len();
+        let baseline_memory = if num_calls > 0 {
+            cmp::max(currently_used_memory, self.calls[num_calls-1].peak_memory)
+        } else {
+            currently_used_memory
+        };
+        self.calls.push(Call::new(name, baseline_memory));
     }
 
     fn finish_call(&mut self) {
@@ -55,9 +62,8 @@ impl Callstack {
     }
 
     fn update_memory_usage(&mut self, currently_used_memory: usize) {
-        let items = self.calls.len();
-        if items > 0 {
-            self.calls[items-1].update_memory_usage(currently_used_memory);
+        for call in self.calls.iter_mut() {
+            &call.update_memory_usage(currently_used_memory);
         }
     }
 }
