@@ -61,15 +61,46 @@ fn call_allocated_memory() {
     assert_eq!(call.allocated_memory(), 16);
 }
 
+/// A finished call.
+struct FinishedCall {
+    // TODO: switch to immutable datastructure to reduce copying?
+    callstack: Vec<String>,
+    allocated_by_call: usize,
+}
 
+/// Record finished calls.
+trait RecordFinishedCall {
+    fn record(&mut self, finished_call: FinishedCall) {}
+}
+
+struct RecordToMemory {
+    finished_calls: Vec<FinishedCall>,
+}
+
+impl RecordFinishedCall for RecordToMemory {
+    fn record(&mut self, finished_call: FinishedCall) {
+        self.finished_calls.push(finished_call);
+    }
+}
+
+struct RecordToFile {
+    // TODO
+}
+
+impl RecordFinishedCall for RecordToFile {
+    fn record(&mut self, finished_call: FinishedCall) {
+        println!("{} {}", finished_call.callstack.join(";"), finished_call.allocated_by_call);
+    }
+}
 /// A callstack.
 struct Callstack {
     calls: Vec<Call>,
+    recorder: Box<dyn RecordFinishedCall>,
 }
 
 impl Callstack {
-    fn new() -> Callstack {
-        Callstack{calls: Vec::new()}
+    fn new(recorder: Box<dyn RecordFinishedCall>) -> Callstack {
+        Callstack{calls: Vec::new(), recorder}
     }
 
     fn start_call(&mut self, name: String, currently_used_memory: usize) {
@@ -89,7 +120,12 @@ impl Callstack {
                 println!("BUG, finished unstarted call?!");
             },
             Some(call) => {
-                println!("TODO call finished, log it somehow: {} {}", call.name, call.allocated_memory());
+                let mut callstack: Vec<String> = self.calls.iter().map(
+                    |c| c.name.clone()).collect();
+                callstack.push(call.name.clone());
+                let allocated_by_call = call.allocated_memory();
+                let finished_call = FinishedCall{callstack, allocated_by_call};
+                self.recorder.record(finished_call);
             },
         }
     }
@@ -101,7 +137,7 @@ impl Callstack {
     }
 }
 
-thread_local!(static CALLSTACK: RefCell<Callstack> = RefCell::new(Callstack::new()));
+thread_local!(static CALLSTACK: RefCell<Callstack> = RefCell::new(Callstack::new(Box::new(RecordToFile{}))));
 
 /// Add to per-thread function stack:
 pub fn start_call(name: String, currently_used_memory: usize) {
