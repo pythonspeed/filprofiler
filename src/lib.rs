@@ -42,7 +42,7 @@ fn get_memory_usage() -> usize {
 fn update_memory_usage_while_in_malloc() {
     call_if_external_api(Box::new(|| {
         let memory = get_memory_usage();
-        println!("Memory usage: {}", memory);
+        //println!("Memory usage: {}", memory);
         callstack::update_memory_usage(memory);
     }));
 }

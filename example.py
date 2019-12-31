@@ -2,6 +2,7 @@ import ctypes
 import sys
 import inspect
 import atexit
+import numpy
 
 pymemprofile = ctypes.CDLL("target/debug/libpymemprofile.so", ctypes.RTLD_GLOBAL)
 
@@ -25,7 +26,7 @@ def g():
     h()
 
 def h():
-    s = "s" * (1024 * 1024 * 10)
+    s = numpy.ones((1024, 1024), dtype=numpy.uint8)
     del s
 
 def demo():
