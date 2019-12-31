@@ -3,6 +3,7 @@ use std::cmp;
 
 /// A function call in Python (or other languages wrapping this library).
 /// Memory usage is in bytes.
+#[derive(PartialEq,Eq,Debug)]
 struct Call {
     name: String,
     starting_memory: usize,
@@ -28,6 +29,38 @@ impl Call {
         }
     }
 }
+
+#[test]
+fn call_no_allocated_memory() {
+    let mut call = Call::new("mycall".to_string(), 123);
+    assert_eq!(call, Call{name: "mycall".to_string(),
+                          starting_memory: 123, peak_memory: 0});
+    assert_eq!(call.allocated_memory(), 0);
+}
+
+#[test]
+fn call_updates_peak_if_higher_than_previous_peak() {
+    let mut call = Call::new("mycall".to_string(), 123);
+    call.update_memory_usage(100);
+    assert_eq!(call, Call{name: "mycall".to_string(),
+                          starting_memory: 123, peak_memory: 100});
+    call.update_memory_usage(90);
+    assert_eq!(call, Call{name: "mycall".to_string(),
+                          starting_memory: 123, peak_memory: 100});
+    call.update_memory_usage(101);
+    assert_eq!(call, Call{name: "mycall".to_string(),
+                          starting_memory: 123, peak_memory: 101});
+}
+
+#[test]
+fn call_allocated_memory() {
+    let mut call = Call::new("mycall".to_string(), 123);
+    call.update_memory_usage(137);
+    assert_eq!(call.allocated_memory(), 14);
+    call.update_memory_usage(139);
+    assert_eq!(call.allocated_memory(), 16);
+}
+
 
 /// A callstack.
 struct Callstack {
