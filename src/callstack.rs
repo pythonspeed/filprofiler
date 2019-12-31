@@ -12,11 +12,12 @@ struct Call {
 
 impl Call {
     fn new(name: String, starting_memory: usize) -> Call {
-        Call{name, starting_memory, peak_memory: 0}
+        Call{name, starting_memory, peak_memory: starting_memory}
     }
 
     fn allocated_memory(&self) -> usize {
         if self.starting_memory > self.peak_memory {
+            // Technically should never happen, but just in case:
             0
         } else {
             self.peak_memory - self.starting_memory
@@ -34,22 +35,22 @@ impl Call {
 fn call_no_allocated_memory() {
     let mut call = Call::new("mycall".to_string(), 123);
     assert_eq!(call, Call{name: "mycall".to_string(),
-                          starting_memory: 123, peak_memory: 0});
+                          starting_memory: 123, peak_memory: 123});
     assert_eq!(call.allocated_memory(), 0);
 }
 
 #[test]
 fn call_updates_peak_if_higher_than_previous_peak() {
     let mut call = Call::new("mycall".to_string(), 123);
-    call.update_memory_usage(100);
+    call.update_memory_usage(200);
     assert_eq!(call, Call{name: "mycall".to_string(),
-                          starting_memory: 123, peak_memory: 100});
-    call.update_memory_usage(90);
+                          starting_memory: 123, peak_memory: 200});
+    call.update_memory_usage(200);
     assert_eq!(call, Call{name: "mycall".to_string(),
-                          starting_memory: 123, peak_memory: 100});
-    call.update_memory_usage(101);
+                          starting_memory: 123, peak_memory: 200});
+    call.update_memory_usage(201);
     assert_eq!(call, Call{name: "mycall".to_string(),
-                          starting_memory: 123, peak_memory: 101});
+                          starting_memory: 123, peak_memory: 201});
 }
 
 #[test]
@@ -77,6 +78,12 @@ struct RecordToMemory {
     finished_calls: Vec<FinishedCall>,
 }
 
+impl RecordToMemory {
+    fn new() -> RecordToMemory {
+        RecordToMemory{finished_calls: Vec::new()}
+    }
+}
+
 impl RecordFinishedCall for RecordToMemory {
     fn record(&mut self, finished_call: FinishedCall) {
         self.finished_calls.push(finished_call);
@@ -89,6 +96,7 @@ struct RecordToFile {
 
 impl RecordFinishedCall for RecordToFile {
     fn record(&mut self, finished_call: FinishedCall) {
+        // TODO don't bother recording zero-allocation calls.
         println!("{} {}", finished_call.callstack.join(";"), finished_call.allocated_by_call);
     }
 }
@@ -104,6 +112,7 @@ impl Callstack {
     }
 
     fn start_call(&mut self, name: String, currently_used_memory: usize) {
+        // TODO maybe update_memory_usage() with new value?
         let num_calls = self.calls.len();
         let baseline_memory = if num_calls > 0 {
             cmp::max(currently_used_memory, self.calls[num_calls-1].peak_memory)
@@ -113,16 +122,23 @@ impl Callstack {
         self.calls.push(Call::new(name, baseline_memory));
     }
 
+    fn current_calls(&self) -> Vec<String> {
+        self.calls.iter().map(|c| c.name.clone()).collect()
+    }
+
+    // For testing.
+    fn current_allocated(&self) -> Vec<usize> {
+        self.calls.iter().map(|c| c.allocated_memory()).collect()
+    }
+
     fn finish_call(&mut self) {
+        let callstack: Vec<String> = self.current_calls();
         let call = self.calls.pop();
         match call {
             None => {
-                println!("BUG, finished unstarted call?!");
+                panic!("I was asked to finish a call, but the callstack is empty!");
             },
             Some(call) => {
-                let mut callstack: Vec<String> = self.calls.iter().map(
-                    |c| c.name.clone()).collect();
-                callstack.push(call.name.clone());
                 let allocated_by_call = call.allocated_memory();
                 let finished_call = FinishedCall{callstack, allocated_by_call};
                 self.recorder.record(finished_call);
@@ -136,6 +152,37 @@ impl Callstack {
         }
     }
 }
+
+#[test]
+fn callstack_update_memory_usage_updates_full_stack() {
+    let mut callstack = Callstack::new(Box::new(RecordToMemory::new()));
+    callstack.start_call("a".to_string(), 2);
+    callstack.start_call("b".to_string(), 2);
+    callstack.update_memory_usage(10);
+    assert_eq!(callstack.current_calls(), ["a", "b"]);
+    assert_eq!(callstack.current_allocated(), [8, 8]);
+    // Memory baseline that is less than current peak of 10:
+    callstack.start_call("c".to_string(), 10);
+    assert_eq!(callstack.current_calls(), ["a", "b", "c"]);
+    assert_eq!(callstack.current_allocated(), [8, 8, 0]);
+    callstack.start_call("d".to_string(), 10);
+    callstack.update_memory_usage(15);
+    assert_eq!(callstack.current_calls(), ["a", "b", "c", "d"]);
+    assert_eq!(callstack.current_allocated(), [13, 13, 5, 5]);
+}
+
+#[test]
+fn callstack_start_call_starting_memory_at_least_previous_peak() {
+    let mut callstack = Callstack::new(Box::new(RecordToMemory::new()));
+    callstack.start_call("a".to_string(), 2);
+    callstack.start_call("b".to_string(), 1);
+    assert_eq!(callstack.calls[1].starting_memory, 2);
+    callstack.start_call("c".to_string(), 3);
+    assert_eq!(callstack.calls[1].starting_memory, 2);
+    assert_eq!(callstack.calls[2].starting_memory, 3);
+}
+
+// fn callstack_finish_call...
 
 thread_local!(static CALLSTACK: RefCell<Callstack> = RefCell::new(Callstack::new(Box::new(RecordToFile{}))));
 
