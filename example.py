@@ -4,7 +4,7 @@ import inspect
 import atexit
 import numpy
 
-pymemprofile = ctypes.CDLL("target/debug/libpymemprofile.so", ctypes.RTLD_GLOBAL)
+pymemprofile = ctypes.CDLL("target/debug/libpymemprofile_api.so")
 
 def _tracer(frame, event, arg):
     if event == "call":
