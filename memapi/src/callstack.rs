@@ -96,8 +96,9 @@ struct RecordToFile {
 
 impl RecordFinishedCall for RecordToFile {
     fn record(&mut self, finished_call: FinishedCall) {
-        // TODO don't bother recording zero-allocation calls.
-        println!("{} {}", finished_call.callstack.join(";"), finished_call.allocated_by_call / 1000000);
+        if finished_call.allocated_by_call > 0 {
+            println!("{} {}", finished_call.callstack.join(";"), finished_call.allocated_by_call / 1000000);
+        }
     }
 }
 /// A callstack.
@@ -206,7 +207,6 @@ pub fn finish_call() {
 /// Update memory usage for calls in stack:
 pub fn update_memory_usage(currently_used_memory: usize) {
     CALLSTACK.with(|cs| {
-        println!("Update memory usage: {}", currently_used_memory / 1000000);
         cs.borrow_mut().update_memory_usage(currently_used_memory);
     });
 }

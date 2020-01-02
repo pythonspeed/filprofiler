@@ -39,7 +39,6 @@ fn get_memory_usage() -> usize {
 #[no_mangle]
 pub extern "C" fn pymemprofile_update_memory_usage() {
     let memory_usage = get_memory_usage();
-    println!("New memory usage is: {} KiB", memory_usage / 1024);
     callstack::update_memory_usage(memory_usage);
 }
 
