@@ -1,5 +1,9 @@
 use libloading::os::unix;
 use std::ffi;
+use static_alloc::Slab;
+
+#[global_allocator]
+static A: Slab<[u8; 1 << 16]> = Slab::uninit();
 
 /// Do the necessary bookkeeping to update memory usage for current function on
 /// stack.

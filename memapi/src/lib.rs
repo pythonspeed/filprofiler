@@ -72,6 +72,20 @@ pub extern "C" fn pymemprofile_dump_functions_to_flamegraph_svg(path: *const c_c
     }));
 }
 
+#[no_mangle]
+extern "C" fn malloc(size: libc::size_t) -> *mut libc::c_void {
+    unsafe {
+        libc::malloc(size)
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn calloc(nmemb: libc::size_t, size: libc::size_t) -> *mut libc::c_void {
+    unsafe {
+        libc::calloc(nmemb, size)
+    }
+}
+
 #[cfg(test)]
 mod tests {
 }
