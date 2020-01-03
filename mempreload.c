@@ -4,10 +4,10 @@
 #include <stdio.h>
 #include <dlfcn.h>
 #include <malloc.h>
+#include <sys/mman.h>
 
-// The real, underlying library calls:
-static void* (*real_malloc)(size_t size) = 0;
-static void* (*real_calloc)(size_t nmemb, size_t size) = 0;
+// Underlying mmap() API:
+static void* (*underlying_real_mmap)(void *addr, size_t length, int prot, int flags, int fd, off_t offset) = 0;
 
 // The internal API we're notifying of allocations:
 static void (*update_memory_usage)(void) = 0;
@@ -18,6 +18,9 @@ static int initialized = 0;
 static int will_i_be_reentrant = 0;
 
 static void __attribute__((constructor)) constructor() {
+  if (initialized) {
+    return;
+  }
   void* lib = dlopen("target/debug/libpymemprofile_api.so", RTLD_LAZY | RTLD_DEEPBIND);
   if (!lib) {
     fprintf(stderr, "Couldn't load libpymemprofile_api.so library: %s\n", dlerror());
@@ -26,6 +29,11 @@ static void __attribute__((constructor)) constructor() {
   update_memory_usage = dlsym(lib, "pymemprofile_update_memory_usage");
   if (!update_memory_usage) {
     fprintf(stderr, "Couldn't load pymemprofile API function: %s\n", dlerror());
+    exit(1);
+  }
+  underlying_real_mmap = dlsym(RTLD_NEXT, "mmap");
+  if (!underlying_real_mmap) {
+    fprintf(stderr, "Couldn't load mmap(): %s\n", dlerror());
     exit(1);
   }
   initialized = 1;
@@ -55,3 +63,16 @@ __attribute__ ((visibility("default"))) void* calloc(size_t nmemb, size_t size) 
   return result;
 }
 
+__attribute__ ((visibility("default"))) void* mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset) {
+  if (!initialized) {
+    constructor();
+  }
+  void* result = underlying_real_mmap(addr, length, prot, flags, fd, offset);
+  fprintf(stdout, "MMAP!\n");
+  if ((flags & (MAP_PRIVATE | MAP_ANONYMOUS)) && !will_i_be_reentrant && initialized) {
+    will_i_be_reentrant = 1;
+    update_memory_usage();
+    will_i_be_reentrant = 0;
+  }
+  return result;
+}
