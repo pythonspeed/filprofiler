@@ -39,7 +39,9 @@ fn get_memory_usage() -> usize {
 #[no_mangle]
 pub extern "C" fn pymemprofile_update_memory_usage() {
     let memory_usage = get_memory_usage();
-    callstack::update_memory_usage(memory_usage);
+    call_if_external_api(Box::new(move || {
+        callstack::update_memory_usage(memory_usage);
+    }));
 }
 
 #[no_mangle]
