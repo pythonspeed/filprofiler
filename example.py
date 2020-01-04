@@ -4,7 +4,7 @@ import inspect
 import atexit
 import numpy
 
-pymemprofile = ctypes.CDLL("target/debug/libpymemprofile.so", ctypes.RTLD_GLOBAL)
+pymemprofile = ctypes.CDLL("target/debug/libpymemprofile_api.so")
 
 def _tracer(frame, event, arg):
     if event == "call":
@@ -21,19 +21,18 @@ def start_tracing():
 
 
 def g():
-    h()
-    h()
-    h()
+    h(1)
+    h(2)
+    h(1)
 
-def h():
-    s = numpy.ones((1024, 1024), dtype=numpy.uint8)
+def h(i):
+    s = numpy.ones((1024, 1024, i), dtype=numpy.uint8)
     del s
 
 def demo():
     g()
-    h()
+    h(5)
 
 if __name__ == '__main__':
     start_tracing()
     demo()
-    print("Goodbye!")

@@ -96,8 +96,9 @@ struct RecordToFile {
 
 impl RecordFinishedCall for RecordToFile {
     fn record(&mut self, finished_call: FinishedCall) {
-        // TODO don't bother recording zero-allocation calls.
-        println!("{} {}", finished_call.callstack.join(";"), finished_call.allocated_by_call / 1000000);
+        if finished_call.allocated_by_call > 0 {
+            println!("{} {}", finished_call.callstack.join(";"), finished_call.allocated_by_call);
+        }
     }
 }
 /// A callstack.
@@ -189,7 +190,7 @@ thread_local!(static CALLSTACK: RefCell<Callstack> = RefCell::new(Callstack::new
 /// Add to per-thread function stack:
 pub fn start_call(name: String, currently_used_memory: usize) {
     CALLSTACK.with(|cs| {
-        println!("start call {} {}", name, currently_used_memory / 1000000);
+        //println!("start call {} {}", name, currently_used_memory / 1000000);
         cs.borrow_mut().start_call(name, currently_used_memory);
     });
 }
@@ -198,7 +199,7 @@ pub fn start_call(name: String, currently_used_memory: usize) {
 /// stack.
 pub fn finish_call() {
     CALLSTACK.with(|cs| {
-        println!("finish call");
+        //println!("finish call");
         cs.borrow_mut().finish_call();
     });
 }
@@ -206,7 +207,6 @@ pub fn finish_call() {
 /// Update memory usage for calls in stack:
 pub fn update_memory_usage(currently_used_memory: usize) {
     CALLSTACK.with(|cs| {
-        println!("Update memory usage: {}", currently_used_memory / 1000000);
         cs.borrow_mut().update_memory_usage(currently_used_memory);
     });
 }
