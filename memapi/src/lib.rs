@@ -32,7 +32,7 @@ fn get_memory_usage() -> usize {
         Err(_) => {
             println!("Couldn't find current process?! This is a bug.");
             std::process::exit(1)
-        },
+        }
     }
 }
 
@@ -47,8 +47,10 @@ pub extern "C" fn pymemprofile_update_memory_usage() {
 #[no_mangle]
 pub extern "C" fn pymemprofile_start_call(name: *const c_char) {
     let name = unsafe {
-        CStr::from_ptr(name).to_str().expect(
-            "Function name wasn't UTF-8").to_string()
+        CStr::from_ptr(name)
+            .to_str()
+            .expect("Function name wasn't UTF-8")
+            .to_string()
     };
     call_if_external_api(Box::new(move || {
         callstack::start_call(name, get_memory_usage());
@@ -65,7 +67,10 @@ pub extern "C" fn pymemprofile_finish_call() {
 #[no_mangle]
 pub extern "C" fn pymemprofile_dump_functions_to_flamegraph_svg(path: *const c_char) {
     let path = unsafe {
-        CStr::from_ptr(path).to_str().expect("Path wasn't UTF-8").to_string()
+        CStr::from_ptr(path)
+            .to_str()
+            .expect("Path wasn't UTF-8")
+            .to_string()
     };
     call_if_external_api(Box::new(|| {
         callstack::dump_functions_to_flamegraph_svg(path);
@@ -74,5 +79,4 @@ pub extern "C" fn pymemprofile_dump_functions_to_flamegraph_svg(path: *const c_c
 }
 
 #[cfg(test)]
-mod tests {
-}
+mod tests {}

@@ -3,7 +3,7 @@ use std::cmp;
 
 /// A function call in Python (or other languages wrapping this library).
 /// Memory usage is in bytes.
-#[derive(PartialEq,Eq,Debug)]
+#[derive(PartialEq, Eq, Debug)]
 struct Call {
     name: String,
     starting_memory: usize,
@@ -12,7 +12,11 @@ struct Call {
 
 impl Call {
     fn new(name: String, starting_memory: usize) -> Call {
-        Call{name, starting_memory, peak_memory: starting_memory}
+        Call {
+            name,
+            starting_memory,
+            peak_memory: starting_memory,
+        }
     }
 
     fn allocated_memory(&self) -> usize {
@@ -34,8 +38,14 @@ impl Call {
 #[test]
 fn call_no_allocated_memory() {
     let mut call = Call::new("mycall".to_string(), 123);
-    assert_eq!(call, Call{name: "mycall".to_string(),
-                          starting_memory: 123, peak_memory: 123});
+    assert_eq!(
+        call,
+        Call {
+            name: "mycall".to_string(),
+            starting_memory: 123,
+            peak_memory: 123
+        }
+    );
     assert_eq!(call.allocated_memory(), 0);
 }
 
@@ -43,14 +53,32 @@ fn call_no_allocated_memory() {
 fn call_updates_peak_if_higher_than_previous_peak() {
     let mut call = Call::new("mycall".to_string(), 123);
     call.update_memory_usage(200);
-    assert_eq!(call, Call{name: "mycall".to_string(),
-                          starting_memory: 123, peak_memory: 200});
+    assert_eq!(
+        call,
+        Call {
+            name: "mycall".to_string(),
+            starting_memory: 123,
+            peak_memory: 200
+        }
+    );
     call.update_memory_usage(200);
-    assert_eq!(call, Call{name: "mycall".to_string(),
-                          starting_memory: 123, peak_memory: 200});
+    assert_eq!(
+        call,
+        Call {
+            name: "mycall".to_string(),
+            starting_memory: 123,
+            peak_memory: 200
+        }
+    );
     call.update_memory_usage(201);
-    assert_eq!(call, Call{name: "mycall".to_string(),
-                          starting_memory: 123, peak_memory: 201});
+    assert_eq!(
+        call,
+        Call {
+            name: "mycall".to_string(),
+            starting_memory: 123,
+            peak_memory: 201
+        }
+    );
 }
 
 #[test]
@@ -80,7 +108,9 @@ struct RecordToMemory {
 
 impl RecordToMemory {
     fn new() -> RecordToMemory {
-        RecordToMemory{finished_calls: Vec::new()}
+        RecordToMemory {
+            finished_calls: Vec::new(),
+        }
     }
 }
 
@@ -97,7 +127,11 @@ struct RecordToFile {
 impl RecordFinishedCall for RecordToFile {
     fn record(&mut self, finished_call: FinishedCall) {
         if finished_call.allocated_by_call > 0 {
-            println!("{} {}", finished_call.callstack.join(";"), finished_call.allocated_by_call);
+            println!(
+                "{} {}",
+                finished_call.callstack.join(";"),
+                finished_call.allocated_by_call
+            );
         }
     }
 }
@@ -109,14 +143,17 @@ struct Callstack {
 
 impl Callstack {
     fn new(recorder: Box<dyn RecordFinishedCall>) -> Callstack {
-        Callstack{calls: Vec::new(), recorder}
+        Callstack {
+            calls: Vec::new(),
+            recorder,
+        }
     }
 
     fn start_call(&mut self, name: String, currently_used_memory: usize) {
         // TODO maybe update_memory_usage() with new value?
         let num_calls = self.calls.len();
         let baseline_memory = if num_calls > 0 {
-            cmp::max(currently_used_memory, self.calls[num_calls-1].peak_memory)
+            cmp::max(currently_used_memory, self.calls[num_calls - 1].peak_memory)
         } else {
             currently_used_memory
         };
@@ -138,12 +175,15 @@ impl Callstack {
         match call {
             None => {
                 panic!("I was asked to finish a call, but the callstack is empty!");
-            },
+            }
             Some(call) => {
                 let allocated_by_call = call.allocated_memory();
-                let finished_call = FinishedCall{callstack, allocated_by_call};
+                let finished_call = FinishedCall {
+                    callstack,
+                    allocated_by_call,
+                };
                 self.recorder.record(finished_call);
-            },
+            }
         }
     }
 
@@ -211,5 +251,4 @@ pub fn update_memory_usage(currently_used_memory: usize) {
     });
 }
 /// Create flamegraph SVG from function stack:
-pub fn dump_functions_to_flamegraph_svg(path: String) {
-}
+pub fn dump_functions_to_flamegraph_svg(path: String) {}
