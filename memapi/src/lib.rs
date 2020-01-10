@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::ffi::CStr;
 use std::os::raw::c_char;
 
-mod callstack;
+mod memorytracking;
 
 thread_local!(static IN_THIS_LIBRARY: RefCell<bool> = RefCell::new(false));
 
@@ -40,7 +40,7 @@ fn get_memory_usage() -> usize {
 pub extern "C" fn pymemprofile_update_memory_usage() {
     let memory_usage = get_memory_usage();
     call_if_external_api(Box::new(move || {
-        callstack::update_memory_usage(memory_usage);
+        memorytracking::update_memory_usage(memory_usage);
     }));
 }
 
@@ -53,14 +53,14 @@ pub extern "C" fn pymemprofile_start_call(name: *const c_char) {
             .to_string()
     };
     call_if_external_api(Box::new(move || {
-        callstack::start_call(name, get_memory_usage());
+        memorytracking::start_call(name);
     }));
 }
 
 #[no_mangle]
 pub extern "C" fn pymemprofile_finish_call() {
     call_if_external_api(Box::new(|| {
-        callstack::finish_call();
+        memorytracking::finish_call();
     }));
 }
 

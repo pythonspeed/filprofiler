@@ -1,3 +1,4 @@
+/*
 use std::cell::RefCell;
 use std::cmp;
 
@@ -252,3 +253,4 @@ pub fn update_memory_usage(currently_used_memory: usize) {
 }
 /// Create flamegraph SVG from function stack:
 pub fn dump_functions_to_flamegraph_svg(path: String) {}
+*/
