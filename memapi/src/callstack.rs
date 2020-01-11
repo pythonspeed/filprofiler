@@ -130,7 +130,7 @@ impl RecordFinishedCall for RecordToFile {
         if finished_call.allocated_by_call > 0 {
             println!(
                 "{} {}",
-                finished_call.callstack.join(";"),
+finished_call.callstack.join(";"),
                 finished_call.allocated_by_call
             );
         }
