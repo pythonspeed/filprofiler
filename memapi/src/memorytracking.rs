@@ -3,6 +3,9 @@ use im::vector as imvector;
 use libc;
 use std::cell::RefCell;
 
+use std::sync::Arc;
+use std::sync::Mutex;
+
 #[derive(Clone)]
 struct Callstack {
     calls: imvector::Vector<String>,
@@ -26,12 +29,14 @@ impl Callstack {
 
 thread_local!(static THREAD_CALLSTACK: RefCell<Callstack> = RefCell::new(Callstack::new()));
 
+#[derive(Clone)]
 struct Allocation {
     callstack: Callstack,
     size: libc::size_t,
 }
 
-static MEMORY_USAGE = imhashmap::HashMap<usize,Allocation>::new();
+static MEMORY_USAGE: Arc<Mutex<imhashmap::HashMap<usize, Allocation>>> =
+    Arc::new(Mutex::new(imhashmap::HashMap::new()));
 
 /// Add to per-thread function stack:
 pub fn start_call(name: String) {
@@ -51,9 +56,14 @@ pub fn finish_call() {
 /// Add a new allocation based off the current callstack.
 pub fn add_allocation(address: usize, size: libc::size_t) {
     let callstack: Callstack = THREAD_CALLSTACK.with(|cs| (*cs.borrow()).clone());
-    let alloc = Allocation{callstack, size};
-    MEMORY_USAGE.set(address, alloc);
+    let alloc = Allocation { callstack, size };
+    let mut map = MEMORY_USAGE.lock().unwrap();
+    map.insert(address, alloc);
 }
 
 /// Free an existing allocation.
-pub fn free_allocation(address: usize) {}
+pub fn free_allocation(address: usize) {
+    let mut map = MEMORY_USAGE.lock().unwrap();
+    // Possibly this allocation doesn't exist; that's OK!
+    map.remove(&address);
+}
