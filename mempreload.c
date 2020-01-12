@@ -17,6 +17,7 @@ static void (*free_allocation_hook)(size_t address) = 0;
 // Note whether we've been initialized yet or not:
 static int initialized = 0;
 
+// TODO switch to `static __Thread_local` inside function, *probably* stack based?
 static int will_i_be_reentrant = 0;
 
 static void __attribute__((constructor)) constructor() {
@@ -83,7 +84,8 @@ __attribute__ ((visibility("default"))) void* calloc(size_t nmemb, size_t size) 
 
 __attribute__ ((visibility("default"))) void free(void* addr) {
   if (!initialized) {
-    constructor();
+    // Well, we're going to leak a little memory, but, such is life...
+    return;
   }
   underlying_real_free(addr);
   if (!will_i_be_reentrant && initialized) {

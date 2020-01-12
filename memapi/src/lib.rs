@@ -59,6 +59,13 @@ pub extern "C" fn pymemprofile_add_allocation(address: usize, size: libc::size_t
 }
 
 #[no_mangle]
+pub extern "C" fn pymemprofile_free_allocation(address: usize) {
+    call_if_external_api(Box::new(move || {
+        memorytracking::free_allocation(address);
+    }));
+}
+
+#[no_mangle]
 pub extern "C" fn pymemprofile_start_call(name: *const c_char) {
     let name = unsafe {
         CStr::from_ptr(name)
