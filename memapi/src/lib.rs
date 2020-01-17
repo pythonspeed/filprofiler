@@ -1,10 +1,16 @@
+use crossbeam::atomic;
 use std::cell::RefCell;
 use std::ffi::CStr;
 use std::os::raw::c_char;
 
-mod callstack;
+#[macro_use]
+extern crate lazy_static;
+
+mod memorytracking;
 
 thread_local!(static IN_THIS_LIBRARY: RefCell<bool> = RefCell::new(false));
+
+static MAX_MEMORY: atomic::AtomicCell<usize> = atomic::AtomicCell::new(0);
 
 /// Run the given function in such way that later calls to malloc() are handled
 /// normally without being captured. Otherwise malloc() calls from this Rust
@@ -32,47 +38,66 @@ fn get_memory_usage() -> usize {
         Err(_) => {
             println!("Couldn't find current process?! This is a bug.");
             std::process::exit(1)
-        },
+        }
     }
 }
 
 #[no_mangle]
-pub extern "C" fn pymemprofile_update_memory_usage() {
-    let memory_usage = get_memory_usage();
+pub extern "C" fn pymemprofile_add_allocation(address: usize, size: libc::size_t) {
     call_if_external_api(Box::new(move || {
-        callstack::update_memory_usage(memory_usage);
+        memorytracking::add_allocation(address, size);
+        // Technically not thread-safe, but not a big deal if we mark peak
+        // twice. The failure mode is peak will be slightly smaller than it
+        // actually was, which means higher peaks will still get noticed, so
+        // that's OK too.
+        let current_memory = get_memory_usage();
+        if current_memory > MAX_MEMORY.load() {
+            MAX_MEMORY.store(current_memory);
+            memorytracking::new_peak();
+        }
+    }));
+}
+
+#[no_mangle]
+pub extern "C" fn pymemprofile_free_allocation(address: usize) {
+    call_if_external_api(Box::new(move || {
+        memorytracking::free_allocation(address);
     }));
 }
 
 #[no_mangle]
 pub extern "C" fn pymemprofile_start_call(name: *const c_char) {
     let name = unsafe {
-        CStr::from_ptr(name).to_str().expect(
-            "Function name wasn't UTF-8").to_string()
+        CStr::from_ptr(name)
+            .to_str()
+            .expect("Function name wasn't UTF-8")
+            .to_string()
     };
     call_if_external_api(Box::new(move || {
-        callstack::start_call(name, get_memory_usage());
+        memorytracking::start_call(name);
     }));
 }
 
 #[no_mangle]
 pub extern "C" fn pymemprofile_finish_call() {
     call_if_external_api(Box::new(|| {
-        callstack::finish_call();
+        memorytracking::finish_call();
     }));
 }
 
 #[no_mangle]
-pub extern "C" fn pymemprofile_dump_functions_to_flamegraph_svg(path: *const c_char) {
+pub extern "C" fn pymemprofile_dump_peak_to_flamegraph(path: *const c_char) {
     let path = unsafe {
-        CStr::from_ptr(path).to_str().expect("Path wasn't UTF-8").to_string()
+        CStr::from_ptr(path)
+            .to_str()
+            .expect("Path wasn't UTF-8")
+            .to_string()
     };
-    call_if_external_api(Box::new(|| {
-        callstack::dump_functions_to_flamegraph_svg(path);
+    call_if_external_api(Box::new(move || {
+        memorytracking::dump_peak_to_flamegraph(&path);
         // TODO: Error handling?
     }));
 }
 
 #[cfg(test)]
-mod tests {
-}
+mod tests {}
