@@ -28,7 +28,11 @@ impl Callstack {
     }
 
     fn to_string(&self) -> String {
-        self.calls.iter().join(";")
+        if self.calls.len() == 0 {
+            "(N/A)".to_string()
+        } else {
+            self.calls.iter().join(";")
+        }
     }
 }
 
