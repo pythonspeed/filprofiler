@@ -17,8 +17,7 @@ static void (*free_allocation_hook)(size_t address) = 0;
 // Note whether we've been initialized yet or not:
 static int initialized = 0;
 
-// TODO switch to `static __Thread_local` inside function, *probably* stack based?
-static int will_i_be_reentrant = 0;
+static _Thread_local int will_i_be_reentrant = 0;
 
 static void __attribute__((constructor)) constructor() {
   if (initialized) {
