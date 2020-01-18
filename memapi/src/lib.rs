@@ -29,32 +29,10 @@ fn call_if_external_api(call: Box<dyn FnOnce() -> ()>) {
     });
 }
 
-// Return current process memory usage. procinfo-based is much much faster than
-// sysinfo-based, but Linux-only for now.
-fn get_memory_usage() -> usize {
-    let result = procinfo::pid::statm_self();
-    match result {
-        Ok(statm) => statm.resident * page_size::get(),
-        Err(_) => {
-            println!("Couldn't find current process?! This is a bug.");
-            std::process::exit(1)
-        }
-    }
-}
-
 #[no_mangle]
 pub extern "C" fn pymemprofile_add_allocation(address: usize, size: libc::size_t) {
     call_if_external_api(Box::new(move || {
         memorytracking::add_allocation(address, size);
-        // Technically not thread-safe, but not a big deal if we mark peak
-        // twice. The failure mode is peak will be slightly smaller than it
-        // actually was, which means higher peaks will still get noticed, so
-        // that's OK too.
-        let current_memory = get_memory_usage();
-        if current_memory > MAX_MEMORY.load() {
-            MAX_MEMORY.store(current_memory);
-            memorytracking::new_peak();
-        }
     }));
 }
 
@@ -82,6 +60,14 @@ pub extern "C" fn pymemprofile_start_call(name: *const c_char) {
 pub extern "C" fn pymemprofile_finish_call() {
     call_if_external_api(Box::new(|| {
         memorytracking::finish_call();
+    }));
+}
+
+#[no_mangle]
+pub extern "C" fn pymemprofile_reset() {
+    MAX_MEMORY.store(0);
+    call_if_external_api(Box::new(|| {
+        memorytracking::reset();
     }));
 }
 

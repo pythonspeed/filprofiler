@@ -63,7 +63,7 @@ extern void *__libc_calloc(size_t nmemb, size_t size);
 // Override memory-allocation functions:
 __attribute__ ((visibility("default"))) void* malloc(size_t size)  {
   void* result = __libc_malloc(size);
-  if (size > 0 && result != NULL && !will_i_be_reentrant && initialized) {
+  if (size > 1000 && result != NULL && !will_i_be_reentrant && initialized) {
     will_i_be_reentrant = 1;
     add_allocation_hook((size_t)result, size);
     will_i_be_reentrant = 0;
@@ -74,7 +74,7 @@ __attribute__ ((visibility("default"))) void* malloc(size_t size)  {
 __attribute__ ((visibility("default"))) void* calloc(size_t nmemb, size_t size) {
   void* result = __libc_calloc(nmemb, size);
   size_t allocated = nmemb * size;
-  if (allocated > 0 && !will_i_be_reentrant && initialized) {
+  if (allocated > 1000 && !will_i_be_reentrant && initialized) {
     will_i_be_reentrant = 1;
     add_allocation_hook((size_t)result, allocated);
     will_i_be_reentrant = 0;

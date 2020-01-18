@@ -16,6 +16,7 @@ def _tracer(frame, event, arg):
     return _tracer
 
 def start_tracing():
+    pymemprofile.pymemprofile_reset()
     sys.settrace(_tracer)
     atexit.register(pymemprofile.pymemprofile_dump_peak_to_flamegraph, b"/tmp/out.svg")
 
