@@ -10,7 +10,6 @@ edition = "2018"
 im = "14.1.0"
 libc = "0.2"
 itertools = "0.8.2"
-crossbeam = "0.7.3"
 lazy_static = "1.4.0"
 
 [lib]

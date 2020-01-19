@@ -27,7 +27,7 @@ static void __attribute__((constructor)) constructor() {
     fprintf(stderr, "BUG: expected size of size_t and void* to be the same.\n");
     exit(1);
   }
-  void* lib = dlopen("target/debug/libpymemprofile_api.so", RTLD_LAZY | RTLD_DEEPBIND);
+  void* lib = dlopen(getenv("FIL_API_LIBRARY"), RTLD_LAZY | RTLD_DEEPBIND);
   if (!lib) {
     fprintf(stderr, "Couldn't load libpymemprofile_api.so library: %s\n", dlerror());
     exit(1);

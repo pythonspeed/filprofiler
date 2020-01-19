@@ -17,17 +17,14 @@ def stage_1():
     """Setup environment variables, re-execute this script."""
     environ["RUST_BACKTRACE"] = "1"
     environ["PYTHONMALLOC"] = "malloc"
-    # TODO dylib on Macs.
     environ["LD_PRELOAD"] = library_path("_filpreload")
+    environ["FIL_API_LIBRARY"] = library_path("libpymemprofile_api")
     execv(sys.executable, [sys.argv[0], "-m", "filprofiler._script"] + sys.argv[1:])
-
-
-def test():
-    s = "aaaaaaaaaaaaaadfdsfsd352352"
 
 
 def stage_2():
     """Main CLI interface. Presumes LD_PRELOAD etc. has been set by stage_1()."""
+    # TODO add support for -m here.
     sys.argv = args = sys.argv[1:]
     script = args[0]
     # Make directory where script is importable:
@@ -42,10 +39,8 @@ def stage_2():
     }
     start_tracing()
     try:
-        print("STARTED")
-        test()  # exec(code, globals, None)
+        exec(code, globals, None)
     finally:
-        print("DONE")
         stop_tracing()
 
 

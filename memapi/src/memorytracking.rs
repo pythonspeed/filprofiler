@@ -97,12 +97,18 @@ pub fn add_allocation(address: usize, size: libc::size_t) {
 pub fn free_allocation(address: usize) {
     let mut allocations = ALLOCATIONS.lock().unwrap();
     // Possibly this allocation doesn't exist; that's OK!
+    let before = allocations.peak_allocations.len();
     if let Some(removed) = allocations.current_allocations.remove(&address) {
         if removed.size > allocations.current_allocated_bytes {
+            // In theory this should never happen, but just in case...
             allocations.current_allocated_bytes = 0;
         } else {
             allocations.current_allocated_bytes -= removed.size;
         }
+    }
+    let after = allocations.peak_allocations.len();
+    if before != after {
+        println!("BUG! MUTATED PEAK?!");
     }
 }
 
@@ -116,7 +122,8 @@ pub fn dump_peak_to_flamegraph(_path: &str) {
     // Convert to mapping from callstack to usage, merging usage for duplicate
     // callstacks:
     let mut by_call: collections::HashMap<String, usize> = collections::HashMap::new();
-    for Allocation { callstack, size } in ALLOCATIONS.lock().unwrap().peak_allocations.values() {
+    let peak_allocations = &ALLOCATIONS.lock().unwrap().peak_allocations;
+    for Allocation { callstack, size } in peak_allocations.values() {
         let callstack = callstack.to_string();
         let entry = by_call.entry(callstack).or_insert(0);
         *entry += size;

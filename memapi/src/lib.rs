@@ -1,4 +1,3 @@
-use crossbeam::atomic;
 use std::cell::RefCell;
 use std::ffi::CStr;
 use std::os::raw::c_char;
@@ -9,8 +8,6 @@ extern crate lazy_static;
 mod memorytracking;
 
 thread_local!(static IN_THIS_LIBRARY: RefCell<bool> = RefCell::new(false));
-
-static MAX_MEMORY: atomic::AtomicCell<usize> = atomic::AtomicCell::new(0);
 
 /// Run the given function in such way that later calls to malloc() are handled
 /// normally without being captured. Otherwise malloc() calls from this Rust
@@ -65,7 +62,6 @@ pub extern "C" fn pymemprofile_finish_call() {
 
 #[no_mangle]
 pub extern "C" fn pymemprofile_reset() {
-    MAX_MEMORY.store(0);
     call_if_external_api(Box::new(|| {
         memorytracking::reset();
     }));
