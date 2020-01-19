@@ -8,6 +8,8 @@ Command-line tools. Because of LD_PRELOAD, it's actually a two stage setup:
 import sys
 from os import environ, execv
 from os.path import abspath, dirname, join
+from argparse import ArgumentParser
+import runpy
 
 from ._utils import library_path
 from ._tracer import start_tracing, stop_tracing
@@ -24,19 +26,35 @@ def stage_1():
 
 def stage_2():
     """Main CLI interface. Presumes LD_PRELOAD etc. has been set by stage_1()."""
-    # TODO add support for -m here.
-    sys.argv = args = sys.argv[1:]
-    script = args[0]
-    # Make directory where script is importable:
-    sys.path.insert(0, dirname(abspath(script)))
-    with open(script, "rb") as script_file:
-        code = compile(script_file.read(), script, "exec")
-    globals = {
-        "__file__": script,
-        "__name__": "__main__",
-        "__package__": None,
-        "__cached__": None,
-    }
+    usage = "fil-profile [-m module | path-to-py-script ] [arg] ..."
+    parser = ArgumentParser(usage=usage)
+    parser.add_argument(
+        "-m",
+        dest="module",
+        action="store",
+        help="Profile a module, equivalent to running with 'python -m <module>'",
+        default="",
+    )
+    parser.add_argument("args", metavar="ARG", nargs="*")
+    arguments = parser.parse_args()
+    if arguments.module:
+        # Not quite the same as what python -m does, but pretty close:
+        sys.argv = [arguments.module] + arguments.args
+        code = "run_module(module_name, run_name='__main__')"
+        globals = {"run_module": runpy.run_module, "module_name": arguments.module}
+    else:
+        sys.argv = args = arguments.args
+        script = args[0]
+        # Make directory where script is importable:
+        sys.path.insert(0, dirname(abspath(script)))
+        with open(script, "rb") as script_file:
+            code = compile(script_file.read(), script, "exec")
+        globals = {
+            "__file__": script,
+            "__name__": "__main__",
+            "__package__": None,
+            "__cached__": None,
+        }
     start_tracing()
     try:
         exec(code, globals, None)
