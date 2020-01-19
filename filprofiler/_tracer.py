@@ -25,3 +25,11 @@ def start_tracing():
 
 def stop_tracing():
     pymemprofile.pymemprofile_dump_peak_to_flamegraph(b"/tmp/out.svg")
+
+
+def trace(code, globals_):
+    start_tracing()
+    try:
+        exec(code, globals_, None)
+    finally:
+        stop_tracing()

@@ -12,7 +12,7 @@ from argparse import ArgumentParser
 import runpy
 
 from ._utils import library_path
-from ._tracer import start_tracing, stop_tracing
+from ._tracer import trace
 
 
 def stage_1():
@@ -41,7 +41,7 @@ def stage_2():
         # Not quite the same as what python -m does, but pretty close:
         sys.argv = [arguments.module] + arguments.args
         code = "run_module(module_name, run_name='__main__')"
-        globals = {"run_module": runpy.run_module, "module_name": arguments.module}
+        globals_ = {"run_module": runpy.run_module, "module_name": arguments.module}
     else:
         sys.argv = args = arguments.args
         script = args[0]
@@ -49,17 +49,13 @@ def stage_2():
         sys.path.insert(0, dirname(abspath(script)))
         with open(script, "rb") as script_file:
             code = compile(script_file.read(), script, "exec")
-        globals = {
+        globals_ = {
             "__file__": script,
             "__name__": "__main__",
             "__package__": None,
             "__cached__": None,
         }
-    start_tracing()
-    try:
-        exec(code, globals, None)
-    finally:
-        stop_tracing()
+    trace(code, globals_)
 
 
 if __name__ == "__main__":
