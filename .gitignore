@@ -1,2 +1,6 @@
 target/
 *.so
+venv
+*.egg-info
+__pycache__
+build/
