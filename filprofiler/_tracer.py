@@ -11,8 +11,7 @@ pymemprofile = CDLL(library_path("libpymemprofile_api"))
 def _tracer(frame, event, arg):
     """Tracing function for sys.settrace."""
     if event == "call":
-        info = inspect.getframeinfo(frame)
-        name = f"{info.filename}:{info.function}"
+        name = f"{frame.f_code.co_filename}:{frame.f_code.co_name}"
         pymemprofile.pymemprofile_start_call(name.encode("utf-8"))
     elif event == "return":
         pymemprofile.pymemprofile_finish_call()
