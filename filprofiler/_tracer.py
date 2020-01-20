@@ -23,13 +23,14 @@ def start_tracing():
     pymemprofile.pymemprofile_reset()
     sys.settrace(_tracer)
 
-def stop_tracing():
-    pymemprofile.pymemprofile_dump_peak_to_flamegraph(b"/tmp/out.svg")
+def stop_tracing(svg_output_path: str):
+    path = svg_output_path.encode(sys.getfilesystemencoding())
+    pymemprofile.pymemprofile_dump_peak_to_flamegraph(path)
 
 
-def trace(code, globals_):
+def trace(code, globals_, svg_output_path: str):
     start_tracing()
     try:
         exec(code, globals_, None)
     finally:
-        stop_tracing()
+        stop_tracing(svg_output_path)

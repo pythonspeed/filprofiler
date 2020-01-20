@@ -26,8 +26,15 @@ def stage_1():
 
 def stage_2():
     """Main CLI interface. Presumes LD_PRELOAD etc. has been set by stage_1()."""
-    usage = "fil-profile [-m module | path-to-py-script ] [arg] ..."
+    usage = "fil-profile [-o /path/to/output.svg] [-m module | /path/to/script.py ] [arg] ..."
     parser = ArgumentParser(usage=usage)
+    parser.add_argument(
+        "-o",
+        dest="svg_output_path",
+        action="store",
+        default="memory-graph.svg",
+        help="Path where the SVG with the profile flamegraph is written.",
+    )
     parser.add_argument(
         "-m",
         dest="module",
@@ -55,7 +62,7 @@ def stage_2():
             "__package__": None,
             "__cached__": None,
         }
-    trace(code, globals_)
+    trace(code, globals_, arguments.svg_output_path)
 
 
 if __name__ == "__main__":

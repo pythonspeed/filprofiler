@@ -1,5 +1,6 @@
-use im::hashmap as imhashmap;
+ouse im::hashmap as imhashmap;
 use im::vector as imvector;
+use inferno::flamegraph;
 use itertools::Itertools;
 use libc;
 use std::cell::RefCell;
@@ -118,7 +119,7 @@ pub fn reset() {
 }
 
 /// Dump all callstacks in peak memory usage to format used by flamegraph.
-pub fn dump_peak_to_flamegraph(_path: &str) {
+pub fn dump_peak_to_flamegraph(path: &str) {
     // Convert to mapping from callstack to usage, merging usage for duplicate
     // callstacks:
     let mut by_call: collections::HashMap<String, usize> = collections::HashMap::new();
@@ -128,7 +129,35 @@ pub fn dump_peak_to_flamegraph(_path: &str) {
         let entry = by_call.entry(callstack).or_insert(0);
         *entry += size;
     }
-    for (callstack, size) in by_call.iter() {
-        println!("{} {}", callstack, size);
+    let lines: Vec<String> = by_call
+        .iter()
+        .map(|(callstack, size)| format!("{} {}", callstack, size))
+        .collect();
+    match write_flamegraph(lines.iter().map(|s| s.as_ref()), path) {
+        Ok(_) => {
+            eprintln!("Wrote memory-usage flamegraph to {}", path);
+        }
+        Err(e) => {
+            eprintln!("Error writing SVG: {}", e);
+        }
+    }
+}
+
+fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
+    lines: I,
+    path: &str,
+) -> std::io::Result<()> {
+    let file = std::fs::File::create(path)?;
+    // TODO better options
+    let mut options = flamegraph::Options {
+        ..Default::default()
+    };
+    if let Err(e) = flamegraph::from_lines(&mut options, lines, file) {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("{}", e),
+        ))
+    } else {
+        Ok(())
     }
 }
