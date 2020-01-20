@@ -22,11 +22,17 @@ def h(i):
     s = numpy.ones((1024, 1024, i), dtype=numpy.uint8)
     del s
 
+def calc():
+    arr = numpy.random.random((4096, 4096))
+    arr2 = numpy.dot(arr, arr)
+    return arr2
+
 def demo():
     print("DEMO TIME!")
     g()
     should_have_no_effect()
     x = return_some_data_that_isnt_freed()
+    arr = calc()
     h(5)
 
 if __name__ == '__main__':
