@@ -154,7 +154,6 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
     peak_bytes: usize,
 ) -> std::io::Result<()> {
     let file = std::fs::File::create(path)?;
-    // TODO better options
     let title = format!(
         "Peak Tracked Memory Usage ({:.1} MiB)",
         peak_bytes as f64 / (1024.0 * 1024.0)
