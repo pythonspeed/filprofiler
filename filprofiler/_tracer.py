@@ -24,7 +24,7 @@ def start_tracing():
     sys.settrace(_tracer)
 
 def stop_tracing(svg_output_path: str):
-    path = svg_output_path.encode(sys.getfilesystemencoding())
+    path = svg_output_path.encode("utf-8")
     pymemprofile.pymemprofile_dump_peak_to_flamegraph(path)
 
 
