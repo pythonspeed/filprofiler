@@ -1,4 +1,4 @@
-ouse im::hashmap as imhashmap;
+use im::hashmap as imhashmap;
 use im::vector as imvector;
 use inferno::flamegraph;
 use itertools::Itertools;
@@ -123,7 +123,8 @@ pub fn dump_peak_to_flamegraph(path: &str) {
     // Convert to mapping from callstack to usage, merging usage for duplicate
     // callstacks:
     let mut by_call: collections::HashMap<String, usize> = collections::HashMap::new();
-    let peak_allocations = &ALLOCATIONS.lock().unwrap().peak_allocations;
+    let allocations = &ALLOCATIONS.lock().unwrap();
+    let peak_allocations = &allocations.peak_allocations;
     for Allocation { callstack, size } in peak_allocations.values() {
         let callstack = callstack.to_string();
         let entry = by_call.entry(callstack).or_insert(0);
@@ -131,11 +132,15 @@ pub fn dump_peak_to_flamegraph(path: &str) {
     }
     let lines: Vec<String> = by_call
         .iter()
-        .map(|(callstack, size)| format!("{} {}", callstack, size))
+        .map(|(callstack, size)| format!("{} {:.0}", callstack, (*size as f64 / 1024.0).round()))
         .collect();
-    match write_flamegraph(lines.iter().map(|s| s.as_ref()), path) {
+    match write_flamegraph(
+        lines.iter().map(|s| s.as_ref()),
+        path,
+        allocations.peak_allocated_bytes,
+    ) {
         Ok(_) => {
-            eprintln!("Wrote memory-usage flamegraph to {}", path);
+            eprintln!("Wrote memory usage flamegraph to {}", path);
         }
         Err(e) => {
             eprintln!("Error writing SVG: {}", e);
@@ -146,10 +151,23 @@ pub fn dump_peak_to_flamegraph(path: &str) {
 fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
     lines: I,
     path: &str,
+    peak_bytes: usize,
 ) -> std::io::Result<()> {
     let file = std::fs::File::create(path)?;
     // TODO better options
+    let title = format!(
+        "Peak Tracked Memory Usage ({:.1} MiB)",
+        peak_bytes as f64 / (1024.0 * 1024.0)
+    );
     let mut options = flamegraph::Options {
+        title: title,
+        direction: flamegraph::Direction::Inverted,
+        count_name: "KiB".to_string(),
+        colors: flamegraph::color::Palette::Basic(flamegraph::color::BasicPalette::Mem),
+        font_size: 16,
+        font_type: "mono".to_string(),
+        frame_height: 22,
+        hash: true,
         ..Default::default()
     };
     if let Err(e) = flamegraph::from_lines(&mut options, lines, file) {
