@@ -2,25 +2,18 @@
 
 import inspect
 import sys
-from ctypes import CDLL
+from ctypes import CDLL, RTLD_GLOBAL
 
 from ._utils import library_path
-pymemprofile = CDLL(library_path("libpymemprofile_api"))
-
-
-def _tracer(frame, event, arg):
-    """Tracing function for sys.settrace."""
-    if event == "call":
-        name = f"{frame.f_code.co_filename}:{frame.f_code.co_name}"
-        pymemprofile.pymemprofile_start_call(name.encode("utf-8"))
-    elif event == "return":
-        pymemprofile.pymemprofile_finish_call()
-    return _tracer
+# Load with RTLD_GLOBAL so _profiler.so has access to those symbols; explicit
+# linking may be possible but haven't done that yet, oh well.
+pymemprofile = CDLL(library_path("libpymemprofile_api"), mode=RTLD_GLOBAL)
+from . import _profiler
 
 
 def start_tracing():
     pymemprofile.pymemprofile_reset()
-    sys.settrace(_tracer)
+    _profiler.start_tracing()
 
 def stop_tracing(svg_output_path: str):
     path = svg_output_path.encode("utf-8")
