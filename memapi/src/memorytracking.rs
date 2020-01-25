@@ -75,7 +75,6 @@ impl AllocationTracker {
     /// Free an existing allocation.
     fn free_allocation(&mut self, address: usize) {
         // Possibly this allocation doesn't exist; that's OK!
-        let before = self.peak_allocations.len();
         if let Some(removed) = self.current_allocations.remove(&address) {
             if removed.size > self.current_allocated_bytes {
                 // In theory this should never happen, but just in case...
@@ -83,10 +82,6 @@ impl AllocationTracker {
             } else {
                 self.current_allocated_bytes -= removed.size;
             }
-        }
-        let after = self.peak_allocations.len();
-        if before != after {
-            println!("BUG! MUTATED PEAK?!");
         }
     }
 
