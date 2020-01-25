@@ -29,7 +29,7 @@ impl Callstack {
 
     fn to_string(&self) -> String {
         if self.calls.len() == 0 {
-            "(N/A)".to_string()
+            "[No Python stack]".to_string()
         } else {
             self.calls.iter().join(";")
         }
@@ -60,6 +60,66 @@ impl AllocationTracker {
             peak_allocated_bytes: 0,
         }
     }
+
+    /// Add a new allocation based off the current callstack.
+    fn add_allocation(&mut self, address: usize, size: libc::size_t, callstack: Callstack) {
+        let alloc = Allocation { callstack, size };
+        self.current_allocations.insert(address, alloc);
+        self.current_allocated_bytes += size;
+        if self.current_allocated_bytes > self.peak_allocated_bytes {
+            self.peak_allocated_bytes = self.current_allocated_bytes;
+            self.peak_allocations = self.current_allocations.clone();
+        }
+    }
+
+    /// Free an existing allocation.
+    fn free_allocation(&mut self, address: usize) {
+        // Possibly this allocation doesn't exist; that's OK!
+        let before = self.peak_allocations.len();
+        if let Some(removed) = self.current_allocations.remove(&address) {
+            if removed.size > self.current_allocated_bytes {
+                // In theory this should never happen, but just in case...
+                self.current_allocated_bytes = 0;
+            } else {
+                self.current_allocated_bytes -= removed.size;
+            }
+        }
+        let after = self.peak_allocations.len();
+        if before != after {
+            println!("BUG! MUTATED PEAK?!");
+        }
+    }
+
+    /// Dump all callstacks in peak memory usage to format used by flamegraph.
+    fn dump_peak_to_flamegraph(&self, path: &str) {
+        // Convert to mapping from callstack to usage, merging usage for duplicate
+        // callstacks:
+        let mut by_call: collections::HashMap<String, usize> = collections::HashMap::new();
+        let peak_allocations = &self.peak_allocations;
+        for Allocation { callstack, size } in peak_allocations.values() {
+            let callstack = callstack.to_string();
+            let entry = by_call.entry(callstack).or_insert(0);
+            *entry += size;
+        }
+        let lines: Vec<String> = by_call
+            .iter()
+            .map(|(callstack, size)| {
+                format!("{} {:.0}", callstack, (*size as f64 / 1024.0).round())
+            })
+            .collect();
+        match write_flamegraph(
+            lines.iter().map(|s| s.as_ref()),
+            path,
+            self.peak_allocated_bytes,
+        ) {
+            Ok(_) => {
+                eprintln!("Wrote memory usage flamegraph to {}", path);
+            }
+            Err(e) => {
+                eprintln!("Error writing SVG: {}", e);
+            }
+        }
+    }
 }
 
 lazy_static! {
@@ -84,33 +144,14 @@ pub fn finish_call() {
 /// Add a new allocation based off the current callstack.
 pub fn add_allocation(address: usize, size: libc::size_t) {
     let callstack: Callstack = THREAD_CALLSTACK.with(|cs| (*cs.borrow()).clone());
-    let alloc = Allocation { callstack, size };
     let mut allocations = ALLOCATIONS.lock().unwrap();
-    allocations.current_allocations.insert(address, alloc);
-    allocations.current_allocated_bytes += size;
-    if allocations.current_allocated_bytes > allocations.peak_allocated_bytes {
-        allocations.peak_allocated_bytes = allocations.current_allocated_bytes;
-        allocations.peak_allocations = allocations.current_allocations.clone();
-    }
+    allocations.add_allocation(address, size, callstack);
 }
 
 /// Free an existing allocation.
 pub fn free_allocation(address: usize) {
     let mut allocations = ALLOCATIONS.lock().unwrap();
-    // Possibly this allocation doesn't exist; that's OK!
-    let before = allocations.peak_allocations.len();
-    if let Some(removed) = allocations.current_allocations.remove(&address) {
-        if removed.size > allocations.current_allocated_bytes {
-            // In theory this should never happen, but just in case...
-            allocations.current_allocated_bytes = 0;
-        } else {
-            allocations.current_allocated_bytes -= removed.size;
-        }
-    }
-    let after = allocations.peak_allocations.len();
-    if before != after {
-        println!("BUG! MUTATED PEAK?!");
-    }
+    allocations.free_allocation(address);
 }
 
 /// Reset internal state.
@@ -120,32 +161,8 @@ pub fn reset() {
 
 /// Dump all callstacks in peak memory usage to format used by flamegraph.
 pub fn dump_peak_to_flamegraph(path: &str) {
-    // Convert to mapping from callstack to usage, merging usage for duplicate
-    // callstacks:
-    let mut by_call: collections::HashMap<String, usize> = collections::HashMap::new();
     let allocations = &ALLOCATIONS.lock().unwrap();
-    let peak_allocations = &allocations.peak_allocations;
-    for Allocation { callstack, size } in peak_allocations.values() {
-        let callstack = callstack.to_string();
-        let entry = by_call.entry(callstack).or_insert(0);
-        *entry += size;
-    }
-    let lines: Vec<String> = by_call
-        .iter()
-        .map(|(callstack, size)| format!("{} {:.0}", callstack, (*size as f64 / 1024.0).round()))
-        .collect();
-    match write_flamegraph(
-        lines.iter().map(|s| s.as_ref()),
-        path,
-        allocations.peak_allocated_bytes,
-    ) {
-        Ok(_) => {
-            eprintln!("Wrote memory usage flamegraph to {}", path);
-        }
-        Err(e) => {
-            eprintln!("Error writing SVG: {}", e);
-        }
-    }
+    allocations.dump_peak_to_flamegraph(path);
 }
 
 fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
