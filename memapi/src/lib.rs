@@ -41,12 +41,17 @@ pub extern "C" fn pymemprofile_free_allocation(address: usize) {
 }
 
 #[no_mangle]
-pub extern "C" fn pymemprofile_start_call(name: *const c_char) {
+pub extern "C" fn pymemprofile_start_call(file_name: *const c_char, func_name: *const c_char) {
     let name = unsafe {
-        CStr::from_ptr(name)
-            .to_str()
-            .expect("Function name wasn't UTF-8")
-            .to_string()
+        format!(
+            "{}:{}",
+            CStr::from_ptr(file_name)
+                .to_str()
+                .expect("Function name wasn't UTF-8"),
+            CStr::from_ptr(func_name)
+                .to_str()
+                .expect("Function name wasn't UTF-8")
+        )
     };
     call_if_external_api(Box::new(move || {
         memorytracking::start_call(name);
