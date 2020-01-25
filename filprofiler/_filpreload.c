@@ -28,7 +28,8 @@ static void __attribute__((constructor)) constructor() {
     fprintf(stderr, "BUG: expected size of size_t and void* to be the same.\n");
     exit(1);
   }
-  void *lib = dlopen(getenv("FIL_API_LIBRARY"), RTLD_LAZY | RTLD_DEEPBIND);
+  void *lib =
+      dlopen(getenv("FIL_API_LIBRARY"), RTLD_NOW | RTLD_DEEPBIND | RTLD_GLOBAL);
   if (!lib) {
     fprintf(stderr, "Couldn't load libpymemprofile_api.so library: %s\n",
             dlerror());
@@ -59,8 +60,43 @@ static void __attribute__((constructor)) constructor() {
 
 extern void *__libc_malloc(size_t size);
 extern void *__libc_calloc(size_t nmemb, size_t size);
+extern void pymemprofile_start_call(const char *filename, const char *funcname);
+extern void pymemprofile_finish_call();
+extern void pymemprofile_reset();
+extern void pymemprofile_dump_peak_to_flamegraph(const char* path);
 
-// TODO switch to new add_allocation and free_allocation APIs
+__attribute__((visibility("default"))) void
+fil_start_call(const char *filename, const char *funcname) {
+  if (!will_i_be_reentrant) {
+    will_i_be_reentrant = 1;
+    pymemprofile_start_call(filename, funcname);
+    will_i_be_reentrant = 0;
+  }
+}
+
+__attribute__((visibility("default"))) void fil_finish_call() {
+  if (!will_i_be_reentrant) {
+    will_i_be_reentrant = 1;
+    pymemprofile_finish_call();
+    will_i_be_reentrant = 0;
+  }
+}
+
+__attribute__((visibility("default"))) void fil_reset() {
+  if (!will_i_be_reentrant) {
+    will_i_be_reentrant = 1;
+    pymemprofile_reset();
+    will_i_be_reentrant = 0;
+  }
+}
+
+__attribute__((visibility("default"))) void fil_dump_peak_to_flamegraph(const char* path) {
+  if (!will_i_be_reentrant) {
+    will_i_be_reentrant = 1;
+    pymemprofile_dump_peak_to_flamegraph(path);
+    will_i_be_reentrant = 0;
+  }
+}
 
 // Override memory-allocation functions:
 __attribute__((visibility("default"))) void *malloc(size_t size) {
