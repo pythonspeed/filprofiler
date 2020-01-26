@@ -190,3 +190,32 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{AllocationTracker, Callstack};
+    use itertools::Itertools;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn current_allocated_matches_sum_of_allocations(
+            // Allocated bytes. Will use index as the memory address.
+            allocated_sizes in prop::collection::vec(1..1000 as usize, 10..20),
+            // Allocations to free.
+            free_indices in prop::collection::vec(any::<prop::sample::Index>(), 5..10)
+        ) {
+            let mut tracker = AllocationTracker::new();
+            for i in 0..allocated_sizes.len() {
+                tracker.add_allocation(i as usize,*allocated_sizes.get(i).unwrap(), Callstack::new());
+            }
+            let mut expected_sum = allocated_sizes.iter().sum();
+            prop_assert_eq!(tracker.current_allocated_bytes, expected_sum);
+            for i in free_indices.iter().map(|i|i.index(allocated_sizes.len())).unique() {
+                expected_sum -= allocated_sizes.get(i).unwrap();
+                tracker.free_allocation(i);
+                prop_assert_eq!(tracker.current_allocated_bytes, expected_sum);
+            }
+        }
+    }
+}
