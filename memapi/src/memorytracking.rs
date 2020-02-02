@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::collections;
 use std::sync::Mutex;
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 struct Callstack {
     calls: imvector::Vector<String>,
 }
@@ -38,7 +38,7 @@ impl Callstack {
 
 thread_local!(static THREAD_CALLSTACK: RefCell<Callstack> = RefCell::new(Callstack::new()));
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 struct Allocation {
     callstack: Callstack,
     size: libc::size_t,
@@ -217,5 +217,36 @@ mod tests {
                 prop_assert_eq!(tracker.current_allocated_bytes, expected_sum);
             }
         }
+    }
+
+    #[test]
+    fn peak_allocations_only_updated_on_new_peaks() {
+        let mut tracker = AllocationTracker::new();
+        let mut cs1 = Callstack::new();
+        cs1.start_call(String::from("a"));
+        let mut cs2 = Callstack::new();
+        cs2.start_call(String::from("b"));
+
+        tracker.add_allocation(1, 1000, cs1.clone());
+        // Peak should now match current allocations:
+        assert_eq!(tracker.current_allocations, tracker.peak_allocations);
+        assert_eq!(tracker.peak_allocated_bytes, 1000);
+        let previous_peak = tracker.peak_allocations.clone();
+
+        // Free the allocation:
+        tracker.free_allocation(1);
+        assert_eq!(tracker.current_allocated_bytes, 0);
+        assert_eq!(previous_peak, tracker.peak_allocations);
+        assert_eq!(tracker.peak_allocated_bytes, 1000);
+
+        // Add allocation, still less than 1000:
+        tracker.add_allocation(3, 123, cs1.clone());
+        assert_eq!(previous_peak, tracker.peak_allocations);
+        assert_eq!(tracker.peak_allocated_bytes, 1000);
+
+        // Add allocation that goes past previous peak
+        tracker.add_allocation(2, 2000, cs2.clone());
+        assert_eq!(tracker.current_allocations, tracker.peak_allocations);
+        assert_eq!(tracker.peak_allocated_bytes, 2123);
     }
 }
