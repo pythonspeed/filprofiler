@@ -85,10 +85,9 @@ impl AllocationTracker {
         }
     }
 
-    /// Dump all callstacks in peak memory usage to format used by flamegraph.
-    fn dump_peak_to_flamegraph(&self, path: &str) {
-        // Convert to mapping from callstack to usage, merging usage for duplicate
-        // callstacks:
+    /// Combine Callstacks and make them human-readable. Duplicate callstacks
+    /// have their allocated memory summed.
+    fn combine_callstacks(&self) -> collections::HashMap<String, usize> {
         let mut by_call: collections::HashMap<String, usize> = collections::HashMap::new();
         let peak_allocations = &self.peak_allocations;
         for Allocation { callstack, size } in peak_allocations.values() {
@@ -96,6 +95,12 @@ impl AllocationTracker {
             let entry = by_call.entry(callstack).or_insert(0);
             *entry += size;
         }
+        by_call
+    }
+
+    /// Dump all callstacks in peak memory usage to format used by flamegraph.
+    fn dump_peak_to_flamegraph(&self, path: &str) {
+        let by_call = self.combine_callstacks();
         let lines: Vec<String> = by_call
             .iter()
             .map(|(callstack, size)| {
@@ -196,6 +201,7 @@ mod tests {
     use super::{AllocationTracker, Callstack};
     use itertools::Itertools;
     use proptest::prelude::*;
+    use std::collections;
 
     proptest! {
         #[test]
@@ -248,5 +254,24 @@ mod tests {
         tracker.add_allocation(2, 2000, cs2.clone());
         assert_eq!(tracker.current_allocations, tracker.peak_allocations);
         assert_eq!(tracker.peak_allocated_bytes, 2123);
+    }
+
+    #[test]
+    fn combine_callstacks_and_sum_allocations() {
+        let mut tracker = AllocationTracker::new();
+        let mut cs1 = Callstack::new();
+        cs1.start_call(String::from("a"));
+        cs1.start_call(String::from("b"));
+        let mut cs2 = Callstack::new();
+        cs2.start_call(String::from("c"));
+
+        tracker.add_allocation(1, 1000, cs1.clone());
+        tracker.add_allocation(2, 234, cs2.clone());
+        tracker.add_allocation(3, 50000, cs1.clone());
+
+        let mut expected: collections::HashMap<String, usize> = collections::HashMap::new();
+        expected.insert("a;b".to_string(), 51000);
+        expected.insert("c".to_string(), 234);
+        assert_eq!(expected, tracker.combine_callstacks());
     }
 }
