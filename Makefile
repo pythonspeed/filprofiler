@@ -16,8 +16,14 @@ filprofiler/_filpreload.so: filprofiler/_filpreload.c
 
 filprofiler/libpymemprofile_api.so: Cargo.lock memapi/Cargo.toml memapi/src/*.rs
 	rm -f filprofiler/libymemprofile_api.so
-	cargo build
-	cp -f target/debug/libpymemprofile_api.so filprofiler/
+	cargo build --release
+	cp -f target/release/libpymemprofile_api.so filprofiler/
 
 test: build
 	fil-profile example.py
+
+.PHONY: clean
+clean:
+	rm -rf target
+	rm -rf filprofiler/*.so
+	python setup.py clean
