@@ -8,7 +8,7 @@ extern void fil_finish_call(void);
 int fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
   if (what == PyTrace_CALL) {
     fil_start_call(PyUnicode_AsUTF8(frame->f_code->co_filename),
-                            PyUnicode_AsUTF8(frame->f_code->co_name));
+                   PyUnicode_AsUTF8(frame->f_code->co_name));
     return 0;
   }
   if (what == PyTrace_RETURN) {
