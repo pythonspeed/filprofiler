@@ -1,6 +1,5 @@
 """Trace code, so that libpymemprofile_api.so know's where we are."""
 
-import inspect
 import sys
 from ctypes import CDLL, RTLD_GLOBAL
 
@@ -17,6 +16,7 @@ def start_tracing():
     _profiler.start_tracing()
 
 def stop_tracing(svg_output_path: str):
+    sys.settrace(None)
     path = svg_output_path.encode("utf-8")
     preload.fil_dump_peak_to_flamegraph(path)
 

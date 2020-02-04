@@ -126,7 +126,7 @@ __attribute__((visibility("default"))) void free(void *addr) {
     return;
   }
   underlying_real_free(addr);
-  if (!will_i_be_reentrant && initialized) {
+  if (!will_i_be_reentrant) {
     will_i_be_reentrant = 1;
     free_allocation_hook((size_t)addr);
     will_i_be_reentrant = 0;
