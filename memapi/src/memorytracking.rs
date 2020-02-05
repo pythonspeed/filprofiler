@@ -1,4 +1,3 @@
-use im::vector as imvector;
 use inferno::flamegraph;
 use itertools::Itertools;
 use libc;
@@ -8,22 +7,22 @@ use std::sync::Mutex;
 
 #[derive(Clone, Debug, PartialEq)]
 struct Callstack {
-    calls: imvector::Vector<String>,
+    calls: Vec<String>,
 }
 
 impl Callstack {
     fn new() -> Callstack {
         Callstack {
-            calls: imvector::Vector::<String>::new(),
+            calls: Vec::<String>::new(),
         }
     }
 
     fn start_call(&mut self, name: String) {
-        self.calls.push_back(name);
+        self.calls.push(name);
     }
 
     fn finish_call(&mut self) {
-        self.calls.pop_back();
+        self.calls.pop();
     }
 
     fn to_string(&self) -> String {
