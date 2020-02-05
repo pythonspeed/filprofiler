@@ -64,7 +64,7 @@ impl AllocationTracker {
         let alloc = Allocation { callstack, size };
         self.current_allocations.insert(address, alloc);
         self.current_allocated_bytes += size;
-        if self.current_allocated_bytes > self.peak_allocated_bytes {
+        if self.current_allocated_bytes > self.peak_allocated_bytes + 10000 {
             self.peak_allocated_bytes = self.current_allocated_bytes;
             self.peak_allocations = self.current_allocations.clone();
         }
