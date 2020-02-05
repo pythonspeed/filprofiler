@@ -25,8 +25,8 @@ impl Callstack {
         self.calls.pop();
     }
 
-    fn to_string(&self) -> String {
-        if self.calls.len() == 0 {
+    fn as_string(&self) -> String {
+        if self.calls.is_empty() {
             "[No Python stack]".to_string()
         } else {
             self.calls.iter().join(";")
@@ -89,7 +89,7 @@ impl AllocationTracker {
         let mut by_call: collections::HashMap<String, usize> = collections::HashMap::new();
         let peak_allocations = &self.peak_allocations;
         for Allocation { callstack, size } in peak_allocations.values() {
-            let callstack = callstack.to_string();
+            let callstack = callstack.as_string();
             let entry = by_call.entry(callstack).or_insert(0);
             *entry += size;
         }
@@ -174,7 +174,7 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
         peak_bytes as f64 / (1024.0 * 1024.0)
     );
     let mut options = flamegraph::Options {
-        title: title,
+        title,
         direction: flamegraph::Direction::Inverted,
         count_name: "KiB".to_string(),
         colors: flamegraph::color::Palette::Basic(flamegraph::color::BasicPalette::Mem),
