@@ -1,6 +1,7 @@
 use inferno::flamegraph;
 use itertools::Itertools;
 use libc;
+use rustc_hash;
 use std::cell::RefCell;
 use std::collections;
 use std::sync::Mutex;
@@ -43,8 +44,8 @@ struct Allocation {
 }
 
 struct AllocationTracker {
-    current_allocations: collections::HashMap<usize, Allocation>,
-    peak_allocations: collections::HashMap<usize, Allocation>,
+    current_allocations: rustc_hash::FxHashMap<usize, Allocation>,
+    peak_allocations: rustc_hash::FxHashMap<usize, Allocation>,
     current_allocated_bytes: usize,
     peak_allocated_bytes: usize,
 }
@@ -52,8 +53,8 @@ struct AllocationTracker {
 impl AllocationTracker {
     fn new() -> AllocationTracker {
         AllocationTracker {
-            current_allocations: collections::HashMap::default(),
-            peak_allocations: collections::HashMap::default(),
+            current_allocations: rustc_hash::FxHashMap::default(),
+            peak_allocations: rustc_hash::FxHashMap::default(),
             current_allocated_bytes: 0,
             peak_allocated_bytes: 0,
         }
