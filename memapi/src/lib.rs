@@ -25,8 +25,12 @@ pub unsafe extern "C" fn pymemprofile_start_call(
     file_name: *const c_char,
     func_name: *const c_char,
 ) {
-    let function_name = str::from_utf8_unchecked(CStr::from_ptr(func_name).to_bytes()).to_string();
-    let module_name = str::from_utf8_unchecked(CStr::from_ptr(file_name).to_bytes()).to_string();
+    let function_name = SmallString::from_str(str::from_utf8_unchecked(
+        CStr::from_ptr(func_name).to_bytes(),
+    ));
+    let module_name = SmallString::from_str(str::from_utf8_unchecked(
+        CStr::from_ptr(file_name).to_bytes(),
+    ));
     let call_site = memorytracking::CallSite {
         function_name,
         module_name,
