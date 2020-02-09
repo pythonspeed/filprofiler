@@ -3,7 +3,7 @@ import sys
 import inspect
 import atexit
 import numpy
-
+import time
 
 import gc
 
@@ -29,11 +29,13 @@ def calc():
 
 def demo():
     print("DEMO TIME!")
+    start = time.time()
     g()
     should_have_no_effect()
     x = return_some_data_that_isnt_freed()
     arr = calc()
     h(5)
+    print("DONE!", time.time() - start)
 
 if __name__ == '__main__':
     demo()
