@@ -1,6 +1,7 @@
 use smallstr::SmallString;
 use std::ffi::CStr;
 use std::os::raw::c_char;
+use std::str;
 
 #[macro_use]
 extern crate lazy_static;
@@ -24,8 +25,8 @@ pub unsafe extern "C" fn pymemprofile_start_call(
     file_name: *const c_char,
     func_name: *const c_char,
 ) {
-    let function_name = CStr::from_ptr(func_name).to_str().unwrap().to_string();
-    let module_name = CStr::from_ptr(file_name).to_str().unwrap().to_string();
+    let function_name = str::from_utf8_unchecked(CStr::from_ptr(func_name).to_bytes()).to_string();
+    let module_name = str::from_utf8_unchecked(CStr::from_ptr(file_name).to_bytes()).to_string();
     let call_site = memorytracking::CallSite {
         function_name,
         module_name,

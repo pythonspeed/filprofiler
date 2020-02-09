@@ -44,8 +44,8 @@ thread_local!(static THREAD_CALLSTACK: RefCell<Callstack> = RefCell::new(Callsta
 /// A particular place where a call happened:
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CallSite {
-    pub module_name: String,   //SmallString<[u8; 24]>,
-    pub function_name: String, //SmallString<[u8; 24]>,
+    pub module_name: String,
+    pub function_name: String,
 }
 
 impl fmt::Display for CallSite {
