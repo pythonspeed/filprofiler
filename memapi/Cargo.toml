@@ -11,7 +11,6 @@ libc = "0.2"
 itertools = "0.8.2"
 lazy_static = "1.4.0"
 rustc-hash = "1.0.1"
-smallvec = "1.2.0"
 
 [dependencies.inferno]
 version = "0.9.4"

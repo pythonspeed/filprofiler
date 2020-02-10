@@ -3,7 +3,6 @@ use itertools::Itertools;
 use libc;
 use rustc_hash;
 use smallstr::SmallString;
-use smallvec::SmallVec;
 use std::cell::RefCell;
 use std::collections;
 use std::fmt;
@@ -235,11 +234,10 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
         title,
         direction: flamegraph::Direction::Inverted,
         count_name: "KiB".to_string(),
-        colors: flamegraph::color::Palette::Basic(flamegraph::color::BasicPalette::Mem),
         font_size: 16,
         font_type: "mono".to_string(),
         frame_height: 22,
-        hash: true,
+        subtitle: Some("SUBTITLE-HERE".to_string()),
         ..Default::default()
     };
     if let Err(e) = flamegraph::from_lines(&mut options, lines, file) {
