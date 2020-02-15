@@ -2,7 +2,7 @@ use im::hashmap as imhashmap;
 use inferno::flamegraph;
 use itertools::Itertools;
 use libc;
-use rustc_hash;
+use rustc_hash::FxHashMap as HashMap;
 use smallstr::SmallString;
 use std::cell::RefCell;
 use std::collections;
@@ -27,13 +27,13 @@ impl Callstack {
         self.calls.pop();
     }
 
-    fn as_string(&self, call_sites: &CallSites) -> String {
+    fn as_string(&self, id_to_callsite: &HashMap<u32, CallSite>) -> String {
         if self.calls.is_empty() {
             "[No Python stack]".to_string()
         } else {
             self.calls
                 .iter()
-                .map(|id| call_sites.get_callsite(*id))
+                .map(|id| id_to_callsite.get(id).unwrap())
                 .join(";")
         }
     }
@@ -56,16 +56,14 @@ impl fmt::Display for CallSite {
 /// Maps CallSites to integer identifiers used in CallStacks.
 struct CallSites {
     max_id: u32,
-    callsite_to_id: rustc_hash::FxHashMap<CallSite, u32>,
-    //id_to_callsite: rustc_hash::FxHashMap<u32, CallSite>,
+    callsite_to_id: HashMap<CallSite, u32>,
 }
 
 impl CallSites {
     fn new() -> CallSites {
         CallSites {
             max_id: 0,
-            callsite_to_id: rustc_hash::FxHashMap::default(),
-            //id_to_callsite: rustc_hash::FxHashMap::default(),
+            callsite_to_id: HashMap::default(),
         }
     }
 
@@ -79,14 +77,12 @@ impl CallSites {
         *result
     }
 
-    fn get_callsite(&self, id: u32) -> CallSite {
-        // TODO this is super-slow, precalculate reverse map
+    fn get_reverse_map(&self) -> HashMap<u32, CallSite> {
+        let mut result = HashMap::default();
         for (call_site, csid) in &(self.callsite_to_id) {
-            if *csid == id {
-                return call_site.clone();
-            }
+            result.insert(*csid, call_site.clone());
         }
-        panic!("ono")
+        result
     }
 }
 
@@ -144,8 +140,9 @@ impl<'a> AllocationTracker {
     fn combine_callstacks(&self) -> collections::HashMap<String, usize> {
         let mut by_call: collections::HashMap<String, usize> = collections::HashMap::new();
         let peak_allocations = &self.peak_allocations;
+        let id_to_callsite = self.call_sites.get_reverse_map();
         for Allocation { callstack, size } in peak_allocations.values() {
-            let callstack = callstack.as_string(&self.call_sites);
+            let callstack = callstack.as_string(&id_to_callsite);
             let entry = by_call.entry(callstack).or_insert(0);
             *entry += size;
         }
