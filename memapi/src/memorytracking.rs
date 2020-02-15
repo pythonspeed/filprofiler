@@ -1,3 +1,4 @@
+use im::hashmap as imhashmap;
 use inferno::flamegraph;
 use itertools::Itertools;
 use libc;
@@ -96,8 +97,8 @@ struct Allocation {
 }
 
 struct AllocationTracker {
-    current_allocations: rustc_hash::FxHashMap<usize, Allocation>,
-    peak_allocations: rustc_hash::FxHashMap<usize, Allocation>,
+    current_allocations: imhashmap::HashMap<usize, Allocation>,
+    peak_allocations: imhashmap::HashMap<usize, Allocation>,
     current_allocated_bytes: usize,
     peak_allocated_bytes: usize,
     call_sites: CallSites,
@@ -106,8 +107,8 @@ struct AllocationTracker {
 impl<'a> AllocationTracker {
     fn new() -> AllocationTracker {
         AllocationTracker {
-            current_allocations: rustc_hash::FxHashMap::default(),
-            peak_allocations: rustc_hash::FxHashMap::default(),
+            current_allocations: imhashmap::HashMap::default(),
+            peak_allocations: imhashmap::HashMap::default(),
             current_allocated_bytes: 0,
             peak_allocated_bytes: 0,
             call_sites: CallSites::new(),
@@ -119,7 +120,7 @@ impl<'a> AllocationTracker {
         let alloc = Allocation { callstack, size };
         self.current_allocations.insert(address, alloc);
         self.current_allocated_bytes += size;
-        if self.current_allocated_bytes > self.peak_allocated_bytes + 10000 {
+        if self.current_allocated_bytes > self.peak_allocated_bytes {
             self.peak_allocated_bytes = self.current_allocated_bytes;
             self.peak_allocations = self.current_allocations.clone();
         }
