@@ -24,7 +24,7 @@ def stop_tracing(svg_output_path: str):
     with open(path) as f:
         data = f.read().replace(
             "SUBTITLE-HERE",
-            """Created by the Fil memory profiler. <a href="https://pythonspeed.com/products/filmemoryprofiler/" style="text-decoration: underline;">Want to try it on your code?</a>""",
+            """Made with the Fil memory profiler. <a href="https://pythonspeed.com/products/filmemoryprofiler/" style="text-decoration: underline;" target="_parent">Try it on your code!</a>""",
         )
     with open(path, "w") as f:
         f.write(data)
