@@ -1,41 +1,90 @@
+use im::hashmap as imhashmap;
 use inferno::flamegraph;
 use itertools::Itertools;
 use libc;
-use rustc_hash;
+use rustc_hash::FxHashMap as HashMap;
+use smallstr::SmallString;
 use std::cell::RefCell;
 use std::collections;
+use std::fmt;
 use std::sync::Mutex;
 
 #[derive(Clone, Debug, PartialEq)]
 struct Callstack {
-    calls: Vec<String>,
+    calls: Vec<u32>,
 }
 
 impl Callstack {
     fn new() -> Callstack {
-        Callstack {
-            calls: Vec::<String>::new(),
-        }
+        Callstack { calls: Vec::new() }
     }
 
-    fn start_call(&mut self, name: String) {
-        self.calls.push(name);
+    fn start_call(&mut self, function_id: u32) {
+        self.calls.push(function_id);
     }
 
     fn finish_call(&mut self) {
         self.calls.pop();
     }
 
-    fn as_string(&self) -> String {
+    fn as_string(&self, id_to_callsite: &HashMap<u32, CallSite>) -> String {
         if self.calls.is_empty() {
             "[No Python stack]".to_string()
         } else {
-            self.calls.iter().join(";")
+            self.calls
+                .iter()
+                .map(|id| id_to_callsite.get(id).unwrap())
+                .join(";")
         }
     }
 }
 
 thread_local!(static THREAD_CALLSTACK: RefCell<Callstack> = RefCell::new(Callstack::new()));
+
+/// A particular place where a call happened:
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct CallSite {
+    pub module_name: SmallString<[u8; 24]>,
+    pub function_name: SmallString<[u8; 24]>,
+}
+
+impl fmt::Display for CallSite {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}", self.module_name, self.function_name)
+    }
+}
+/// Maps CallSites to integer identifiers used in CallStacks.
+struct CallSites {
+    max_id: u32,
+    callsite_to_id: HashMap<CallSite, u32>,
+}
+
+impl CallSites {
+    fn new() -> CallSites {
+        CallSites {
+            max_id: 0,
+            callsite_to_id: HashMap::default(),
+        }
+    }
+
+    fn get_or_insert_id(&mut self, call_site: CallSite) -> u32 {
+        let max_id = &mut self.max_id;
+        let result = self.callsite_to_id.entry(call_site).or_insert_with(|| {
+            let result = *max_id;
+            *max_id += 1;
+            result
+        });
+        *result
+    }
+
+    fn get_reverse_map(&self) -> HashMap<u32, CallSite> {
+        let mut result = HashMap::default();
+        for (call_site, csid) in &(self.callsite_to_id) {
+            result.insert(*csid, call_site.clone());
+        }
+        result
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 struct Allocation {
@@ -44,19 +93,21 @@ struct Allocation {
 }
 
 struct AllocationTracker {
-    current_allocations: rustc_hash::FxHashMap<usize, Allocation>,
-    peak_allocations: rustc_hash::FxHashMap<usize, Allocation>,
+    current_allocations: imhashmap::HashMap<usize, Allocation>,
+    peak_allocations: imhashmap::HashMap<usize, Allocation>,
     current_allocated_bytes: usize,
     peak_allocated_bytes: usize,
+    call_sites: CallSites,
 }
 
-impl AllocationTracker {
+impl<'a> AllocationTracker {
     fn new() -> AllocationTracker {
         AllocationTracker {
-            current_allocations: rustc_hash::FxHashMap::default(),
-            peak_allocations: rustc_hash::FxHashMap::default(),
+            current_allocations: imhashmap::HashMap::default(),
+            peak_allocations: imhashmap::HashMap::default(),
             current_allocated_bytes: 0,
             peak_allocated_bytes: 0,
+            call_sites: CallSites::new(),
         }
     }
 
@@ -65,7 +116,7 @@ impl AllocationTracker {
         let alloc = Allocation { callstack, size };
         self.current_allocations.insert(address, alloc);
         self.current_allocated_bytes += size;
-        if self.current_allocated_bytes > self.peak_allocated_bytes + 10000 {
+        if self.current_allocated_bytes > self.peak_allocated_bytes {
             self.peak_allocated_bytes = self.current_allocated_bytes;
             self.peak_allocations = self.current_allocations.clone();
         }
@@ -89,8 +140,9 @@ impl AllocationTracker {
     fn combine_callstacks(&self) -> collections::HashMap<String, usize> {
         let mut by_call: collections::HashMap<String, usize> = collections::HashMap::new();
         let peak_allocations = &self.peak_allocations;
+        let id_to_callsite = self.call_sites.get_reverse_map();
         for Allocation { callstack, size } in peak_allocations.values() {
-            let callstack = callstack.as_string();
+            let callstack = callstack.as_string(&id_to_callsite);
             let entry = by_call.entry(callstack).or_insert(0);
             *entry += size;
         }
@@ -126,9 +178,11 @@ lazy_static! {
 }
 
 /// Add to per-thread function stack:
-pub fn start_call(name: String) {
+pub fn start_call(call_site: CallSite) {
+    let mut allocations = ALLOCATIONS.lock().unwrap();
+    let id = allocations.call_sites.get_or_insert_id(call_site);
     THREAD_CALLSTACK.with(|cs| {
-        cs.borrow_mut().start_call(name);
+        cs.borrow_mut().start_call(id);
     });
 }
 
@@ -178,11 +232,10 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
         title,
         direction: flamegraph::Direction::Inverted,
         count_name: "KiB".to_string(),
-        colors: flamegraph::color::Palette::Basic(flamegraph::color::BasicPalette::Mem),
         font_size: 16,
         font_type: "mono".to_string(),
         frame_height: 22,
-        hash: true,
+        subtitle: Some("SUBTITLE-HERE".to_string()),
         ..Default::default()
     };
     if let Err(e) = flamegraph::from_lines(&mut options, lines, file) {
@@ -228,9 +281,9 @@ mod tests {
     fn peak_allocations_only_updated_on_new_peaks() {
         let mut tracker = AllocationTracker::new();
         let mut cs1 = Callstack::new();
-        cs1.start_call(String::from("a"));
+        cs1.start_call(1);
         let mut cs2 = Callstack::new();
-        cs2.start_call(String::from("b"));
+        cs2.start_call(2);
 
         tracker.add_allocation(1, 1000, cs1.clone());
         // Peak should now match current allocations:
@@ -259,10 +312,10 @@ mod tests {
     fn combine_callstacks_and_sum_allocations() {
         let mut tracker = AllocationTracker::new();
         let mut cs1 = Callstack::new();
-        cs1.start_call(String::from("a"));
-        cs1.start_call(String::from("b"));
+        cs1.start_call(1);
+        cs1.start_call(2);
         let mut cs2 = Callstack::new();
-        cs2.start_call(String::from("c"));
+        cs2.start_call(3);
 
         tracker.add_allocation(1, 1000, cs1.clone());
         tracker.add_allocation(2, 234, cs2.clone());

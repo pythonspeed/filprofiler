@@ -1,11 +1,6 @@
-import ctypes
-import sys
-import inspect
-import atexit
+import time
 import numpy
 
-
-import gc
 
 def should_have_no_effect():
     h(3)
@@ -29,11 +24,13 @@ def calc():
 
 def demo():
     print("DEMO TIME!")
+    start = time.time()
     g()
     should_have_no_effect()
     x = return_some_data_that_isnt_freed()
     arr = calc()
     h(5)
+    print("DONE!", time.time() - start)
 
 if __name__ == '__main__':
     demo()

@@ -1,5 +1,7 @@
+use smallstr::SmallString;
 use std::ffi::CStr;
 use std::os::raw::c_char;
+use std::str;
 
 #[macro_use]
 extern crate lazy_static;
@@ -23,16 +25,17 @@ pub unsafe extern "C" fn pymemprofile_start_call(
     file_name: *const c_char,
     func_name: *const c_char,
 ) {
-    let name = format!(
-        "{}:{}",
-        CStr::from_ptr(file_name)
-            .to_str()
-            .expect("Function name wasn't UTF-8"),
-        CStr::from_ptr(func_name)
-            .to_str()
-            .expect("Function name wasn't UTF-8")
-    );
-    memorytracking::start_call(name);
+    let function_name = SmallString::from_str(str::from_utf8_unchecked(
+        CStr::from_ptr(func_name).to_bytes(),
+    ));
+    let module_name = SmallString::from_str(str::from_utf8_unchecked(
+        CStr::from_ptr(file_name).to_bytes(),
+    ));
+    let call_site = memorytracking::CallSite {
+        function_name,
+        module_name,
+    };
+    memorytracking::start_call(call_site);
 }
 
 #[no_mangle]
