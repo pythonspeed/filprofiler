@@ -1,6 +1,7 @@
 """Trace code, so that libpymemprofile_api.so know's where we are."""
 
 import sys
+import threading
 from ctypes import CDLL, RTLD_GLOBAL
 
 from ._utils import library_path
@@ -14,7 +15,16 @@ from . import _profiler
 
 def start_tracing():
     preload.fil_reset()
+    threading.settrace(_start_thread_trace)
     _profiler.start_tracing()
+
+def _start_thread_trace(frame, event, arg):
+    # Modeled on
+    # https://github.com/nedbat/coveragepy/blob/master/coverage/ctracer/tracer.c's
+    # CTracer_call.
+    if event == "call":
+        _profiler.start_tracing()
+    return _start_thread_trace
 
 
 def stop_tracing(svg_output_path: str):
