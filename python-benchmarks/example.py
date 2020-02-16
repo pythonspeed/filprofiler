@@ -1,11 +1,6 @@
-import ctypes
-import sys
-import inspect
-import atexit
-import numpy
 import time
+import numpy
 
-import gc
 
 def should_have_no_effect():
     h(3)
