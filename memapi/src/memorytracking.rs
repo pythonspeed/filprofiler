@@ -8,6 +8,7 @@ use std::cell::RefCell;
 use std::collections;
 use std::fmt;
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -175,6 +176,14 @@ impl<'a> AllocationTracker {
                 format!("{} {:.0}", callstack, (*size as f64 / 1024.0).round())
             })
             .collect();
+        let raw_path = directory_path
+            .join("peak-memory.prof")
+            .to_str()
+            .unwrap()
+            .to_string();
+        if let Err(e) = write_lines(&lines, &raw_path) {
+            eprintln!("Error writing raw profiling data: {}", e);
+        }
         let svg_path = directory_path
             .join("peak-memory.svg")
             .to_str()
@@ -240,6 +249,17 @@ pub fn dump_peak_to_flamegraph(path: &str) {
     allocations.dump_peak_to_flamegraph(path);
 }
 
+/// Write strings to disk, one line per string.
+fn write_lines(lines: &Vec<String>, path: &str) -> std::io::Result<()> {
+    let mut file = fs::File::create(path)?;
+    for line in lines.iter() {
+        file.write_all(line.as_bytes())?;
+        file.write_all(b"\n")?;
+    }
+    Ok(())
+}
+
+/// Write a flamegraph SVG to disk, given lines in summarized format.
 fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
     lines: I,
     path: &str,

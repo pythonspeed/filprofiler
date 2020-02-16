@@ -38,7 +38,7 @@ def stage_1():
 
 def stage_2():
     """Main CLI interface. Presumes LD_PRELOAD etc. has been set by stage_1()."""
-    usage = "fil-profile [-o /path/to/output.svg] [-m module | /path/to/script.py ] [arg] ..."
+    usage = "fil-profile [-o /path/to/output-dir/] [-m module | /path/to/script.py ] [arg] ..."
     parser = ArgumentParser(usage=usage)
     parser.add_argument(
         "-o",
