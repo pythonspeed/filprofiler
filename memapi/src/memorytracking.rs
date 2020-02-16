@@ -7,6 +7,8 @@ use smallstr::SmallString;
 use std::cell::RefCell;
 use std::collections;
 use std::fmt;
+use std::fs;
+use std::path::Path;
 use std::sync::Mutex;
 
 /// The current Python callstack. We use u32 IDs instead of CallSite objects for
@@ -156,8 +158,16 @@ impl<'a> AllocationTracker {
         by_call
     }
 
-    /// Dump all callstacks in peak memory usage to format used by flamegraph.
+    /// Dump all callstacks in peak memory usage to various files describing the
+    /// memory usage.
     fn dump_peak_to_flamegraph(&self, path: &str) {
+        let directory_path = Path::new(path);
+        if !directory_path.exists() {
+            fs::create_dir(directory_path).expect("Couldn't create the output directory.");
+        } else if !directory_path.is_dir() {
+            panic!("Output path must be a directory.");
+        }
+
         let by_call = self.combine_callstacks();
         let lines: Vec<String> = by_call
             .iter()
@@ -165,13 +175,18 @@ impl<'a> AllocationTracker {
                 format!("{} {:.0}", callstack, (*size as f64 / 1024.0).round())
             })
             .collect();
+        let svg_path = directory_path
+            .join("peak-memory.svg")
+            .to_str()
+            .unwrap()
+            .to_string();
         match write_flamegraph(
             lines.iter().map(|s| s.as_ref()),
-            path,
+            &svg_path,
             self.peak_allocated_bytes,
         ) {
             Ok(_) => {
-                eprintln!("Wrote memory usage flamegraph to {}", path);
+                eprintln!("Wrote memory usage flamegraph to {}", svg_path);
             }
             Err(e) => {
                 eprintln!("Error writing SVG: {}", e);

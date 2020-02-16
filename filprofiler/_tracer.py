@@ -1,5 +1,6 @@
 """Trace code, so that libpymemprofile_api.so know's where we are."""
 
+import os
 import sys
 import threading
 from ctypes import CDLL, RTLD_GLOBAL
@@ -36,12 +37,13 @@ def stop_tracing(output_path: str):
     sys.settrace(None)
     path = output_path.encode("utf-8")
     preload.fil_dump_peak_to_flamegraph(path)
-    with open(path) as f:
+    svg_path = os.path.join(output_path, "peak-memory.svg")
+    with open(svg_path) as f:
         data = f.read().replace(
             "SUBTITLE-HERE",
             """Made with the Fil memory profiler. <a href="https://pythonspeed.com/products/filmemoryprofiler/" style="text-decoration: underline;" target="_parent">Try it on your code!</a>""",
         )
-    with open(path, "w") as f:
+    with open(svg_path, "w") as f:
         f.write(data)
 
 

@@ -42,10 +42,10 @@ def stage_2():
     parser = ArgumentParser(usage=usage)
     parser.add_argument(
         "-o",
-        dest="svg_output_path",
+        dest="output_path",
         action="store",
-        default="memory-graph.svg",
-        help="Path where the SVG with the profile flamegraph is written.",
+        default="fil-result",
+        help="Directory where the profiling results written.",
     )
     parser.add_argument(
         "-m",
@@ -74,7 +74,7 @@ def stage_2():
             "__package__": None,
             "__cached__": None,
         }
-    trace(code, globals_, arguments.svg_output_path)
+    trace(code, globals_, arguments.output_path)
 
 
 if __name__ == "__main__":
