@@ -172,6 +172,9 @@ impl<'a> AllocationTracker {
         let by_call = self.combine_callstacks();
         let lines: Vec<String> = by_call
             .iter()
+            // Filter out callstacks with less than 1 KiB RAM usage.
+            // TODO maybe make this number configurable someday.
+            .filter(|(_, size)| **size >= 1024)
             .map(|(callstack, size)| {
                 format!("{} {:.0}", callstack, (*size as f64 / 1024.0).round())
             })
