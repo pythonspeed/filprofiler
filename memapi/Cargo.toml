@@ -24,10 +24,6 @@ features = ["ffi"]
 [dev-dependencies]
 proptest = "0.9.5"
 
-[profile.release]
-# Needed for profiling, disable for real release:
-#debug = true
-
 [lib]
 name = "pymemprofile_api"
 crate_type = ["cdylib"]
