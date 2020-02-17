@@ -1,5 +1,6 @@
 """Trace code, so that libpymemprofile_api.so know's where we are."""
 
+import atexit
 import os
 import sys
 import threading
@@ -47,15 +48,11 @@ def stop_tracing(output_path: str):
         f.write(data)
 
 
-def trace(code, globals_, svg_output_path: str):
+def trace(code, globals_, output_path: str):
     """
     Given code (Python or code object), run it under the tracer until the
     program exits.
     """
+    atexit.register(stop_tracing, output_path)
     start_tracing()
-    try:
-        exec(code, globals_, None)
-    finally:
-        # TODO shouldn't stop until all threads are done, I guess?
-        # so switch atexit.register.
-        stop_tracing(svg_output_path)
+    exec(code, globals_, None)
