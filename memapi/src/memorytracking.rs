@@ -49,8 +49,17 @@ thread_local!(static THREAD_CALLSTACK: RefCell<Callstack> = RefCell::new(Callsta
 /// A particular place where a call happened.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CallSite {
-    pub module_name: SmallString<[u8; 24]>,
-    pub function_name: SmallString<[u8; 24]>,
+    module_name: SmallString<[u8; 24]>,
+    function_name: SmallString<[u8; 24]>,
+}
+
+impl CallSite {
+    pub fn new(module_name: &str, function_name: &str) -> CallSite {
+        CallSite {
+            module_name: SmallString::from_str(module_name),
+            function_name: SmallString::from_str(function_name),
+        }
+    }
 }
 
 impl fmt::Display for CallSite {
@@ -295,10 +304,9 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
 
 #[cfg(test)]
 mod tests {
-    use super::{AllocationTracker, CallSite, Callstack};
+    use super::{AllocationTracker, CallSite, CallSites, Callstack};
     use itertools::Itertools;
     use proptest::prelude::*;
-    use smallstr::SmallString;
     use std::collections;
 
     proptest! {
@@ -355,20 +363,37 @@ mod tests {
     }
 
     #[test]
+    fn callsites_notices_duplicate_callsites() {
+        let callsite1 = CallSite::new("a", "af");
+        let callsite2 = CallSite::new("b", "af");
+        let callsite3 = CallSite::new("a", "bf");
+        let mut callsites = CallSites::new();
+        let id1 = callsites.get_or_insert_id(callsite1.clone());
+        let id1b = callsites.get_or_insert_id(callsite1);
+        let id2 = callsites.get_or_insert_id(callsite2);
+        let id3 = callsites.get_or_insert_id(callsite3.clone());
+        let id3b = callsites.get_or_insert_id(callsite3.clone());
+        assert_eq!(id1, id1b);
+        assert_ne!(id1, id2);
+        assert_ne!(id1, id3);
+        assert_ne!(id2, id3);
+        assert_eq!(id3, id3b);
+    }
+
+    #[test]
     fn combine_callstacks_and_sum_allocations() {
         let mut tracker = AllocationTracker::new();
-        let id1 = tracker.call_sites.get_or_insert_id(CallSite {
-            module_name: SmallString::from_str("a"),
-            function_name: SmallString::from_str("af"),
-        });
-        let id2 = tracker.call_sites.get_or_insert_id(CallSite {
-            module_name: SmallString::from_str("b"),
-            function_name: SmallString::from_str("bf"),
-        });
-        let id3 = tracker.call_sites.get_or_insert_id(CallSite {
-            module_name: SmallString::from_str("c"),
-            function_name: SmallString::from_str("cf"),
-        });
+        let id1 = tracker
+            .call_sites
+            .get_or_insert_id(CallSite::new("a", "af"));
+
+        let id2 = tracker
+            .call_sites
+            .get_or_insert_id(CallSite::new("b", "bf"));
+
+        let id3 = tracker
+            .call_sites
+            .get_or_insert_id(CallSite::new("c", "cf"));
         let mut cs1 = Callstack::new();
         cs1.start_call(id1);
         cs1.start_call(id2);
