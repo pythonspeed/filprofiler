@@ -20,7 +20,8 @@ filprofiler/libpymemprofile_api.so: Cargo.lock memapi/Cargo.toml memapi/src/*.rs
 	cp -f target/release/libpymemprofile_api.so filprofiler/
 
 test: build
-	fil-profile example.py
+	env RUST_BACKTRACE=1 cargo test
+	env RUST_BACKTRACE=1 py.test
 
 .PHONY: clean
 clean:
