@@ -295,9 +295,10 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
 
 #[cfg(test)]
 mod tests {
-    use super::{AllocationTracker, Callstack};
+    use super::{AllocationTracker, CallSite, Callstack};
     use itertools::Itertools;
     use proptest::prelude::*;
+    use smallstr::SmallString;
     use std::collections;
 
     proptest! {
@@ -356,19 +357,31 @@ mod tests {
     #[test]
     fn combine_callstacks_and_sum_allocations() {
         let mut tracker = AllocationTracker::new();
+        let id1 = tracker.call_sites.get_or_insert_id(CallSite {
+            module_name: SmallString::from_str("a"),
+            function_name: SmallString::from_str("af"),
+        });
+        let id2 = tracker.call_sites.get_or_insert_id(CallSite {
+            module_name: SmallString::from_str("b"),
+            function_name: SmallString::from_str("bf"),
+        });
+        let id3 = tracker.call_sites.get_or_insert_id(CallSite {
+            module_name: SmallString::from_str("c"),
+            function_name: SmallString::from_str("cf"),
+        });
         let mut cs1 = Callstack::new();
-        cs1.start_call(1);
-        cs1.start_call(2);
+        cs1.start_call(id1);
+        cs1.start_call(id2);
         let mut cs2 = Callstack::new();
-        cs2.start_call(3);
+        cs2.start_call(id3);
 
         tracker.add_allocation(1, 1000, cs1.clone());
         tracker.add_allocation(2, 234, cs2.clone());
         tracker.add_allocation(3, 50000, cs1.clone());
 
         let mut expected: collections::HashMap<String, usize> = collections::HashMap::new();
-        expected.insert("a;b".to_string(), 51000);
-        expected.insert("c".to_string(), 234);
+        expected.insert("a:af;b:bf".to_string(), 51000);
+        expected.insert("c:cf".to_string(), 234);
         assert_eq!(expected, tracker.combine_callstacks());
     }
 }
