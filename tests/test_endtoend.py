@@ -1,7 +1,7 @@
 """End-to-end tests."""
 
-from subprocess import check_call
-from tempfile import mkdtemp
+from subprocess import check_call, check_output
+from tempfile import mkdtemp, NamedTemporaryFile
 from pathlib import Path
 
 import pytest
@@ -73,3 +73,19 @@ def test_thread_allocates_after_main_thread_is_done():
     script = str(script)
     thread1_path1 = (threading, script + ":thread1", ones)
     assert allocations[thread1_path1] / 1024 == pytest.approx(70, 0.1)
+
+
+def test_ld_preload_disabled_for_subprocesses():
+    """
+    LD_PRELOAD is reset so subprocesses don't get the malloc() preload.
+    """
+    with NamedTemporaryFile() as script_file:
+        script_file.write(
+            b"""\
+import subprocess
+print(subprocess.check_output(["env"]))
+"""
+        )
+        script_file.flush()
+        result = check_output(["fil-profile", "-o", mkdtemp(), str(script_file.name)])
+        assert b"LD_PRELOAD" not in result

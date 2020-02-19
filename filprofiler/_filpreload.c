@@ -24,6 +24,7 @@ static void __attribute__((constructor)) constructor() {
   if (initialized) {
     return;
   }
+  unsetenv("LD_PRELOAD");
   if (sizeof((void *)0) != sizeof((size_t)0)) {
     fprintf(stderr, "BUG: expected size of size_t and void* to be the same.\n");
     exit(1);
