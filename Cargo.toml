@@ -3,3 +3,8 @@
 members = [
         "memapi",
 ]
+
+[profile.release]
+# Needed for profiling, disable for real release:
+#debug = true
+lto = true

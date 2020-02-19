@@ -7,8 +7,13 @@ use smallstr::SmallString;
 use std::cell::RefCell;
 use std::collections;
 use std::fmt;
+use std::fs;
+use std::io::Write;
+use std::path::Path;
 use std::sync::Mutex;
 
+/// The current Python callstack. We use u32 IDs instead of CallSite objects for
+/// performance reasons.
 #[derive(Clone, Debug, PartialEq)]
 struct Callstack {
     calls: Vec<u32>,
@@ -41,11 +46,20 @@ impl Callstack {
 
 thread_local!(static THREAD_CALLSTACK: RefCell<Callstack> = RefCell::new(Callstack::new()));
 
-/// A particular place where a call happened:
+/// A particular place where a call happened.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CallSite {
-    pub module_name: SmallString<[u8; 24]>,
-    pub function_name: SmallString<[u8; 24]>,
+    module_name: SmallString<[u8; 24]>,
+    function_name: SmallString<[u8; 24]>,
+}
+
+impl CallSite {
+    pub fn new(module_name: &str, function_name: &str) -> CallSite {
+        CallSite {
+            module_name: SmallString::from_str(module_name),
+            function_name: SmallString::from_str(function_name),
+        }
+    }
 }
 
 impl fmt::Display for CallSite {
@@ -53,6 +67,7 @@ impl fmt::Display for CallSite {
         write!(f, "{}:{}", self.module_name, self.function_name)
     }
 }
+
 /// Maps CallSites to integer identifiers used in CallStacks.
 struct CallSites {
     max_id: u32,
@@ -67,6 +82,7 @@ impl CallSites {
         }
     }
 
+    /// Add a (possibly) new CallSite, returning its ID.
     fn get_or_insert_id(&mut self, call_site: CallSite) -> u32 {
         let max_id = &mut self.max_id;
         let result = self.callsite_to_id.entry(call_site).or_insert_with(|| {
@@ -77,6 +93,7 @@ impl CallSites {
         *result
     }
 
+    /// Get map from IDs to CallSites.
     fn get_reverse_map(&self) -> HashMap<u32, CallSite> {
         let mut result = HashMap::default();
         for (call_site, csid) in &(self.callsite_to_id) {
@@ -86,12 +103,14 @@ impl CallSites {
     }
 }
 
+/// A specific call to malloc()/calloc().
 #[derive(Clone, Debug, PartialEq)]
 struct Allocation {
     callstack: Callstack,
     size: libc::size_t,
 }
 
+/// The main data structure tracking everything.
 struct AllocationTracker {
     current_allocations: imhashmap::HashMap<usize, Allocation>,
     peak_allocations: imhashmap::HashMap<usize, Allocation>,
@@ -149,22 +168,46 @@ impl<'a> AllocationTracker {
         by_call
     }
 
-    /// Dump all callstacks in peak memory usage to format used by flamegraph.
+    /// Dump all callstacks in peak memory usage to various files describing the
+    /// memory usage.
     fn dump_peak_to_flamegraph(&self, path: &str) {
+        let directory_path = Path::new(path);
+        if !directory_path.exists() {
+            fs::create_dir(directory_path).expect("Couldn't create the output directory.");
+        } else if !directory_path.is_dir() {
+            panic!("Output path must be a directory.");
+        }
+
         let by_call = self.combine_callstacks();
         let lines: Vec<String> = by_call
             .iter()
+            // Filter out callstacks with less than 1 KiB RAM usage.
+            // TODO maybe make this number configurable someday.
+            .filter(|(_, size)| **size >= 1024)
             .map(|(callstack, size)| {
                 format!("{} {:.0}", callstack, (*size as f64 / 1024.0).round())
             })
             .collect();
+        let raw_path = directory_path
+            .join("peak-memory.prof")
+            .to_str()
+            .unwrap()
+            .to_string();
+        if let Err(e) = write_lines(&lines, &raw_path) {
+            eprintln!("Error writing raw profiling data: {}", e);
+        }
+        let svg_path = directory_path
+            .join("peak-memory.svg")
+            .to_str()
+            .unwrap()
+            .to_string();
         match write_flamegraph(
             lines.iter().map(|s| s.as_ref()),
-            path,
+            &svg_path,
             self.peak_allocated_bytes,
         ) {
             Ok(_) => {
-                eprintln!("Wrote memory usage flamegraph to {}", path);
+                eprintln!("Wrote memory usage flamegraph to {}", svg_path);
             }
             Err(e) => {
                 eprintln!("Error writing SVG: {}", e);
@@ -218,6 +261,17 @@ pub fn dump_peak_to_flamegraph(path: &str) {
     allocations.dump_peak_to_flamegraph(path);
 }
 
+/// Write strings to disk, one line per string.
+fn write_lines(lines: &Vec<String>, path: &str) -> std::io::Result<()> {
+    let mut file = fs::File::create(path)?;
+    for line in lines.iter() {
+        file.write_all(line.as_bytes())?;
+        file.write_all(b"\n")?;
+    }
+    Ok(())
+}
+
+/// Write a flamegraph SVG to disk, given lines in summarized format.
 fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
     lines: I,
     path: &str,
@@ -250,7 +304,7 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
 
 #[cfg(test)]
 mod tests {
-    use super::{AllocationTracker, Callstack};
+    use super::{AllocationTracker, CallSite, CallSites, Callstack};
     use itertools::Itertools;
     use proptest::prelude::*;
     use std::collections;
@@ -309,21 +363,50 @@ mod tests {
     }
 
     #[test]
+    fn callsites_notices_duplicate_callsites() {
+        let callsite1 = CallSite::new("a", "af");
+        let callsite2 = CallSite::new("b", "af");
+        let callsite3 = CallSite::new("a", "bf");
+        let mut callsites = CallSites::new();
+        let id1 = callsites.get_or_insert_id(callsite1.clone());
+        let id1b = callsites.get_or_insert_id(callsite1);
+        let id2 = callsites.get_or_insert_id(callsite2);
+        let id3 = callsites.get_or_insert_id(callsite3.clone());
+        let id3b = callsites.get_or_insert_id(callsite3.clone());
+        assert_eq!(id1, id1b);
+        assert_ne!(id1, id2);
+        assert_ne!(id1, id3);
+        assert_ne!(id2, id3);
+        assert_eq!(id3, id3b);
+    }
+
+    #[test]
     fn combine_callstacks_and_sum_allocations() {
         let mut tracker = AllocationTracker::new();
+        let id1 = tracker
+            .call_sites
+            .get_or_insert_id(CallSite::new("a", "af"));
+
+        let id2 = tracker
+            .call_sites
+            .get_or_insert_id(CallSite::new("b", "bf"));
+
+        let id3 = tracker
+            .call_sites
+            .get_or_insert_id(CallSite::new("c", "cf"));
         let mut cs1 = Callstack::new();
-        cs1.start_call(1);
-        cs1.start_call(2);
+        cs1.start_call(id1);
+        cs1.start_call(id2);
         let mut cs2 = Callstack::new();
-        cs2.start_call(3);
+        cs2.start_call(id3);
 
         tracker.add_allocation(1, 1000, cs1.clone());
         tracker.add_allocation(2, 234, cs2.clone());
         tracker.add_allocation(3, 50000, cs1.clone());
 
         let mut expected: collections::HashMap<String, usize> = collections::HashMap::new();
-        expected.insert("a;b".to_string(), 51000);
-        expected.insert("c".to_string(), 234);
+        expected.insert("a:af;b:bf".to_string(), 51000);
+        expected.insert("c:cf".to_string(), 234);
         assert_eq!(expected, tracker.combine_callstacks());
     }
 }
