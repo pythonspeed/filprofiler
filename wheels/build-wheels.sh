@@ -11,6 +11,6 @@ make filprofiler/_filpreload.so
 /opt/python/cp36-cp36m/bin/pip wheel . -w /tmp/wheel
 /opt/python/cp37-cp37m/bin/pip wheel . -w /tmp/wheel
 /opt/python/cp38-cp38/bin/pip wheel . -w /tmp/wheel
-auditwheel repair --plat manylinux2010_x86_64 -w dist/ /tmp/wheel/filprofiler*36*whl
-auditwheel repair --plat manylinux2010_x86_64 -w dist/ /tmp/wheel/filprofiler*37*whl
-auditwheel repair --plat manylinux2010_x86_64 -w dist/ /tmp/wheel/filprofiler*38*whl
+auditwheel repair -w dist/ /tmp/wheel/filprofiler*36*whl
+auditwheel repair -w dist/ /tmp/wheel/filprofiler*37*whl
+auditwheel repair -w dist/ /tmp/wheel/filprofiler*38*whl
