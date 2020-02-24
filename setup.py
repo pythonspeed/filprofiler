@@ -15,4 +15,6 @@ setup(
             "_filpreload.so",
         ]
     },
+    use_scm_version=True,
+    setup_requires=['setuptools_scm'],
 )

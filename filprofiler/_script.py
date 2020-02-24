@@ -13,7 +13,7 @@ import runpy
 
 from ._utils import library_path
 from ._tracer import trace
-
+from . import __version__
 
 def stage_1():
     """Setup environment variables, re-execute this script."""
@@ -40,6 +40,7 @@ def stage_2():
     """Main CLI interface. Presumes LD_PRELOAD etc. has been set by stage_1()."""
     usage = "fil-profile [-o /path/to/output-dir/] [-m module | /path/to/script.py ] [arg] ..."
     parser = ArgumentParser(usage=usage)
+    parser.add_argument('--version', action='version', version=__version__)
     parser.add_argument(
         "-o",
         dest="output_path",
