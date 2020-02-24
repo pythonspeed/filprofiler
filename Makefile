@@ -23,6 +23,14 @@ test: build
 	env RUST_BACKTRACE=1 cargo test
 	env RUST_BACKTRACE=1 py.test
 
+.PHONY: docker-image
+docker-image:
+	docker build -t manylinux-rust -f wheels/Dockerfile.build .
+
+.PHONY: wheel
+wheel:
+	docker run -u $(shell id -u):$(shell id -g) -v $(PWD):/src manylinux-rust /src/wheels/build-wheels.sh
+
 .PHONY: clean
 clean:
 	rm -rf target

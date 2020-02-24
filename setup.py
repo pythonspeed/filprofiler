@@ -11,8 +11,8 @@ setup(
     package_data={
         "filprofiler": [
             # TODO dynlib on Macs.
-            "filprofiler/libpymemprofile_api.so",
-            "filprofiler/_filpreload.so",
+            "libpymemprofile_api.so",
+            "_filpreload.so",
         ]
     },
 )
