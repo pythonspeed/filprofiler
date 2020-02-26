@@ -194,7 +194,7 @@ impl<'a> AllocationTracker {
             .unwrap()
             .to_string();
         if let Err(e) = write_lines(&lines, &raw_path) {
-            eprintln!("Error writing raw profiling data: {}", e);
+            eprintln!("=fil-profile= Error writing raw profiling data: {}", e);
         }
         let svg_path = directory_path
             .join("peak-memory.svg")
@@ -207,10 +207,13 @@ impl<'a> AllocationTracker {
             self.peak_allocated_bytes,
         ) {
             Ok(_) => {
-                eprintln!("Wrote memory usage flamegraph to {}", svg_path);
+                eprintln!(
+                    "=fil-profile= Wrote memory usage flamegraph to {}",
+                    svg_path
+                );
             }
             Err(e) => {
-                eprintln!("Error writing SVG: {}", e);
+                eprintln!("=fil-profile= Error writing SVG: {}", e);
             }
         }
     }

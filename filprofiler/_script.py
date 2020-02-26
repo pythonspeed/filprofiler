@@ -6,14 +6,17 @@ Command-line tools. Because of LD_PRELOAD, it's actually a two stage setup:
 """
 
 import sys
-from os import environ, execv
+from time import asctime
+from os import environ, execv, getpid
 from os.path import abspath, dirname, join
 from argparse import ArgumentParser
 import runpy
+import signal
 
 from ._utils import library_path
-from ._tracer import trace
+from ._tracer import trace, dump_svg
 from . import __version__
+
 
 def stage_1():
     """Setup environment variables, re-execute this script."""
@@ -40,7 +43,7 @@ def stage_2():
     """Main CLI interface. Presumes LD_PRELOAD etc. has been set by stage_1()."""
     usage = "fil-profile [-o /path/to/output-dir/] [-m module | /path/to/script.py ] [arg] ..."
     parser = ArgumentParser(usage=usage)
-    parser.add_argument('--version', action='version', version=__version__)
+    parser.add_argument("--version", action="version", version=__version__)
     parser.add_argument(
         "-o",
         dest="output_path",
@@ -75,6 +78,14 @@ def stage_2():
             "__package__": None,
             "__cached__": None,
         }
+    signal.signal(
+        signal.SIGUSR2, lambda *args: dump_svg(join(arguments.output_path, asctime()))
+    )
+    print(
+        "=fil-profile= Run the following command to write out peak memory usage: "
+        "kill -s SIGUSR2 {}".format(getpid()),
+        file=sys.stderr,
+    )
     trace(code, globals_, arguments.output_path)
 
 

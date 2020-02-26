@@ -36,6 +36,10 @@ def _start_thread_trace(frame, event, arg):
 
 def stop_tracing(output_path: str):
     sys.settrace(None)
+    dump_svg(output_path)
+
+
+def dump_svg(output_path: str):
     path = output_path.encode("utf-8")
     preload.fil_dump_peak_to_flamegraph(path)
     svg_path = os.path.join(output_path, "peak-memory.svg")
