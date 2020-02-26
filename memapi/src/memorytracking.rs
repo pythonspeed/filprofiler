@@ -171,13 +171,14 @@ impl<'a> AllocationTracker {
     /// Dump all callstacks in peak memory usage to various files describing the
     /// memory usage.
     fn dump_peak_to_flamegraph(&self, path: &str) {
+        eprintln!("=fil-profile= Preparing to write to {}", path);
         let directory_path = Path::new(path);
         if !directory_path.exists() {
-            fs::create_dir(directory_path).expect("Couldn't create the output directory.");
+            fs::create_dir(directory_path)
+                .expect("=fil-profile= Couldn't create the output directory.");
         } else if !directory_path.is_dir() {
-            panic!("Output path must be a directory.");
+            panic!("=fil-profile= Output path must be a directory.");
         }
-
         let by_call = self.combine_callstacks();
         let lines: Vec<String> = by_call
             .iter()

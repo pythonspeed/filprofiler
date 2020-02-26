@@ -7,8 +7,8 @@ Command-line tools. Because of LD_PRELOAD, it's actually a two stage setup:
 
 import sys
 from time import asctime
-from os import environ, execv, getpid
-from os.path import abspath, dirname, join
+from os import environ, execv, getpid, makedirs
+from os.path import abspath, dirname, join, exists
 from argparse import ArgumentParser
 import runpy
 import signal
@@ -86,6 +86,8 @@ def stage_2():
         "kill -s SIGUSR2 {}".format(getpid()),
         file=sys.stderr,
     )
+    if not exists(arguments.output_path):
+        makedirs(arguments.output_path)
     trace(code, globals_, arguments.output_path)
 
 
