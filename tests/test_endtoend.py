@@ -14,7 +14,7 @@ def get_allocations(output_directory: Path):
         for line in f:
             *calls, size_kb = line.split(" ")
             calls = " ".join(calls)
-            size_kb = int(size_kb)
+            size_kb = int(int(size_kb) / 1024)
             result[tuple(calls.split(";"))] = size_kb
     return result
 

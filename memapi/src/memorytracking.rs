@@ -182,12 +182,7 @@ impl<'a> AllocationTracker {
         let by_call = self.combine_callstacks();
         let lines: Vec<String> = by_call
             .iter()
-            // Filter out callstacks with less than 1 KiB RAM usage.
-            // TODO maybe make this number configurable someday.
-            .filter(|(_, size)| **size >= 1024)
-            .map(|(callstack, size)| {
-                format!("{} {:.0}", callstack, (*size as f64 / 1024.0).round())
-            })
+            .map(|(callstack, size)| format!("{} {}", callstack, *size))
             .collect();
         let raw_path = directory_path
             .join("peak-memory.prof")
@@ -206,6 +201,28 @@ impl<'a> AllocationTracker {
             lines.iter().map(|s| s.as_ref()),
             &svg_path,
             self.peak_allocated_bytes,
+            false,
+        ) {
+            Ok(_) => {
+                eprintln!(
+                    "=fil-profile= Wrote memory usage flamegraph to {}",
+                    svg_path
+                );
+            }
+            Err(e) => {
+                eprintln!("=fil-profile= Error writing SVG: {}", e);
+            }
+        }
+        let svg_path = directory_path
+            .join("peak-memory-reversed.svg")
+            .to_str()
+            .unwrap()
+            .to_string();
+        match write_flamegraph(
+            lines.iter().map(|s| s.as_ref()),
+            &svg_path,
+            self.peak_allocated_bytes,
+            true,
         ) {
             Ok(_) => {
                 eprintln!(
@@ -280,20 +297,23 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
     lines: I,
     path: &str,
     peak_bytes: usize,
+    reversed: bool,
 ) -> std::io::Result<()> {
     let file = std::fs::File::create(path)?;
     let title = format!(
-        "Peak Tracked Memory Usage ({:.1} MiB)",
+        "Peak Tracked Memory Usage{} ({:.1} MiB)",
+        if reversed { ", Reversed" } else { "" },
         peak_bytes as f64 / (1024.0 * 1024.0)
     );
     let mut options = flamegraph::Options {
         title,
         direction: flamegraph::Direction::Inverted,
-        count_name: "KiB".to_string(),
+        count_name: "bytes".to_string(),
         font_size: 16,
         font_type: "mono".to_string(),
         frame_height: 22,
         subtitle: Some("SUBTITLE-HERE".to_string()),
+        reverse_stack_order: reversed,
         ..Default::default()
     };
     if let Err(e) = flamegraph::from_lines(&mut options, lines, file) {

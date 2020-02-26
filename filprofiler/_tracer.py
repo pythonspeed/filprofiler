@@ -42,14 +42,17 @@ def stop_tracing(output_path: str):
 def dump_svg(output_path: str):
     path = output_path.encode("utf-8")
     preload.fil_dump_peak_to_flamegraph(path)
-    svg_path = os.path.join(output_path, "peak-memory.svg")
-    with open(svg_path) as f:
-        data = f.read().replace(
-            "SUBTITLE-HERE",
-            """Made with the Fil memory profiler. <a href="https://pythonspeed.com/products/filmemoryprofiler/" style="text-decoration: underline;" target="_parent">Try it on your code!</a>""",
-        )
-    with open(svg_path, "w") as f:
-        f.write(data)
+    for svg_path in [
+        os.path.join(output_path, "peak-memory.svg"),
+        os.path.join(output_path, "peak-memory-reversed.svg"),
+    ]:
+        with open(svg_path) as f:
+            data = f.read().replace(
+                "SUBTITLE-HERE",
+                """Made with the Fil memory profiler. <a href="https://pythonspeed.com/products/filmemoryprofiler/" style="text-decoration: underline;" target="_parent">Try it on your code!</a>""",
+            )
+            with open(svg_path, "w") as f:
+                f.write(data)
 
 
 def trace(code, globals_, output_path: str):
