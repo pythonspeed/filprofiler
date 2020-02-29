@@ -16,5 +16,6 @@ setup(
         ]
     },
     use_scm_version=True,
-    setup_requires=['setuptools_scm'],
+    setup_requires=["setuptools_scm"],
+    extras_require={"dev": ["pytest", "pampy", "numpy", "scikit-image"],},
 )

@@ -37,6 +37,11 @@ pub extern "C" fn pymemprofile_finish_call() {
 }
 
 #[no_mangle]
+pub extern "C" fn pymemprofile_new_line_number(line_number: u16) {
+    memorytracking::new_line_number(line_number);
+}
+
+#[no_mangle]
 pub extern "C" fn pymemprofile_reset() {
     memorytracking::reset();
 }

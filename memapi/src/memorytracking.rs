@@ -51,6 +51,12 @@ impl Callstack {
         self.calls.pop();
     }
 
+    fn new_line_number(&mut self, line_number: u16) {
+        if let Some(callsite_id) = self.calls.last_mut() {
+            callsite_id.line_number = line_number;
+        }
+    }
+
     fn as_string(&self, id_to_callsite: &HashMap<FunctionId, Function>) -> String {
         if self.calls.is_empty() {
             "[No Python stack]".to_string()
@@ -282,6 +288,13 @@ pub fn start_call(call_site: Function, line_number: u16) {
 pub fn finish_call() {
     THREAD_CALLSTACK.with(|cs| {
         cs.borrow_mut().finish_call();
+    });
+}
+
+/// Change line number on current function in per-thread function stack:
+pub fn new_line_number(line_number: u16) {
+    THREAD_CALLSTACK.with(|cs| {
+        cs.borrow_mut().new_line_number(line_number);
     });
 }
 

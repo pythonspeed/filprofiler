@@ -6,17 +6,22 @@
 extern void fil_start_call(const char *file_name, const char *function_name,
                            uint32_t line_number);
 extern void fil_finish_call(void);
+extern void fil_new_line_number(uint16_t line_number);
 
 int fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
-  if (what == PyTrace_CALL) {
+  switch (what) {
+  case PyTrace_LINE:
+    fil_new_line_number(frame->f_lineno);
+    break;
+  case PyTrace_CALL:
     fil_start_call(PyUnicode_AsUTF8(frame->f_code->co_filename),
-                   PyUnicode_AsUTF8(frame->f_code->co_name),
-                   frame->f_lineno);
-    return 0;
-  }
-  if (what == PyTrace_RETURN) {
+                   PyUnicode_AsUTF8(frame->f_code->co_name), frame->f_lineno);
+    break;
+  case PyTrace_RETURN:
     fil_finish_call();
-    return 0;
+    break;
+  default:
+    break;
   }
   return 0;
 }
@@ -24,7 +29,7 @@ int fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
 static PyObject *fil_start_tracing(PyObject *self, PyObject *args) {
   if (!PyArg_ParseTuple(args, ""))
     return NULL;
-  PyEval_SetProfile(fil_tracer, Py_None);
+  PyEval_SetTrace(fil_tracer, Py_None);
   return Py_None;
 }
 
