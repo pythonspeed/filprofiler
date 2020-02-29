@@ -4,6 +4,7 @@ from subprocess import check_call, check_output
 from tempfile import mkdtemp, NamedTemporaryFile
 from pathlib import Path
 
+from pampy import match, _ as ANY
 import pytest
 
 
@@ -15,7 +16,19 @@ def get_allocations(output_directory: Path):
             *calls, size_kb = line.split(" ")
             calls = " ".join(calls)
             size_kb = int(int(size_kb) / 1024)
-            result[tuple(calls.split(";"))] = size_kb
+            path = []
+            if calls == "[No Python stack]":
+                result[calls] = size_kb
+                continue
+            for call in calls.split(";"):
+                part1, func_name = call.rsplit(" ", 1)
+                assert func_name[0] == "("
+                assert func_name[-1] == ")"
+                func_name = func_name[1:-1]
+                file_name, line = part1.split(":")
+                line = int(line)
+                path.append((file_name, func_name, line))
+            result[tuple(path)] = size_kb
     return result
 
 
@@ -40,20 +53,30 @@ def test_threaded_allocation_tracking():
     import threading
     import numpy.core.numeric
 
-    threading = threading.__file__ + ":run"
-    ones = numpy.core.numeric.__file__ + ":ones"
+    threading = (threading.__file__, "run", ANY)
+    ones = (numpy.core.numeric.__file__, "ones", ANY)
     script = str(script)
-    h = script + ":h"
+    h = (script, "h", 6)
 
     # The main thread:
-    main_path = (script + ":<module>", script + ":main", h, ones)
-    assert allocations[main_path] / 1024 == pytest.approx(50, 0.1)
+    main_path = ((script, "<module>", 1), (script, "main", 20), h, ones)
+
+    def as_mb(*args):
+        return args[-1] / 1024
+
+    assert match(allocations, {main_path: ANY}, as_mb) == pytest.approx(50, 0.1)
 
     # Thread that ends before main thread:
-    thread1_path1 = (threading, script + ":thread1", script + ":child1", h, ones)
-    assert allocations[thread1_path1] / 1024 == pytest.approx(30, 0.1)
-    thread1_path2 = (threading, script + ":thread1", h, ones)
-    assert allocations[thread1_path2] / 1024 == pytest.approx(20, 0.1)
+    thread1_path1 = (
+        threading,
+        (script, "thread1", 12),
+        (script, "child1", 9),
+        h,
+        ones,
+    )
+    assert match(allocations, {thread1_path1: ANY}, as_mb) == pytest.approx(30, 0.1)
+    thread1_path2 = (threading, (script, "thread1", 12), h, ones)
+    assert match(allocations, {thread1_path2: ANY}, as_mb) == pytest.approx(20, 0.1)
 
 
 def test_thread_allocates_after_main_thread_is_done():
@@ -68,11 +91,15 @@ def test_thread_allocates_after_main_thread_is_done():
     import threading
     import numpy.core.numeric
 
-    threading = threading.__file__ + ":run"
-    ones = numpy.core.numeric.__file__ + ":ones"
+    threading = (threading.__file__, "run", ANY)
+    ones = (numpy.core.numeric.__file__, "ones", ANY)
     script = str(script)
-    thread1_path1 = (threading, script + ":thread1", ones)
-    assert allocations[thread1_path1] / 1024 == pytest.approx(70, 0.1)
+    thread1_path1 = (threading, (script, "thread1", 6), ones)
+
+    def as_mb(*args):
+        return args[-1] / 1024
+
+    assert match(allocations, {thread1_path1: ANY}, as_mb) == pytest.approx(70, 0.1)
 
 
 def test_ld_preload_disabled_for_subprocesses():
