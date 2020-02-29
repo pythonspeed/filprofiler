@@ -23,11 +23,12 @@ pub extern "C" fn pymemprofile_free_allocation(address: usize) {
 pub unsafe extern "C" fn pymemprofile_start_call(
     file_name: *const c_char,
     func_name: *const c_char,
+    line_number: u16,
 ) {
     let function_name = str::from_utf8_unchecked(CStr::from_ptr(func_name).to_bytes());
     let module_name = str::from_utf8_unchecked(CStr::from_ptr(file_name).to_bytes());
-    let call_site = memorytracking::CallSite::new(module_name, function_name);
-    memorytracking::start_call(call_site);
+    let call_site = memorytracking::Function::new(module_name, function_name);
+    memorytracking::start_call(call_site, line_number);
 }
 
 #[no_mangle]

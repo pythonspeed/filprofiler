@@ -3,6 +3,7 @@
 #include <dlfcn.h>
 #include <malloc.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <sys/mman.h>
 
@@ -61,16 +62,16 @@ static void __attribute__((constructor)) constructor() {
 
 extern void *__libc_malloc(size_t size);
 extern void *__libc_calloc(size_t nmemb, size_t size);
-extern void pymemprofile_start_call(const char *filename, const char *funcname);
+extern void pymemprofile_start_call(const char *filename, const char *funcname, uint16_t line_number);
 extern void pymemprofile_finish_call();
 extern void pymemprofile_reset();
 extern void pymemprofile_dump_peak_to_flamegraph(const char* path);
 
 __attribute__((visibility("default"))) void
-fil_start_call(const char *filename, const char *funcname) {
+fil_start_call(const char *filename, const char *funcname, uint16_t line_number) {
   if (!will_i_be_reentrant) {
     will_i_be_reentrant = 1;
-    pymemprofile_start_call(filename, funcname);
+    pymemprofile_start_call(filename, funcname, line_number);
     will_i_be_reentrant = 0;
   }
 }

@@ -12,9 +12,26 @@ use std::io::Write;
 use std::path::Path;
 use std::sync::Mutex;
 
-type CallSiteId = u32;
+type FunctionId = u32;
 
-/// The current Python callstack. We use IDs instead of CallSite objects for
+/// A specific location: file + function + line number.
+#[derive(Clone, Debug, PartialEq)]
+struct CallSiteId {
+    function_id: FunctionId,
+    /// Line number within the _file_, 1-indexed.
+    line_number: u16,
+}
+
+impl CallSiteId {
+    fn new(function_id: FunctionId, line_number: u16) -> CallSiteId {
+        CallSiteId {
+            function_id,
+            line_number,
+        }
+    }
+}
+
+/// The current Python callstack. We use IDs instead of Function objects for
 /// performance reasons.
 #[derive(Clone, Debug, PartialEq)]
 struct Callstack {
@@ -26,21 +43,28 @@ impl Callstack {
         Callstack { calls: Vec::new() }
     }
 
-    fn start_call(&mut self, function_id: CallSiteId) {
-        self.calls.push(function_id);
+    fn start_call(&mut self, callsite_id: CallSiteId) {
+        self.calls.push(callsite_id);
     }
 
     fn finish_call(&mut self) {
         self.calls.pop();
     }
 
-    fn as_string(&self, id_to_callsite: &HashMap<CallSiteId, CallSite>) -> String {
+    fn as_string(&self, id_to_callsite: &HashMap<FunctionId, Function>) -> String {
         if self.calls.is_empty() {
             "[No Python stack]".to_string()
         } else {
             self.calls
                 .iter()
-                .map(|id| id_to_callsite.get(id).unwrap())
+                // TODO include line number in output
+                .map(|id| {
+                    let function = id_to_callsite.get(&id.function_id).unwrap();
+                    format!(
+                        "{}:{} ({})",
+                        &function.file_name, id.line_number, &function.function_name
+                    )
+                })
                 .join(";")
         }
     }
@@ -50,44 +74,44 @@ thread_local!(static THREAD_CALLSTACK: RefCell<Callstack> = RefCell::new(Callsta
 
 /// A particular place where a call happened.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct CallSite {
-    module_name: SmallString<[u8; 24]>,
+pub struct Function {
+    file_name: SmallString<[u8; 24]>,
     function_name: SmallString<[u8; 24]>,
 }
 
-impl CallSite {
-    pub fn new(module_name: &str, function_name: &str) -> CallSite {
-        CallSite {
-            module_name: SmallString::from_str(module_name),
+impl Function {
+    pub fn new(file_name: &str, function_name: &str) -> Function {
+        Function {
+            file_name: SmallString::from_str(file_name),
             function_name: SmallString::from_str(function_name),
         }
     }
 }
 
-impl fmt::Display for CallSite {
+impl fmt::Display for Function {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{}", self.module_name, self.function_name)
+        write!(f, "{}:{}", self.file_name, self.function_name)
     }
 }
 
-/// Maps CallSites to integer identifiers used in CallStacks.
-struct CallSites {
+/// Maps Functions to integer identifiers used in CallStacks.
+struct FunctionTracker {
     max_id: u32,
-    callsite_to_id: HashMap<CallSite, CallSiteId>,
+    function_to_id: HashMap<Function, FunctionId>,
 }
 
-impl CallSites {
-    fn new() -> CallSites {
-        CallSites {
+impl FunctionTracker {
+    fn new() -> FunctionTracker {
+        FunctionTracker {
             max_id: 0,
-            callsite_to_id: HashMap::default(),
+            function_to_id: HashMap::default(),
         }
     }
 
-    /// Add a (possibly) new CallSite, returning its ID.
-    fn get_or_insert_id(&mut self, call_site: CallSite) -> CallSiteId {
+    /// Add a (possibly) new Function, returning its ID.
+    fn get_or_insert_id(&mut self, call_site: Function) -> FunctionId {
         let max_id = &mut self.max_id;
-        let result = self.callsite_to_id.entry(call_site).or_insert_with(|| {
+        let result = self.function_to_id.entry(call_site).or_insert_with(|| {
             let result = *max_id;
             *max_id += 1;
             result
@@ -95,10 +119,10 @@ impl CallSites {
         *result
     }
 
-    /// Get map from IDs to CallSites.
-    fn get_reverse_map(&self) -> HashMap<CallSiteId, CallSite> {
+    /// Get map from IDs to Functions.
+    fn get_reverse_map(&self) -> HashMap<FunctionId, Function> {
         let mut result = HashMap::default();
-        for (call_site, csid) in &(self.callsite_to_id) {
+        for (call_site, csid) in &(self.function_to_id) {
             result.insert(*csid, call_site.clone());
         }
         result
@@ -118,7 +142,7 @@ struct AllocationTracker {
     peak_allocations: imhashmap::HashMap<usize, Allocation>,
     current_allocated_bytes: usize,
     peak_allocated_bytes: usize,
-    call_sites: CallSites,
+    call_sites: FunctionTracker,
 }
 
 impl<'a> AllocationTracker {
@@ -128,7 +152,7 @@ impl<'a> AllocationTracker {
             peak_allocations: imhashmap::HashMap::default(),
             current_allocated_bytes: 0,
             peak_allocated_bytes: 0,
-            call_sites: CallSites::new(),
+            call_sites: FunctionTracker::new(),
         }
     }
 
@@ -244,11 +268,12 @@ lazy_static! {
 }
 
 /// Add to per-thread function stack:
-pub fn start_call(call_site: CallSite) {
+pub fn start_call(call_site: Function, line_number: u16) {
     let mut allocations = ALLOCATIONS.lock().unwrap();
-    let id = allocations.call_sites.get_or_insert_id(call_site);
+    let function_id = allocations.call_sites.get_or_insert_id(call_site);
     THREAD_CALLSTACK.with(|cs| {
-        cs.borrow_mut().start_call(id);
+        cs.borrow_mut()
+            .start_call(CallSiteId::new(function_id, line_number));
     });
 }
 
@@ -330,7 +355,7 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
 
 #[cfg(test)]
 mod tests {
-    use super::{AllocationTracker, CallSite, CallSites, Callstack};
+    use super::{AllocationTracker, CallSiteId, Callstack, Function, FunctionTracker};
     use itertools::Itertools;
     use proptest::prelude::*;
     use std::collections;
@@ -361,9 +386,9 @@ mod tests {
     fn peak_allocations_only_updated_on_new_peaks() {
         let mut tracker = AllocationTracker::new();
         let mut cs1 = Callstack::new();
-        cs1.start_call(1);
+        cs1.start_call(CallSiteId::new(1, 2));
         let mut cs2 = Callstack::new();
-        cs2.start_call(2);
+        cs2.start_call(CallSiteId::new(3, 4));
 
         tracker.add_allocation(1, 1000, cs1.clone());
         // Peak should now match current allocations:
@@ -390,10 +415,10 @@ mod tests {
 
     #[test]
     fn callsites_notices_duplicate_callsites() {
-        let callsite1 = CallSite::new("a", "af");
-        let callsite2 = CallSite::new("b", "af");
-        let callsite3 = CallSite::new("a", "bf");
-        let mut callsites = CallSites::new();
+        let callsite1 = Function::new("a", "af");
+        let callsite2 = Function::new("b", "af");
+        let callsite3 = Function::new("a", "bf");
+        let mut callsites = FunctionTracker::new();
         let id1 = callsites.get_or_insert_id(callsite1.clone());
         let id1b = callsites.get_or_insert_id(callsite1);
         let id2 = callsites.get_or_insert_id(callsite2);
@@ -409,30 +434,50 @@ mod tests {
     #[test]
     fn combine_callstacks_and_sum_allocations() {
         let mut tracker = AllocationTracker::new();
-        let id1 = tracker
-            .call_sites
-            .get_or_insert_id(CallSite::new("a", "af"));
+        let id1 = CallSiteId::new(
+            tracker
+                .call_sites
+                .get_or_insert_id(Function::new("a", "af")),
+            1,
+        );
+        // Same function, different line number—should be different item:
+        let id1_different = CallSiteId::new(
+            tracker
+                .call_sites
+                .get_or_insert_id(Function::new("a", "af")),
+            7,
+        );
+        let id2 = CallSiteId::new(
+            tracker
+                .call_sites
+                .get_or_insert_id(Function::new("b", "bf")),
+            2,
+        );
 
-        let id2 = tracker
-            .call_sites
-            .get_or_insert_id(CallSite::new("b", "bf"));
-
-        let id3 = tracker
-            .call_sites
-            .get_or_insert_id(CallSite::new("c", "cf"));
+        let id3 = CallSiteId::new(
+            tracker
+                .call_sites
+                .get_or_insert_id(Function::new("c", "cf")),
+            3,
+        );
         let mut cs1 = Callstack::new();
         cs1.start_call(id1);
-        cs1.start_call(id2);
+        cs1.start_call(id2.clone());
         let mut cs2 = Callstack::new();
         cs2.start_call(id3);
+        let mut cs3 = Callstack::new();
+        cs3.start_call(id1_different);
+        cs3.start_call(id2);
 
         tracker.add_allocation(1, 1000, cs1.clone());
         tracker.add_allocation(2, 234, cs2.clone());
         tracker.add_allocation(3, 50000, cs1.clone());
+        tracker.add_allocation(4, 6000, cs3.clone());
 
         let mut expected: collections::HashMap<String, usize> = collections::HashMap::new();
-        expected.insert("a:af;b:bf".to_string(), 51000);
-        expected.insert("c:cf".to_string(), 234);
+        expected.insert("a:1 (af);b:2 (bf)".to_string(), 51000);
+        expected.insert("c:3 (cf)".to_string(), 234);
+        expected.insert("a:7 (af);b:2 (bf)".to_string(), 6000);
         assert_eq!(expected, tracker.combine_callstacks());
     }
 }

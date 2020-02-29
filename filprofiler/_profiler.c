@@ -1,14 +1,17 @@
 #include "Python.h"
 #include "frameobject.h"
+#include <stdint.h>
+#include <stdio.h>
 
-extern void fil_start_call(const char *file_name,
-                           const char *function_name);
+extern void fil_start_call(const char *file_name, const char *function_name,
+                           uint32_t line_number);
 extern void fil_finish_call(void);
 
 int fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
   if (what == PyTrace_CALL) {
     fil_start_call(PyUnicode_AsUTF8(frame->f_code->co_filename),
-                   PyUnicode_AsUTF8(frame->f_code->co_name));
+                   PyUnicode_AsUTF8(frame->f_code->co_name),
+                   frame->f_lineno);
     return 0;
   }
   if (what == PyTrace_RETURN) {
