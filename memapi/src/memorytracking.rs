@@ -12,11 +12,13 @@ use std::io::Write;
 use std::path::Path;
 use std::sync::Mutex;
 
-/// The current Python callstack. We use u32 IDs instead of CallSite objects for
+type CallSiteId = u32;
+
+/// The current Python callstack. We use IDs instead of CallSite objects for
 /// performance reasons.
 #[derive(Clone, Debug, PartialEq)]
 struct Callstack {
-    calls: Vec<u32>,
+    calls: Vec<CallSiteId>,
 }
 
 impl Callstack {
@@ -24,7 +26,7 @@ impl Callstack {
         Callstack { calls: Vec::new() }
     }
 
-    fn start_call(&mut self, function_id: u32) {
+    fn start_call(&mut self, function_id: CallSiteId) {
         self.calls.push(function_id);
     }
 
@@ -32,7 +34,7 @@ impl Callstack {
         self.calls.pop();
     }
 
-    fn as_string(&self, id_to_callsite: &HashMap<u32, CallSite>) -> String {
+    fn as_string(&self, id_to_callsite: &HashMap<CallSiteId, CallSite>) -> String {
         if self.calls.is_empty() {
             "[No Python stack]".to_string()
         } else {
@@ -71,7 +73,7 @@ impl fmt::Display for CallSite {
 /// Maps CallSites to integer identifiers used in CallStacks.
 struct CallSites {
     max_id: u32,
-    callsite_to_id: HashMap<CallSite, u32>,
+    callsite_to_id: HashMap<CallSite, CallSiteId>,
 }
 
 impl CallSites {
@@ -83,7 +85,7 @@ impl CallSites {
     }
 
     /// Add a (possibly) new CallSite, returning its ID.
-    fn get_or_insert_id(&mut self, call_site: CallSite) -> u32 {
+    fn get_or_insert_id(&mut self, call_site: CallSite) -> CallSiteId {
         let max_id = &mut self.max_id;
         let result = self.callsite_to_id.entry(call_site).or_insert_with(|| {
             let result = *max_id;
@@ -94,7 +96,7 @@ impl CallSites {
     }
 
     /// Get map from IDs to CallSites.
-    fn get_reverse_map(&self) -> HashMap<u32, CallSite> {
+    fn get_reverse_map(&self) -> HashMap<CallSiteId, CallSite> {
         let mut result = HashMap::default();
         for (call_site, csid) in &(self.callsite_to_id) {
             result.insert(*csid, call_site.clone());
