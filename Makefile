@@ -12,7 +12,7 @@ build_ext: filprofiler/libpymemprofile_api.so
 	python3.8 setup.py build_ext --inplace
 
 filprofiler/_filpreload.so: filprofiler/_filpreload.c
-	gcc -std=c11 -D_FORTIFY_SOURCE=2 -fasynchronous-unwind-tables -fstack-clash-protection -fstack-protector -Werror=format-security -Werror=implicit-function-declaration -O2 -shared -ldl -g -fPIC -fvisibility=hidden -Wall -o $@ $<
+	gcc -std=c11 -D_FORTIFY_SOURCE=2 -fasynchronous-unwind-tables -fstack-clash-protection -fstack-protector -Werror=format-security -Werror=implicit-function-declaration -O2 -shared -ldl -g -fPIC -fvisibility=hidden -Wall -I$(shell python -c "import sysconfig; print(sysconfig.get_paths()['include'])") -o $@ $<
 
 filprofiler/libpymemprofile_api.so: Cargo.lock memapi/Cargo.toml memapi/src/*.rs
 	rm -f filprofiler/libymemprofile_api.so

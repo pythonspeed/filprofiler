@@ -7,6 +7,7 @@ extern void fil_start_call(const char *file_name, const char *function_name,
                            uint32_t line_number);
 extern void fil_finish_call(void);
 extern void fil_new_line_number(uint16_t line_number);
+extern void fil_new_thread_started();
 
 int fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
   switch (what) {
@@ -29,7 +30,8 @@ int fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
 static PyObject *fil_start_tracing(PyObject *self, PyObject *args) {
   if (!PyArg_ParseTuple(args, ""))
     return NULL;
-  PyEval_SetTrace(fil_tracer, Py_None);
+  fil_new_thread_started();
+  PyEval_SetProfile(fil_tracer, Py_None);
   return Py_None;
 }
 

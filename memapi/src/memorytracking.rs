@@ -43,7 +43,12 @@ impl Callstack {
         Callstack { calls: Vec::new() }
     }
 
-    fn start_call(&mut self, callsite_id: CallSiteId) {
+    fn start_call(&mut self, parent_line_number: u16, callsite_id: CallSiteId) {
+        if parent_line_number != 0 {
+            if let Some(mut call) = self.calls.last_mut() {
+                call.line_number = parent_line_number;
+            }
+        }
         self.calls.push(callsite_id);
     }
 
@@ -274,12 +279,14 @@ lazy_static! {
 }
 
 /// Add to per-thread function stack:
-pub fn start_call(call_site: Function, line_number: u16) {
+pub fn start_call(call_site: Function, parent_line_number: u16, line_number: u16) {
     let mut allocations = ALLOCATIONS.lock().unwrap();
     let function_id = allocations.call_sites.get_or_insert_id(call_site);
     THREAD_CALLSTACK.with(|cs| {
-        cs.borrow_mut()
-            .start_call(CallSiteId::new(function_id, line_number));
+        cs.borrow_mut().start_call(
+            parent_line_number,
+            CallSiteId::new(function_id, line_number),
+        );
     });
 }
 
@@ -299,8 +306,11 @@ pub fn new_line_number(line_number: u16) {
 }
 
 /// Add a new allocation based off the current callstack.
-pub fn add_allocation(address: usize, size: libc::size_t) {
-    let callstack: Callstack = THREAD_CALLSTACK.with(|cs| (*cs.borrow()).clone());
+pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16) {
+    let mut callstack: Callstack = THREAD_CALLSTACK.with(|cs| (*cs.borrow()).clone());
+    if line_number != 0 && !callstack.calls.is_empty() {
+        callstack.new_line_number(line_number);
+    }
     let mut allocations = ALLOCATIONS.lock().unwrap();
     allocations.add_allocation(address, size, callstack);
 }
@@ -399,9 +409,9 @@ mod tests {
     fn peak_allocations_only_updated_on_new_peaks() {
         let mut tracker = AllocationTracker::new();
         let mut cs1 = Callstack::new();
-        cs1.start_call(CallSiteId::new(1, 2));
+        cs1.start_call(0, CallSiteId::new(1, 2));
         let mut cs2 = Callstack::new();
-        cs2.start_call(CallSiteId::new(3, 4));
+        cs2.start_call(0, CallSiteId::new(3, 4));
 
         tracker.add_allocation(1, 1000, cs1.clone());
         // Peak should now match current allocations:
@@ -474,13 +484,13 @@ mod tests {
             3,
         );
         let mut cs1 = Callstack::new();
-        cs1.start_call(id1);
-        cs1.start_call(id2.clone());
+        cs1.start_call(0, id1);
+        cs1.start_call(0, id2.clone());
         let mut cs2 = Callstack::new();
-        cs2.start_call(id3);
+        cs2.start_call(0, id3);
         let mut cs3 = Callstack::new();
-        cs3.start_call(id1_different);
-        cs3.start_call(id2);
+        cs3.start_call(0, id1_different);
+        cs3.start_call(0, id2);
 
         tracker.add_allocation(1, 1000, cs1.clone());
         tracker.add_allocation(2, 234, cs2.clone());

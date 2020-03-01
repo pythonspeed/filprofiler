@@ -8,8 +8,12 @@ extern crate lazy_static;
 mod memorytracking;
 
 #[no_mangle]
-pub extern "C" fn pymemprofile_add_allocation(address: usize, size: libc::size_t) {
-    memorytracking::add_allocation(address, size);
+pub extern "C" fn pymemprofile_add_allocation(
+    address: usize,
+    size: libc::size_t,
+    line_number: u16,
+) {
+    memorytracking::add_allocation(address, size, line_number);
 }
 
 #[no_mangle]
@@ -21,6 +25,7 @@ pub extern "C" fn pymemprofile_free_allocation(address: usize) {
 /// Intended for use from C APIs, what can I say.
 #[no_mangle]
 pub unsafe extern "C" fn pymemprofile_start_call(
+    parent_line_number: u16,
     file_name: *const c_char,
     func_name: *const c_char,
     line_number: u16,
@@ -28,7 +33,7 @@ pub unsafe extern "C" fn pymemprofile_start_call(
     let function_name = str::from_utf8_unchecked(CStr::from_ptr(func_name).to_bytes());
     let module_name = str::from_utf8_unchecked(CStr::from_ptr(file_name).to_bytes());
     let call_site = memorytracking::Function::new(module_name, function_name);
-    memorytracking::start_call(call_site, line_number);
+    memorytracking::start_call(call_site, parent_line_number, line_number);
 }
 
 #[no_mangle]

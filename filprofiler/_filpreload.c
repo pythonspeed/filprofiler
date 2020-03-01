@@ -1,9 +1,10 @@
 #define _GNU_SOURCE
-
+#include "Python.h"
+#include "frameobject.h"
 #include <dlfcn.h>
 #include <malloc.h>
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <sys/mman.h>
 
@@ -16,6 +17,8 @@ static void (*underlying_real_free)(void *addr) = 0;
 static int initialized = 0;
 
 static _Thread_local int will_i_be_reentrant = 0;
+// Current thread's Python state:
+static _Thread_local PyThreadState *tstate = NULL;
 
 static void __attribute__((constructor)) constructor() {
   if (initialized) {
@@ -48,19 +51,27 @@ static void __attribute__((constructor)) constructor() {
 
 extern void *__libc_malloc(size_t size);
 extern void *__libc_calloc(size_t nmemb, size_t size);
-extern void pymemprofile_start_call(const char *filename, const char *funcname, uint16_t line_number);
+extern void pymemprofile_start_call(uint16_t parent_line_number, const char *filename, const char *funcname,
+                                    uint16_t line_number);
 extern void pymemprofile_finish_call();
 extern void pymemprofile_new_line_number(uint16_t line_number);
 extern void pymemprofile_reset();
 extern void pymemprofile_dump_peak_to_flamegraph(const char *path);
-extern void pymemprofile_add_allocation(size_t address, size_t length);
+extern void pymemprofile_add_allocation(size_t address, size_t length,
+                                        uint16_t line_number);
 extern void pymemprofile_free_allocation(size_t address);
 
 __attribute__((visibility("default"))) void
-fil_start_call(const char *filename, const char *funcname, uint16_t line_number) {
+fil_start_call(const char *filename, const char *funcname,
+               uint16_t line_number) {
   if (!will_i_be_reentrant) {
     will_i_be_reentrant = 1;
-    pymemprofile_start_call(filename, funcname, line_number);
+    uint16_t parent_line_number = 0;
+    if (tstate != NULL && tstate->frame != NULL && tstate->frame->f_back) {
+      parent_line_number = PyFrame_GetLineNumber(tstate->frame->f_back);
+    }
+
+    pymemprofile_start_call(parent_line_number, filename, funcname, line_number);
     will_i_be_reentrant = 0;
   }
 }
@@ -90,7 +101,15 @@ __attribute__((visibility("default"))) void fil_reset() {
   }
 }
 
-__attribute__((visibility("default"))) void fil_dump_peak_to_flamegraph(const char* path) {
+// Record current Python thread state in a thread-local, for easy retrieval; the
+// Python APIs have many irrelevant-for-this-case assumptions about the GIL
+// being held.
+__attribute__((visibility("default"))) void fil_new_thread_started() {
+  tstate = PyThreadState_Get();
+}
+
+__attribute__((visibility("default"))) void
+fil_dump_peak_to_flamegraph(const char *path) {
   if (!will_i_be_reentrant) {
     will_i_be_reentrant = 1;
     pymemprofile_dump_peak_to_flamegraph(path);
@@ -98,12 +117,21 @@ __attribute__((visibility("default"))) void fil_dump_peak_to_flamegraph(const ch
   }
 }
 
+void add_allocation(size_t address, size_t size) {
+  uint16_t line_number = 0;
+
+  if (tstate != NULL && tstate->frame != NULL) {
+    line_number = PyFrame_GetLineNumber(tstate->frame);
+  }
+  pymemprofile_add_allocation(address, size, line_number);
+}
+
 // Override memory-allocation functions:
 __attribute__((visibility("default"))) void *malloc(size_t size) {
   void *result = __libc_malloc(size);
   if (!will_i_be_reentrant && initialized) {
     will_i_be_reentrant = 1;
-    pymemprofile_add_allocation((size_t)result, size);
+    add_allocation((size_t)result, size);
     will_i_be_reentrant = 0;
   }
   return result;
@@ -114,7 +142,7 @@ __attribute__((visibility("default"))) void *calloc(size_t nmemb, size_t size) {
   size_t allocated = nmemb * size;
   if (!will_i_be_reentrant && initialized) {
     will_i_be_reentrant = 1;
-    pymemprofile_add_allocation((size_t)result, allocated);
+    add_allocation((size_t)result, allocated);
     will_i_be_reentrant = 0;
   }
   return result;
