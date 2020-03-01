@@ -51,7 +51,8 @@ static void __attribute__((constructor)) constructor() {
 
 extern void *__libc_malloc(size_t size);
 extern void *__libc_calloc(size_t nmemb, size_t size);
-extern void pymemprofile_start_call(uint16_t parent_line_number, const char *filename, const char *funcname,
+extern void pymemprofile_start_call(uint16_t parent_line_number,
+                                    const char *filename, const char *funcname,
                                     uint16_t line_number);
 extern void pymemprofile_finish_call();
 extern void pymemprofile_new_line_number(uint16_t line_number);
@@ -71,7 +72,8 @@ fil_start_call(const char *filename, const char *funcname,
       parent_line_number = PyFrame_GetLineNumber(tstate->frame->f_back);
     }
 
-    pymemprofile_start_call(parent_line_number, filename, funcname, line_number);
+    pymemprofile_start_call(parent_line_number, filename, funcname,
+                            line_number);
     will_i_be_reentrant = 0;
   }
 }
@@ -104,8 +106,12 @@ __attribute__((visibility("default"))) void fil_reset() {
 // Record current Python thread state in a thread-local, for easy retrieval; the
 // Python APIs have many irrelevant-for-this-case assumptions about the GIL
 // being held.
-__attribute__((visibility("default"))) void fil_new_thread_started() {
+__attribute__((visibility("default"))) void fil_thread_started() {
   tstate = PyThreadState_Get();
+}
+
+__attribute__((visibility("default"))) void fil_thread_finished() {
+  tstate = NULL;
 }
 
 __attribute__((visibility("default"))) void
@@ -163,7 +169,8 @@ __attribute__((visibility("default"))) void free(void *addr) {
 
 /*
 __attribute__ ((visibility("default"))) void* mmap(void *addr, size_t length,
-int prot, int flags, int fd, off_t offset) { if (!initialized) { constructor();
+int prot, int flags, int fd, off_t offset) { if (!initialized) {
+constructor();
   }
   void* result = underlying_real_mmap(addr, length, prot, flags, fd, offset);
   fprintf(stdout, "MMAP!\n");

@@ -56,27 +56,30 @@ def test_threaded_allocation_tracking():
     threading = (threading.__file__, "run", ANY)
     ones = (numpy.core.numeric.__file__, "ones", ANY)
     script = str(script)
-    h = (script, "h", 6)
+    h = (script, "h", 7)
 
     # The main thread:
-    main_path = ((script, "<module>", 1), (script, "main", 20), h, ones)
+    main_path = ((script, "<module>", 24), (script, "main", 21), h, ones)
 
     def as_mb(*args):
         return args[-1] / 1024
 
-    assert match(allocations, {main_path: ANY}, as_mb) == pytest.approx(50, 0.1)
+    def big(length):
+        return length > 10000
+
+    assert match(allocations, {main_path: big}, as_mb) == pytest.approx(50, 0.1)
 
     # Thread that ends before main thread:
     thread1_path1 = (
         threading,
-        (script, "thread1", 12),
-        (script, "child1", 9),
+        (script, "thread1", 15),
+        (script, "child1", 10),
         h,
         ones,
     )
-    assert match(allocations, {thread1_path1: ANY}, as_mb) == pytest.approx(30, 0.1)
-    thread1_path2 = (threading, (script, "thread1", 12), h, ones)
-    assert match(allocations, {thread1_path2: ANY}, as_mb) == pytest.approx(20, 0.1)
+    assert match(allocations, {thread1_path1: big}, as_mb) == pytest.approx(30, 0.1)
+    thread1_path2 = (threading, (script, "thread1", 13), h, ones)
+    assert match(allocations, {thread1_path2: big}, as_mb) == pytest.approx(20, 0.1)
 
 
 def test_thread_allocates_after_main_thread_is_done():
@@ -94,12 +97,15 @@ def test_thread_allocates_after_main_thread_is_done():
     threading = (threading.__file__, "run", ANY)
     ones = (numpy.core.numeric.__file__, "ones", ANY)
     script = str(script)
-    thread1_path1 = (threading, (script, "thread1", 6), ones)
+    thread1_path1 = (threading, (script, "thread1", 9), ones)
 
     def as_mb(*args):
         return args[-1] / 1024
 
-    assert match(allocations, {thread1_path1: ANY}, as_mb) == pytest.approx(70, 0.1)
+    def big(length):
+        return length > 10000
+
+    assert match(allocations, {thread1_path1: big}, as_mb) == pytest.approx(70, 0.1)
 
 
 def test_ld_preload_disabled_for_subprocesses():
