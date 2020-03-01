@@ -11,9 +11,6 @@ extern void fil_new_thread_started();
 
 int fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
   switch (what) {
-  case PyTrace_LINE:
-    fil_new_line_number(frame->f_lineno);
-    break;
   case PyTrace_CALL:
     fil_start_call(PyUnicode_AsUTF8(frame->f_code->co_filename),
                    PyUnicode_AsUTF8(frame->f_code->co_name), frame->f_lineno);
