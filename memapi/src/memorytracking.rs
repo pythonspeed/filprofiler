@@ -15,7 +15,7 @@ use std::sync::Mutex;
 type FunctionId = u32;
 
 /// A specific location: file + function + line number.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Copy)]
 struct CallSiteId {
     function_id: FunctionId,
     /// Line number within the _file_, 1-indexed.
@@ -403,6 +403,31 @@ mod tests {
                 prop_assert_eq!(tracker.current_allocated_bytes, expected_sum);
             }
         }
+    }
+
+    #[test]
+    fn callstack_line_numbers() {
+        // Parent line number does nothing if it's first call:
+        let mut cs1 = Callstack::new();
+        let id1 = CallSiteId::new(1, 2);
+        let id2 = CallSiteId::new(3, 45);
+        let id3 = CallSiteId::new(5, 6);
+        cs1.start_call(123, id1);
+        assert_eq!(cs1.calls, vec![id1]);
+
+        // Parent line number does nothing if it's 0:
+        cs1.start_call(0, id2);
+        assert_eq!(cs1.calls, vec![id1, id2]);
+
+        // Parent line number overrides previous level if it's non-0:
+        let mut cs2 = Callstack::new();
+        cs2.start_call(0, id1);
+        cs2.start_call(10, id2);
+        cs2.start_call(12, id3);
+        assert_eq!(
+            cs2.calls,
+            vec![CallSiteId::new(1, 10), CallSiteId::new(3, 12), id3]
+        );
     }
 
     #[test]
