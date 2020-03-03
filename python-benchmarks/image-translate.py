@@ -7,7 +7,7 @@ from scipy.ndimage import fourier_shift
 from skimage.transform import rescale
 
 image = data.camera()
-image = rescale(image, 8, anti_aliasing=True)
+image = rescale(image, 4, anti_aliasing=True)
 
 shift = (-22.4, 13.32)
 # The shift corresponds to the pixel offset relative to the reference image
