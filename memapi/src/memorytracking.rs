@@ -86,14 +86,14 @@ thread_local!(static THREAD_CALLSTACK: RefCell<Callstack> = RefCell::new(Callsta
 /// A particular place where a call happened.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Function {
-    file_name: SmallString<[u8; 24]>,
+    file_name: String,
     function_name: SmallString<[u8; 24]>,
 }
 
 impl Function {
     pub fn new(file_name: &str, function_name: &str) -> Function {
         Function {
-            file_name: SmallString::from_str(file_name),
+            file_name: file_name.to_string(),
             function_name: SmallString::from_str(function_name),
         }
     }
