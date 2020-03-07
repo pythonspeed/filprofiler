@@ -8,3 +8,4 @@ members = [
 # Needed for profiling, disable for real release:
 #debug = true
 lto = true
+panic = "abort"
