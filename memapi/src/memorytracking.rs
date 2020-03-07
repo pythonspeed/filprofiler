@@ -114,8 +114,8 @@ struct FunctionTracker {
     function_to_id: HashMap<Function<'static>, FunctionId>,
 }
 
-impl FunctionTracker {
-    fn new() -> FunctionTracker {
+impl<'a> FunctionTracker {
+    fn new() -> Self {
         FunctionTracker {
             max_id: 0,
             function_to_id: HashMap::default(),
@@ -123,14 +123,20 @@ impl FunctionTracker {
     }
 
     /// Add a (possibly) new Function, returning its ID.
-    fn get_or_insert_id(&mut self, call_site: Function<'static>) -> FunctionId {
+    fn get_or_insert_id(&mut self, call_site: Function<'a>) -> FunctionId {
         let max_id = &mut self.max_id;
-        let result = self.function_to_id.entry(call_site).or_insert_with(|| {
-            let result = *max_id;
+        if let Some(result) = self.function_to_id.get(&call_site) {
+            *result
+        } else {
+            let new_id = *max_id;
             *max_id += 1;
-            result
-        });
-        *result
+            let new_call_site = Function::new(
+                call_site.file_name.to_string(),
+                call_site.function_name.to_string(),
+            );
+            self.function_to_id.insert(new_call_site, new_id);
+            new_id
+        }
     }
 
     /// Get map from IDs to Functions.
@@ -342,6 +348,7 @@ fn write_lines(lines: &Vec<String>, path: &str) -> std::io::Result<()> {
         file.write_all(line.as_bytes())?;
         file.write_all(b"\n")?;
     }
+    file.flush()?;
     Ok(())
 }
 
@@ -352,7 +359,7 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
     peak_bytes: usize,
     reversed: bool,
 ) -> std::io::Result<()> {
-    let file = std::fs::File::create(path)?;
+    let mut file = std::fs::File::create(path)?;
     let title = format!(
         "Peak Tracked Memory Usage{} ({:.1} MiB)",
         if reversed { ", Reversed" } else { "" },
@@ -369,12 +376,13 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
         reverse_stack_order: reversed,
         ..Default::default()
     };
-    if let Err(e) = flamegraph::from_lines(&mut options, lines, file) {
+    if let Err(e) = flamegraph::from_lines(&mut options, lines, &file) {
         Err(std::io::Error::new(
             std::io::ErrorKind::Other,
             format!("{}", e),
         ))
     } else {
+        file.flush()?;
         Ok(())
     }
 }
