@@ -367,7 +367,6 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
     );
     let mut options = flamegraph::Options {
         title,
-        direction: flamegraph::Direction::Inverted,
         count_name: "bytes".to_string(),
         font_size: 16,
         font_type: "mono".to_string(),
@@ -376,6 +375,9 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
         reverse_stack_order: reversed,
         ..Default::default()
     };
+    if !reversed {
+        options.direction = flamegraph::Direction::Inverted;
+    }
     if let Err(e) = flamegraph::from_lines(&mut options, lines, &file) {
         Err(std::io::Error::new(
             std::io::ErrorKind::Other,
