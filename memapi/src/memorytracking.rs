@@ -3,7 +3,7 @@ use inferno::flamegraph;
 use itertools::Itertools;
 use libc;
 use rustc_hash::FxHashMap as HashMap;
-use smallstr::SmallString;
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections;
 use std::fmt;
@@ -85,21 +85,24 @@ thread_local!(static THREAD_CALLSTACK: RefCell<Callstack> = RefCell::new(Callsta
 
 /// A particular place where a call happened.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Function {
-    file_name: String,
-    function_name: SmallString<[u8; 24]>,
+pub struct Function<'a> {
+    file_name: Cow<'a, str>,
+    function_name: Cow<'a, str>,
 }
 
-impl Function {
-    pub fn new(file_name: &str, function_name: &str) -> Function {
+impl<'a> Function<'a> {
+    pub fn new<S>(file_name: S, function_name: S) -> Function<'a>
+    where
+        S: Into<Cow<'a, str>>,
+    {
         Function {
-            file_name: file_name.to_string(),
-            function_name: SmallString::from_str(function_name),
+            file_name: file_name.into(),
+            function_name: function_name.into(),
         }
     }
 }
 
-impl fmt::Display for Function {
+impl<'a> fmt::Display for Function<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}", self.file_name, self.function_name)
     }
@@ -108,7 +111,7 @@ impl fmt::Display for Function {
 /// Maps Functions to integer identifiers used in CallStacks.
 struct FunctionTracker {
     max_id: u32,
-    function_to_id: HashMap<Function, FunctionId>,
+    function_to_id: HashMap<Function<'static>, FunctionId>,
 }
 
 impl FunctionTracker {
@@ -120,7 +123,7 @@ impl FunctionTracker {
     }
 
     /// Add a (possibly) new Function, returning its ID.
-    fn get_or_insert_id(&mut self, call_site: Function) -> FunctionId {
+    fn get_or_insert_id(&mut self, call_site: Function<'static>) -> FunctionId {
         let max_id = &mut self.max_id;
         let result = self.function_to_id.entry(call_site).or_insert_with(|| {
             let result = *max_id;
@@ -279,7 +282,7 @@ lazy_static! {
 }
 
 /// Add to per-thread function stack:
-pub fn start_call(call_site: Function, parent_line_number: u16, line_number: u16) {
+pub fn start_call(call_site: Function<'static>, parent_line_number: u16, line_number: u16) {
     let mut allocations = ALLOCATIONS.lock().unwrap();
     let function_id = allocations.call_sites.get_or_insert_id(call_site);
     THREAD_CALLSTACK.with(|cs| {

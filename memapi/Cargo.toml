@@ -17,10 +17,6 @@ rustc-hash = "1.0.1"
 version = "0.9.4"
 default-features = false
 
-[dependencies.smallstr]
-version = "0.2.0"
-features = ["ffi"]
-
 [dev-dependencies]
 proptest = "0.9.5"
 
