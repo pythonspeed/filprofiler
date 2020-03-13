@@ -110,7 +110,7 @@ impl<'a> fmt::Display for Function<'a> {
 
 /// Maps Functions to integer identifiers used in CallStacks.
 struct FunctionTracker {
-    max_id: u32,
+    max_id: FunctionId,
     function_to_id: HashMap<Function<'static>, FunctionId>,
 }
 
