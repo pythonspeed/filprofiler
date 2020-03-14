@@ -5,11 +5,8 @@ MAKEFLAGS += --warn-undefined-variables
 MAKEFLAGS += --no-builtin-rules
 
 .PHONY: build
-build: filprofiler/fil-python build_ext
-
-.PHONY: build_ext
-build_ext: filprofiler/libpymemprofile_api.so
-	env CFLAGS=-fno-omit-frame-pointer python3.8 setup.py build_ext --inplace
+build: filprofiler/fil-python
+	pip install -e .
 
 filprofiler/fil-python: filprofiler/_filpreload.c target/release/libpymemprofile_api.a
 	gcc -std=c11 $(shell python3.8-config --cflags --ldflags) -O3 -lpython3.8 -export-dynamic -flto -o $@ $< ./target/release/libpymemprofile_api.a
@@ -31,6 +28,7 @@ wheel:
 
 .PHONY: clean
 clean:
+	rm -f filprofiler/fil-python
 	rm -rf target
 	rm -rf filprofiler/*.so
 	python setup.py clean

@@ -18,7 +18,7 @@ from ._utils import library_path
 from ._tracer import trace, dump_svg
 from . import __version__, __file__
 
-
+# TODO if we go with exe mode, don't need two-stage execution
 def stage_1():
     """Setup environment variables, re-execute this script."""
     # Tracebacks when Rust crashes:
@@ -34,7 +34,7 @@ def stage_1():
     environ["VECLIB_MAXIMUM_THREADS"] = "1"
     environ["NUMEXPR_NUM_THREADS"] = "1"
 
-    execv(join(dirname(__file__), "fil-python"), ["fil-python", "-m", "filprofiler._script"] + sys.argv[1:])
+    execv(which("fil-python"), ["fil-python", "-m", "filprofiler._script"] + sys.argv[1:])
 
 
 def stage_2():
