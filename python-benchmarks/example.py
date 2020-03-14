@@ -1,4 +1,11 @@
 import time
+from os import environ
+environ["BLOSC_NTHREADS"] = "1"
+environ["OMP_NUM_THREADS"] = "1"
+environ["OPENBLAS_NUM_THREADS"] = "1"
+environ["MKL_NUM_THREADS"] = "1"
+environ["VECLIB_MAXIMUM_THREADS"] = "1"
+environ["NUMEXPR_NUM_THREADS"] = "1"
 import numpy
 
 
