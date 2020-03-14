@@ -4,21 +4,20 @@ import atexit
 import os
 import sys
 import threading
-from ctypes import CDLL, RTLD_GLOBAL
+from ctypes import PyDLL
 
 from ._utils import library_path
 
 # Load with RTLD_GLOBAL so _profiler.so has access to those symbols; explicit
 # linking may be possible but haven't done that yet, oh well.
-pymemprofile = CDLL(library_path("libpymemprofile_api"), mode=RTLD_GLOBAL)
-preload = CDLL(library_path("_filpreload"), mode=RTLD_GLOBAL)
-from . import _profiler
+#pymemprofile = CDLL(library_path("libpymemprofile_api"), mode=RTLD_GLOBAL)
+preload = PyDLL(None)  # the executable
 
 
 def start_tracing():
     preload.fil_reset()
     threading.settrace(_start_thread_trace)
-    _profiler.start_tracing()
+    preload.register_fil_tracer()
 
 
 def _start_thread_trace(frame, event, arg):
@@ -30,7 +29,7 @@ def _start_thread_trace(frame, event, arg):
     CTracer_call.
     """
     if event == "call":
-        _profiler.start_tracing()
+        preload.register_fil_tracer()
     return _start_thread_trace
 
 

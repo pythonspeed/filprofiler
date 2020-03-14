@@ -12,7 +12,7 @@ build_ext: filprofiler/libpymemprofile_api.so
 	env CFLAGS=-fno-omit-frame-pointer python3.8 setup.py build_ext --inplace
 
 filprofiler/fil-python: filprofiler/_filpreload.c target/release/libpymemprofile_api.a
-	gcc -std=c11 $(shell python3.8-config --cflags --ldflags) -lpython3.8 -o $@ $< ./target/release/libpymemprofile_api.a
+	gcc -std=c11 $(shell python3.8-config --cflags --ldflags) -lpython3.8 -export-dynamic -flto -o $@ $< ./target/release/libpymemprofile_api.a
 
 target/release/libpymemprofile_api.a: Cargo.lock memapi/Cargo.toml memapi/src/*.rs
 	cargo build --release

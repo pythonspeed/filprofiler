@@ -182,3 +182,26 @@ initialized) { will_i_be_reentrant = 1; update_memory_usage();
   return result;
 }
 */
+
+int fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
+  switch (what) {
+  case PyTrace_CALL:
+    fil_start_call(PyUnicode_AsUTF8(frame->f_code->co_filename),
+                   PyUnicode_AsUTF8(frame->f_code->co_name), frame->f_lineno);
+    break;
+  case PyTrace_RETURN:
+    fil_finish_call();
+    if (frame->f_back == NULL) {
+      // This thread is done.
+      fil_thread_finished();
+    }
+  default:
+    break;
+  }
+  return 0;
+}
+
+void register_fil_tracer() {
+  fil_thread_started();
+  PyEval_SetProfile(fil_tracer, Py_None);
+}
