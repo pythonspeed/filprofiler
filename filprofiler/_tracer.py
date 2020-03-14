@@ -17,7 +17,7 @@ from . import _profiler
 
 def start_tracing():
     preload.fil_reset()
-    threading.settrace(_start_thread_trace)
+    threading.setprofile(_start_thread_trace)
     _profiler.start_tracing()
 
 
@@ -35,7 +35,7 @@ def _start_thread_trace(frame, event, arg):
 
 
 def stop_tracing(output_path: str):
-    sys.settrace(None)
+    sys.setprofile(None)
     dump_svg(output_path)
 
 
