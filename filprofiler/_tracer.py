@@ -10,13 +10,13 @@ from ._utils import library_path
 
 # Load with RTLD_GLOBAL so _profiler.so has access to those symbols; explicit
 # linking may be possible but haven't done that yet, oh well.
-#pymemprofile = CDLL(library_path("libpymemprofile_api"), mode=RTLD_GLOBAL)
+# pymemprofile = CDLL(library_path("libpymemprofile_api"), mode=RTLD_GLOBAL)
 preload = PyDLL(None)  # the executable
 
 
 def start_tracing():
     preload.fil_reset()
-    threading.settrace(_start_thread_trace)
+    threading.setprofile(_start_thread_trace)
     preload.register_fil_tracer()
 
 
@@ -34,7 +34,7 @@ def _start_thread_trace(frame, event, arg):
 
 
 def stop_tracing(output_path: str):
-    sys.settrace(None)
+    sys.setprofile(None)
     dump_svg(output_path)
 
 
