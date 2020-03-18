@@ -9,12 +9,12 @@
 #include <sys/mman.h>
 
 #if PY_VERSION_HEX < 0x03080000
-  #define Py_BytesMain _Py_UnixMain
+#define Py_BytesMain _Py_UnixMain
 #endif
 
 // Underlying APIs we're wrapping:
 static void *(*underlying_real_mmap)(void *addr, size_t length, int prot,
-                                           int flags, int fd, off_t offset) = 0;
+                                     int flags, int fd, off_t offset) = 0;
 static void (*underlying_real_free)(void *addr) = 0;
 
 // Note whether we've been initialized yet or not:
@@ -22,7 +22,7 @@ static int initialized = 0;
 
 static _Thread_local int will_i_be_reentrant = 0;
 // Current thread's Python state:
-static _Thread_local PyThreadState *tstate = NULL;
+static _Thread_local PyFrameObject *current_frame = NULL;
 
 int main(int argc, char **argv) {
   if (sizeof((void *)0) != sizeof((size_t)0)) {
@@ -69,8 +69,8 @@ fil_start_call(const char *filename, const char *funcname,
   if (!will_i_be_reentrant) {
     will_i_be_reentrant = 1;
     uint16_t parent_line_number = 0;
-    if (tstate != NULL && tstate->frame != NULL && tstate->frame->f_back) {
-      parent_line_number = PyFrame_GetLineNumber(tstate->frame->f_back);
+    if (current_frame != NULL && current_frame->f_back != NULL) {
+      parent_line_number = PyFrame_GetLineNumber(current_frame->f_back);
     }
 
     pymemprofile_start_call(parent_line_number, filename, funcname,
@@ -104,17 +104,6 @@ __attribute__((visibility("default"))) void fil_reset() {
   }
 }
 
-// Record current Python thread state in a thread-local, for easy retrieval; the
-// Python APIs have many irrelevant-for-this-case assumptions about the GIL
-// being held.
-__attribute__((visibility("default"))) void fil_thread_started() {
-  tstate = PyThreadState_Get();
-}
-
-__attribute__((visibility("default"))) void fil_thread_finished() {
-  tstate = NULL;
-}
-
 __attribute__((visibility("default"))) void
 fil_dump_peak_to_flamegraph(const char *path) {
   if (!will_i_be_reentrant) {
@@ -124,11 +113,12 @@ fil_dump_peak_to_flamegraph(const char *path) {
   }
 }
 
-void add_allocation(size_t address, size_t size) {
+__attribute__((visibility("hidden"))) void add_allocation(size_t address,
+                                                          size_t size) {
   uint16_t line_number = 0;
 
-  if (tstate != NULL && tstate->frame != NULL) {
-    line_number = PyFrame_GetLineNumber(tstate->frame);
+  if (current_frame != NULL) {
+    line_number = PyFrame_GetLineNumber(current_frame);
   }
   pymemprofile_add_allocation(address, size, line_number);
 }
@@ -186,15 +176,14 @@ initialized) { will_i_be_reentrant = 1; update_memory_usage();
 int fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
   switch (what) {
   case PyTrace_CALL:
+    current_frame = frame;
     fil_start_call(PyUnicode_AsUTF8(frame->f_code->co_filename),
                    PyUnicode_AsUTF8(frame->f_code->co_name), frame->f_lineno);
     break;
   case PyTrace_RETURN:
     fil_finish_call();
-    if (frame->f_back == NULL) {
-      // This thread is done.
-      fil_thread_finished();
-    }
+    current_frame = frame->f_back;
+    break;
   default:
     break;
   }
@@ -202,6 +191,5 @@ int fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
 }
 
 void register_fil_tracer() {
-  fil_thread_started();
   PyEval_SetProfile(fil_tracer, Py_None);
 }
