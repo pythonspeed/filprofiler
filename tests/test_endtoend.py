@@ -28,7 +28,8 @@ def get_allocations(output_directory: Path):
                 file_name, line = part1.split(":")
                 line = int(line)
                 path.append((file_name, func_name, line))
-            result[tuple(path)] = size_kb
+            if size_kb > 10:
+                result[tuple(path)] = size_kb
     return result
 
 
@@ -71,14 +72,13 @@ def test_threaded_allocation_tracking():
 
     # Thread that ends before main thread:
     thread1_path1 = (
-        threading,
         (script, "thread1", 15),
         (script, "child1", 10),
         h,
         ones,
     )
     assert match(allocations, {thread1_path1: big}, as_mb) == pytest.approx(30, 0.1)
-    thread1_path2 = (threading, (script, "thread1", 13), h, ones)
+    thread1_path2 = ((script, "thread1", 13), h, ones)
     assert match(allocations, {thread1_path2: big}, as_mb) == pytest.approx(20, 0.1)
 
 
@@ -97,7 +97,7 @@ def test_thread_allocates_after_main_thread_is_done():
     threading = (threading.__file__, "run", ANY)
     ones = (numpy.core.numeric.__file__, "ones", ANY)
     script = str(script)
-    thread1_path1 = (threading, (script, "thread1", 9), ones)
+    thread1_path1 = ((script, "thread1", 9), ones)
 
     def as_mb(*args):
         return args[-1] / 1024
