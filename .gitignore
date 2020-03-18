@@ -7,3 +7,4 @@ build/
 dist/
 fil-result/
 .eggs/
+python-benchmarks/pymalloc.c

@@ -14,7 +14,12 @@ filprofiler/fil-python: filprofiler/_filpreload.c target/release/libpymemprofile
 target/release/libpymemprofile_api.a: Cargo.lock memapi/Cargo.toml memapi/src/*.rs
 	cargo build --release
 
+venv:
+	python3 -m venv venv/
+	venv/bin/pip install -e .[dev]
+
 test: build
+	cythonize -3 -i python-benchmarks/pymalloc.pyx
 	env RUST_BACKTRACE=1 cargo test
 	env RUST_BACKTRACE=1 py.test
 

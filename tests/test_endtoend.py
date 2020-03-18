@@ -28,7 +28,8 @@ def get_allocations(output_directory: Path):
                 file_name, line = part1.split(":")
                 line = int(line)
                 path.append((file_name, func_name, line))
-            result[tuple(path)] = size_kb
+            if size_kb > 10:
+                result[tuple(path)] = size_kb
     return result
 
 
@@ -37,6 +38,14 @@ def profile(script: Path, *arguments: str) -> Path:
     output = Path(mkdtemp())
     check_call(["fil-profile", "-o", str(output), str(script)] + list(arguments))
     return output
+
+
+def as_mb(*args):
+    return args[-1] / 1024
+
+
+def big(length):
+    return length > 10000
 
 
 def test_threaded_allocation_tracking():
@@ -61,24 +70,17 @@ def test_threaded_allocation_tracking():
     # The main thread:
     main_path = ((script, "<module>", 24), (script, "main", 21), h, ones)
 
-    def as_mb(*args):
-        return args[-1] / 1024
-
-    def big(length):
-        return length > 10000
-
     assert match(allocations, {main_path: big}, as_mb) == pytest.approx(50, 0.1)
 
     # Thread that ends before main thread:
     thread1_path1 = (
-        threading,
         (script, "thread1", 15),
         (script, "child1", 10),
         h,
         ones,
     )
     assert match(allocations, {thread1_path1: big}, as_mb) == pytest.approx(30, 0.1)
-    thread1_path2 = (threading, (script, "thread1", 13), h, ones)
+    thread1_path2 = ((script, "thread1", 13), h, ones)
     assert match(allocations, {thread1_path2: big}, as_mb) == pytest.approx(20, 0.1)
 
 
@@ -97,15 +99,25 @@ def test_thread_allocates_after_main_thread_is_done():
     threading = (threading.__file__, "run", ANY)
     ones = (numpy.core.numeric.__file__, "ones", ANY)
     script = str(script)
-    thread1_path1 = (threading, (script, "thread1", 9), ones)
-
-    def as_mb(*args):
-        return args[-1] / 1024
-
-    def big(length):
-        return length > 10000
+    thread1_path1 = ((script, "thread1", 9), ones)
 
     assert match(allocations, {thread1_path1: big}, as_mb) == pytest.approx(70, 0.1)
+
+
+def test_malloc_in_c_extension():
+    """
+    Direct malloc() in C extension gets captured.
+
+    (NumPy uses Python memory APIs, so is not sufficient to test this.)
+    """
+    script = Path("python-benchmarks") / "malloc.py"
+    output_dir = profile(script)
+    allocations = get_allocations(output_dir)
+
+    script = str(script)
+    path = ((script, "<module>", 12), (script, "main", 9))
+
+    assert match(allocations, {path: big}, as_mb) == pytest.approx(50, 0.1)
 
 
 def test_ld_preload_disabled_for_subprocesses():
