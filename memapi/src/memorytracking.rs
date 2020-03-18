@@ -374,11 +374,9 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
         subtitle: Some("SUBTITLE-HERE".to_string()),
         reverse_stack_order: reversed,
         color_diffusion: true,
+        direction: flamegraph::Direction::Inverted,
         ..Default::default()
     };
-    if !reversed {
-        options.direction = flamegraph::Direction::Inverted;
-    }
     if let Err(e) = flamegraph::from_lines(&mut options, lines, &file) {
         Err(std::io::Error::new(
             std::io::ErrorKind::Other,
