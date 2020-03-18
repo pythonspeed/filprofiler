@@ -1,11 +1,8 @@
-from ctypes import CDLL, c_void_p
-from ctypes.util import find_library
+import os
+import sys
+from pymalloc import pymalloc as malloc, pyfree as free
 
-exe = CDLL(None)
-malloc = exe.malloc
-malloc.restype = c_void_p
-free = exe.free
-free.argtypes = (c_void_p,)
+sys.path.append(os.path.dirname(__file__))
 
 
 class Memory:
@@ -27,7 +24,7 @@ def g():
 def main():
     x = allocate(20)
     del x
-    y = g()
+    g()
 
 
 main()
