@@ -12,21 +12,19 @@ from os.path import abspath, dirname, join, exists
 from argparse import ArgumentParser
 import runpy
 import signal
+from shutil import which
 
 from ._utils import library_path
 from ._tracer import trace, dump_svg
-from . import __version__
+from . import __version__, __file__
 
-
+# TODO if we go with exe mode, don't need two-stage execution
 def stage_1():
     """Setup environment variables, re-execute this script."""
     # Tracebacks when Rust crashes:
     environ["RUST_BACKTRACE"] = "1"
     # Route all allocations from Python through malloc() directly:
     environ["PYTHONMALLOC"] = "malloc"
-    # Library setup:
-    environ["LD_PRELOAD"] = library_path("_filpreload")
-    environ["FIL_API_LIBRARY"] = library_path("libpymemprofile_api")
     # Disable multi-threaded backends in various scientific computing libraries
     # (Zarr uses Blosc, NumPy uses BLAS):
     environ["BLOSC_NTHREADS"] = "1"
@@ -36,7 +34,7 @@ def stage_1():
     environ["VECLIB_MAXIMUM_THREADS"] = "1"
     environ["NUMEXPR_NUM_THREADS"] = "1"
 
-    execv(sys.executable, [sys.argv[0], "-m", "filprofiler._script"] + sys.argv[1:])
+    execv(which("fil-python"), ["fil-python", "-m", "filprofiler._script"] + sys.argv[1:])
 
 
 def stage_2():

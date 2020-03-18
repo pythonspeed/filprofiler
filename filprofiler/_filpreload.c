@@ -8,9 +8,13 @@
 #include <stdlib.h>
 #include <sys/mman.h>
 
+#if PY_VERSION_HEX < 0x03080000
+  #define Py_BytesMain _Py_UnixMain
+#endif
+
 // Underlying APIs we're wrapping:
 static void *(*underlying_real_mmap)(void *addr, size_t length, int prot,
-                                     int flags, int fd, off_t offset) = 0;
+                                           int flags, int fd, off_t offset) = 0;
 static void (*underlying_real_free)(void *addr) = 0;
 
 // Note whether we've been initialized yet or not:
@@ -20,11 +24,7 @@ static _Thread_local int will_i_be_reentrant = 0;
 // Current thread's Python state:
 static _Thread_local PyThreadState *tstate = NULL;
 
-static void __attribute__((constructor)) constructor() {
-  if (initialized) {
-    return;
-  }
-  unsetenv("LD_PRELOAD");
+int main(int argc, char **argv) {
   if (sizeof((void *)0) != sizeof((size_t)0)) {
     fprintf(stderr, "BUG: expected size of size_t and void* to be the same.\n");
     exit(1);
@@ -47,6 +47,7 @@ static void __attribute__((constructor)) constructor() {
     exit(1);
   }
   initialized = 1;
+  return Py_BytesMain(argc, argv);
 }
 
 extern void *__libc_malloc(size_t size);
@@ -181,3 +182,26 @@ initialized) { will_i_be_reentrant = 1; update_memory_usage();
   return result;
 }
 */
+
+int fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
+  switch (what) {
+  case PyTrace_CALL:
+    fil_start_call(PyUnicode_AsUTF8(frame->f_code->co_filename),
+                   PyUnicode_AsUTF8(frame->f_code->co_name), frame->f_lineno);
+    break;
+  case PyTrace_RETURN:
+    fil_finish_call();
+    if (frame->f_back == NULL) {
+      // This thread is done.
+      fil_thread_finished();
+    }
+  default:
+    break;
+  }
+  return 0;
+}
+
+void register_fil_tracer() {
+  fil_thread_started();
+  PyEval_SetProfile(fil_tracer, Py_None);
+}
