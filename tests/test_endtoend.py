@@ -40,6 +40,14 @@ def profile(script: Path, *arguments: str) -> Path:
     return output
 
 
+def as_mb(*args):
+    return args[-1] / 1024
+
+
+def big(length):
+    return length > 10000
+
+
 def test_threaded_allocation_tracking():
     """
     fil-profile tracks allocations from all threads.
@@ -61,12 +69,6 @@ def test_threaded_allocation_tracking():
 
     # The main thread:
     main_path = ((script, "<module>", 24), (script, "main", 21), h, ones)
-
-    def as_mb(*args):
-        return args[-1] / 1024
-
-    def big(length):
-        return length > 10000
 
     assert match(allocations, {main_path: big}, as_mb) == pytest.approx(50, 0.1)
 
@@ -99,13 +101,23 @@ def test_thread_allocates_after_main_thread_is_done():
     script = str(script)
     thread1_path1 = ((script, "thread1", 9), ones)
 
-    def as_mb(*args):
-        return args[-1] / 1024
-
-    def big(length):
-        return length > 10000
-
     assert match(allocations, {thread1_path1: big}, as_mb) == pytest.approx(70, 0.1)
+
+
+def test_malloc_in_c_extension():
+    """
+    Direct malloc() in C extension gets captured.
+
+    (NumPy uses Python memory APIs, so is not sufficient to test this.)
+    """
+    script = Path("python-benchmarks") / "malloc.py"
+    output_dir = profile(script)
+    allocations = get_allocations(output_dir)
+
+    script = str(script)
+    path = ((script, "<module>", 12), (script, "main", 9))
+
+    assert match(allocations, {path: big}, as_mb) == pytest.approx(50, 0.1)
 
 
 def test_ld_preload_disabled_for_subprocesses():
