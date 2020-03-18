@@ -70,7 +70,8 @@ fil_start_call(const char *filename, const char *funcname,
     will_i_be_reentrant = 1;
     uint16_t parent_line_number = 0;
     if (current_frame != NULL && current_frame->f_back != NULL) {
-      parent_line_number = PyFrame_GetLineNumber(current_frame->f_back);
+      PyFrameObject* f = current_frame->f_back;
+      parent_line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
     }
 
     pymemprofile_start_call(parent_line_number, filename, funcname,
@@ -116,9 +117,9 @@ fil_dump_peak_to_flamegraph(const char *path) {
 __attribute__((visibility("hidden"))) void add_allocation(size_t address,
                                                           size_t size) {
   uint16_t line_number = 0;
-
-  if (current_frame != NULL) {
-    line_number = PyFrame_GetLineNumber(current_frame);
+  PyFrameObject* f = current_frame;
+  if (f != NULL) {
+    line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
   }
   pymemprofile_add_allocation(address, size, line_number);
 }
