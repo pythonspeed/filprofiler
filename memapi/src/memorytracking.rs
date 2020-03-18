@@ -156,7 +156,7 @@ struct Allocation {
     size: libc::size_t,
 }
 
-/// The main data structure tracking everything.
+/// The main data structure tracsking everything.
 struct AllocationTracker {
     current_allocations: imhashmap::HashMap<usize, Allocation>,
     peak_allocations: imhashmap::HashMap<usize, Allocation>,
@@ -373,6 +373,7 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
         frame_height: 22,
         subtitle: Some("SUBTITLE-HERE".to_string()),
         reverse_stack_order: reversed,
+        color_diffusion: true,
         ..Default::default()
     };
     if !reversed {
