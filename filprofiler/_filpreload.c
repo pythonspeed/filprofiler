@@ -5,16 +5,18 @@
 #include <malloc.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <sys/mman.h>
 
 #if PY_VERSION_HEX < 0x03080000
 #define Py_BytesMain _Py_UnixMain
 #endif
 
+#define likely(x) __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
+
 // Underlying APIs we're wrapping:
-static void *(*underlying_real_mmap)(void *addr, size_t length, int prot,
-                                     int flags, int fd, off_t offset) = 0;
+static void *(*underlying_real_malloc)(size_t length) = 0;
+static void *(*underlying_real_calloc)(size_t nmemb, size_t length) = 0;
 static void (*underlying_real_free)(void *addr) = 0;
 
 // Note whether we've been initialized yet or not:
@@ -29,16 +31,14 @@ int main(int argc, char **argv) {
     fprintf(stderr, "BUG: expected size of size_t and void* to be the same.\n");
     exit(1);
   }
-  void *lib =
-      dlopen(getenv("FIL_API_LIBRARY"), RTLD_NOW | RTLD_DEEPBIND | RTLD_GLOBAL);
-  if (!lib) {
-    fprintf(stderr, "Couldn't load libpymemprofile_api.so library: %s\n",
-            dlerror());
+  underlying_real_malloc = dlsym(RTLD_NEXT, "malloc");
+  if (!underlying_real_malloc) {
+    fprintf(stderr, "Couldn't load malloc(): %s\n", dlerror());
     exit(1);
   }
-  underlying_real_mmap = dlsym(RTLD_NEXT, "mmap");
-  if (!underlying_real_mmap) {
-    fprintf(stderr, "Couldn't load mmap(): %s\n", dlerror());
+  underlying_real_calloc = dlsym(RTLD_NEXT, "calloc");
+  if (!underlying_real_calloc) {
+    fprintf(stderr, "Couldn't load calloc(): %s\n", dlerror());
     exit(1);
   }
   underlying_real_free = dlsym(RTLD_NEXT, "free");
@@ -70,7 +70,7 @@ fil_start_call(const char *filename, const char *funcname,
     will_i_be_reentrant = 1;
     uint16_t parent_line_number = 0;
     if (current_frame != NULL && current_frame->f_back != NULL) {
-      PyFrameObject* f = current_frame->f_back;
+      PyFrameObject *f = current_frame->f_back;
       parent_line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
     }
 
@@ -117,7 +117,7 @@ fil_dump_peak_to_flamegraph(const char *path) {
 __attribute__((visibility("hidden"))) void add_allocation(size_t address,
                                                           size_t size) {
   uint16_t line_number = 0;
-  PyFrameObject* f = current_frame;
+  PyFrameObject *f = current_frame;
   if (f != NULL) {
     line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
   }
@@ -126,7 +126,11 @@ __attribute__((visibility("hidden"))) void add_allocation(size_t address,
 
 // Override memory-allocation functions:
 __attribute__((visibility("default"))) void *malloc(size_t size) {
-  void *result = __libc_malloc(size);
+  if (unlikely(!initialized)) {
+    return mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
+                -1, 0);
+  }
+  void *result = underlying_real_malloc(size);
   if (!will_i_be_reentrant && initialized) {
     will_i_be_reentrant = 1;
     add_allocation((size_t)result, size);
@@ -136,7 +140,11 @@ __attribute__((visibility("default"))) void *malloc(size_t size) {
 }
 
 __attribute__((visibility("default"))) void *calloc(size_t nmemb, size_t size) {
-  void *result = __libc_calloc(nmemb, size);
+  if (unlikely(!initialized)) {
+    return mmap(NULL, nmemb * size, PROT_READ | PROT_WRITE,
+                MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  }
+  void *result = underlying_real_calloc(nmemb, size);
   size_t allocated = nmemb * size;
   if (!will_i_be_reentrant && initialized) {
     will_i_be_reentrant = 1;
@@ -147,7 +155,7 @@ __attribute__((visibility("default"))) void *calloc(size_t nmemb, size_t size) {
 }
 
 __attribute__((visibility("default"))) void free(void *addr) {
-  if (!initialized) {
+  if (unlikely(!initialized)) {
     // Well, we're going to leak a little memory, but, such is life...
     return;
   }
@@ -158,21 +166,6 @@ __attribute__((visibility("default"))) void free(void *addr) {
     will_i_be_reentrant = 0;
   }
 }
-
-/*
-__attribute__ ((visibility("default"))) void* mmap(void *addr, size_t length,
-int prot, int flags, int fd, off_t offset) { if (!initialized) {
-constructor();
-  }
-  void* result = underlying_real_mmap(addr, length, prot, flags, fd, offset);
-  fprintf(stdout, "MMAP!\n");
-  if ((flags & (MAP_PRIVATE | MAP_ANONYMOUS)) && !will_i_be_reentrant &&
-initialized) { will_i_be_reentrant = 1; update_memory_usage();
-    will_i_be_reentrant = 0;
-  }
-  return result;
-}
-*/
 
 __attribute__((visibility("hidden"))) int
 fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
@@ -192,6 +185,4 @@ fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
   return 0;
 }
 
-void register_fil_tracer() {
-  PyEval_SetProfile(fil_tracer, Py_None);
-}
+void register_fil_tracer() { PyEval_SetProfile(fil_tracer, Py_None); }

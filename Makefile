@@ -9,7 +9,7 @@ build: filprofiler/fil-python
 	pip install -e .
 
 filprofiler/fil-python: filprofiler/_filpreload.c target/release/libpymemprofile_api.a
-	gcc -std=c11 -g $(shell python3.8-config --cflags --ldflags) -O3 -lpython3.8 -export-dynamic -flto -o $@ $< ./target/release/libpymemprofile_api.a
+	gcc -std=c11 -g $(shell python3.8-config --cflags --ldflags) -O3 -lpython3.8 -export-dynamic -flto -fno-omit-frame-pointer -o $@ $< ./target/release/libpymemprofile_api.a
 
 target/release/libpymemprofile_api.a: Cargo.lock memapi/Cargo.toml memapi/src/*.rs
 	cargo build --release
