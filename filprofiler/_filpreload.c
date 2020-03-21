@@ -174,7 +174,8 @@ initialized) { will_i_be_reentrant = 1; update_memory_usage();
 }
 */
 
-int fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
+__attribute__((visibility("hidden"))) int
+fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
   switch (what) {
   case PyTrace_CALL:
     current_frame = frame;
