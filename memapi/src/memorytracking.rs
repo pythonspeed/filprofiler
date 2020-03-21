@@ -191,12 +191,7 @@ impl<'a> AllocationTracker {
     fn free_allocation(&mut self, address: usize) {
         // Possibly this allocation doesn't exist; that's OK!
         if let Some(removed) = self.current_allocations.remove(&address) {
-            if removed.size > self.current_allocated_bytes {
-                // In theory this should never happen, but just in case...
-                self.current_allocated_bytes = 0;
-            } else {
-                self.current_allocated_bytes -= removed.size;
-            }
+            self.current_allocated_bytes -= removed.size;
         }
     }
 
