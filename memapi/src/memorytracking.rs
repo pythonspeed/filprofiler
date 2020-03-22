@@ -469,21 +469,26 @@ mod tests {
     }
 
     #[test]
-    fn callsites_notices_duplicate_callsites() {
-        let callsite1 = Function::new("a", "af");
-        let callsite2 = Function::new("b", "af");
-        let callsite3 = Function::new("a", "bf");
-        let mut callsites = FunctionTracker::new();
-        let id1 = callsites.get_or_insert_id(callsite1.clone());
-        let id1b = callsites.get_or_insert_id(callsite1);
-        let id2 = callsites.get_or_insert_id(callsite2);
-        let id3 = callsites.get_or_insert_id(callsite3.clone());
-        let id3b = callsites.get_or_insert_id(callsite3.clone());
+    fn functiontracker_notices_duplicate_functions() {
+        let function1 = Function::new("a", "af");
+        let function2 = Function::new("b", "af");
+        let function3 = Function::new("a", "bf");
+        let mut functions = FunctionTracker::new();
+        let id1 = functions.get_or_insert_id(function1.clone());
+        let id1b = functions.get_or_insert_id(function1.clone());
+        let id2 = functions.get_or_insert_id(function2.clone());
+        let id3 = functions.get_or_insert_id(function3.clone());
+        let id3b = functions.get_or_insert_id(function3.clone());
         assert_eq!(id1, id1b);
         assert_ne!(id1, id2);
         assert_ne!(id1, id3);
         assert_ne!(id2, id3);
         assert_eq!(id3, id3b);
+        let mut expected = super::HashMap::default();
+        expected.insert(id1, function1);
+        expected.insert(id2, function2);
+        expected.insert(id3, function3);
+        assert_eq!(functions.get_reverse_map(), expected);
     }
 
     #[test]
