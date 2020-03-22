@@ -1,5 +1,7 @@
-#define _GNU_SOURCE
 #include "Python.h"
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
 #include "frameobject.h"
 #include <dlfcn.h>
 #include <malloc.h>
