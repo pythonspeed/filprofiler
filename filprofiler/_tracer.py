@@ -1,9 +1,11 @@
 """Trace code, so that libpymemprofile_api.so know's where we are."""
 
 import atexit
+from datetime import datetime
 import os
 import sys
 import threading
+import time
 from ctypes import PyDLL
 
 from ._utils import library_path
@@ -39,6 +41,9 @@ def stop_tracing(output_path: str):
 
 
 def dump_svg(output_path: str):
+    output_path = os.path.join(
+        output_path, datetime.now().isoformat(timespec="milliseconds")
+    )
     path = output_path.encode("utf-8")
     preload.fil_dump_peak_to_flamegraph(path)
     for svg_path in [
