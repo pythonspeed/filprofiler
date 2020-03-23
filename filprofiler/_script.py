@@ -18,7 +18,6 @@ from ._utils import library_path
 from ._tracer import trace, dump_svg
 from . import __version__, __file__
 
-# TODO if we go with exe mode, don't need two-stage execution
 def stage_1():
     """Setup environment variables, re-execute this script."""
     # Tracebacks when Rust crashes:

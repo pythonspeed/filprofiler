@@ -8,3 +8,4 @@ dist/
 fil-result/
 .eggs/
 python-benchmarks/pymalloc.c
+filprofiler/fil-python
