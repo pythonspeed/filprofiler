@@ -68,11 +68,27 @@ def dump_svg(output_path: str):
   <title>Fil Memory Profile ({now})</title>
   <style type="text/css">
     body {{
-    max-width: 40rem;
-    margin: 4rem auto;
-    font-size: 18px;
+        font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif;
+        line-height: 1.2;
+        max-width: 40rem;
+        margin: 4rem auto;
+        font-size: 18px;
     }}
-</style></head>
+    div {{
+        text-align: center;
+    }}
+  </style>
+  <script>
+   function fullScreen(id) {{
+       var elem = document.querySelector(id);
+       var currentHeight = elem.style.height;
+       elem.style.height = "100%";
+       elem.requestFullscreen().finally(
+           (info) => {{elem.style.height = currentHeight;}}
+       );
+   }}
+  </script>
+</head>
 <body>
 <h1>Fil Memory Profile</h1>
 <h2>{now}</h2>
@@ -80,9 +96,14 @@ def dump_svg(output_path: str):
 <p><code>{argv}</code><p>
 
 <h2>Profiling result</h2>
-<div><iframe id="peak" src="peak-memory.svg" width="100%" height="450" scrolling="auto" frameborder="0"></iframe></div>
+<div><iframe id="peak" src="peak-memory.svg" width="100%" height="200" scrolling="auto" frameborder="0"></iframe><br>
+<p><input type="button" onclick="fullScreen('#peak');" value="Full screen"></p></div>
 
-<div><iframe id="peak-reversed" src="peak-memory-reversed.svg" width="100%" height="450" scrolling="auto" frameborder="0"></iframe></div>
+<br>
+
+<div><iframe id="peak-reversed" src="peak-memory-reversed.svg" width="100%" height="200" scrolling="auto" frameborder="0"></iframe><br>
+<p><input type="button" onclick="fullScreen('#peak-reversed');" value="Full screen"></p></div>
+            </div>
 """.format(
                 now=now.ctime(), argv=" ".join(map(shlex.quote, sys.argv))
             )
