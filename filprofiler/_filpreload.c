@@ -10,6 +10,7 @@
 #include <sys/mman.h>
 
 #if PY_VERSION_HEX < 0x03080000
+extern PyAPI_FUNC(int) _Py_UnixMain(int argc, char **argv);
 #define Py_BytesMain _Py_UnixMain
 #endif
 
@@ -187,4 +188,11 @@ fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
   return 0;
 }
 
-void register_fil_tracer() { PyEval_SetProfile(fil_tracer, Py_None); }
+__attribute__((visibility("default"))) void register_fil_tracer() {
+  PyEval_SetProfile(fil_tracer, Py_None);
+}
+
+__attribute__((visibility("default"))) void fil_shutting_down() {
+  // We're shutting down, so things like PyCode_Addr2Line won't work:
+  will_i_be_reentrant = 1;
+}

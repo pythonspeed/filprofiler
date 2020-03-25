@@ -8,8 +8,10 @@ MAKEFLAGS += --no-builtin-rules
 build: filprofiler/fil-python
 	pip install -e .
 
+PYTHON_VERSION := 3.8
+
 filprofiler/fil-python: filprofiler/_filpreload.c target/release/libpymemprofile_api.a
-	gcc -std=c11 -g $(shell python3.8-config --cflags --ldflags) -O3 -lpython3.8 -export-dynamic -flto -fno-omit-frame-pointer -o $@ $< ./target/release/libpymemprofile_api.a
+	gcc -std=c11 -g $(shell python$(PYTHON_VERSION)-config --cflags --ldflags) -O3 -lpython$(PYTHON_VERSION) -export-dynamic -flto -fno-omit-frame-pointer -o $@ $< ./target/release/libpymemprofile_api.a
 
 target/release/libpymemprofile_api.a: Cargo.lock memapi/Cargo.toml memapi/src/*.rs
 	cargo build --release
@@ -18,9 +20,18 @@ venv:
 	python3 -m venv venv/
 	venv/bin/pip install -e .[dev]
 
-test: build
-	cythonize -3 -i python-benchmarks/pymalloc.pyx
+.PHONY: test
+test:
+	make test-rust
+	make test-python
+
+.PHONY: test-rust
+test-rust:
 	env RUST_BACKTRACE=1 cargo test
+
+.PHONY: test-python
+test-python: build
+	cythonize -3 -i python-benchmarks/pymalloc.pyx
 	env RUST_BACKTRACE=1 py.test
 
 .PHONY: docker-image

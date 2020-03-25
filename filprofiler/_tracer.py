@@ -39,6 +39,7 @@ def _start_thread_trace(frame, event, arg):
 def stop_tracing(output_path: str):
     sys.setprofile(None)
     dump_svg(output_path)
+    preload.fil_shutting_down()
 
 
 def dump_svg(output_path: str):
