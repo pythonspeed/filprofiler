@@ -5,15 +5,15 @@ MAKEFLAGS += --warn-undefined-variables
 MAKEFLAGS += --no-builtin-rules
 
 .PHONY: build
-build: filprofiler/fil-python
-	pip install .
+build: filprofiler/_filpreload.so
+	pip install -e .
 
 PYTHON_VERSION := 3.8
 
-filprofiler/fil-python: filprofiler/_filpreload.c target/release/libpymemprofile_api.a
+filprofiler/_filpreload.so: filprofiler/_filpreload.c target/release/libpymemprofile_api.a
 	gcc -c -std=c11 -fPIC $(shell python$(PYTHON_VERSION)-config --cflags) -fno-omit-frame-pointer filprofiler/_filpreload.c
 	mv -f _filpreload.o filprofiler/
-	gcc $(shell python$(PYTHON_VERSION)-config --ldflags) -export-dynamic -lpython$(PYTHON_VERSION) -o $@ filprofiler/_filpreload.o target/release/libpymemprofile_api.a
+	gcc -shared $(shell python$(PYTHON_VERSION)-config --ldflags) -o $@ filprofiler/_filpreload.o target/release/libpymemprofile_api.a
 
 target/release/libpymemprofile_api.a: Cargo.lock memapi/Cargo.toml memapi/src/*.rs
 	cargo build --release

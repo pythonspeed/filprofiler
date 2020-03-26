@@ -29,7 +29,11 @@ static _Thread_local int will_i_be_reentrant = 0;
 // Current thread's Python state:
 static _Thread_local PyFrameObject *current_frame = NULL;
 
-int main(int argc, char **argv) {
+static void __attribute__((constructor)) constructor() {
+  if (initialized) {
+    return;
+  }
+
   if (sizeof((void *)0) != sizeof((size_t)0)) {
     fprintf(stderr, "BUG: expected size of size_t and void* to be the same.\n");
     exit(1);
@@ -49,8 +53,9 @@ int main(int argc, char **argv) {
     fprintf(stderr, "Couldn't load free(): %s\n", dlerror());
     exit(1);
   }
+
   initialized = 1;
-  return Py_BytesMain(argc, argv);
+  unsetenv("LD_PRELOAD");
 }
 
 extern void *__libc_malloc(size_t size);

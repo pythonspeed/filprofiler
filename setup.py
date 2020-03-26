@@ -4,7 +4,8 @@ setup(
     name="filprofiler",
     packages=["filprofiler"],
     entry_points={"console_scripts": ["fil-profile=filprofiler._script:stage_1"],},
-    data_files=[("bin", ["filprofiler/fil-python"])],
+    # TODO dynlib on mac
+    package_data={"filprofiler": ["_filpreload.so"]},
     use_scm_version=True,
     setup_requires=["setuptools_scm"],
     extras_require={
