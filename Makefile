@@ -6,12 +6,14 @@ MAKEFLAGS += --no-builtin-rules
 
 .PHONY: build
 build: filprofiler/fil-python
-	pip install -e .
+	pip install .
 
 PYTHON_VERSION := 3.8
 
 filprofiler/fil-python: filprofiler/_filpreload.c target/release/libpymemprofile_api.a
-	gcc -std=c11 -g $(shell python$(PYTHON_VERSION)-config --cflags --ldflags) -O3 -lpython$(PYTHON_VERSION) -export-dynamic -flto -fno-omit-frame-pointer -o $@ $< ./target/release/libpymemprofile_api.a
+	gcc -c -std=c11 -fPIC $(shell python$(PYTHON_VERSION)-config --cflags) -fno-omit-frame-pointer filprofiler/_filpreload.c
+	mv -f _filpreload.o filprofiler/
+	gcc $(shell python$(PYTHON_VERSION)-config --ldflags) -export-dynamic -lpython$(PYTHON_VERSION) -o $@ filprofiler/_filpreload.o target/release/libpymemprofile_api.a
 
 target/release/libpymemprofile_api.a: Cargo.lock memapi/Cargo.toml memapi/src/*.rs
 	cargo build --release
@@ -40,8 +42,7 @@ docker-image:
 
 .PHONY: wheel
 wheel:
-	docker run -u $(shell id -u):$(shell id -g) -v $(PWD):/src manylinux-rust /src/wheels/build-wheels.sh
-
+	wheels/build-wheels.sh
 .PHONY: clean
 clean:
 	rm -f filprofiler/fil-python

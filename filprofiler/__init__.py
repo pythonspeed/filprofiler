@@ -1,9 +1,7 @@
 """The Fil memory profiler."""
 
-from importlib.metadata import version, PackageNotFoundError
-
 try:
-    __version__ = version(__name__)
-except PackageNotFoundError:
+    from ._version import __version__
+except ImportError:
     # package is not installed
     __version__ = "unknown"

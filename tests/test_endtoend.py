@@ -29,7 +29,7 @@ def get_allocations(output_directory: Path):
                 file_name, line = part1.split(":")
                 line = int(line)
                 path.append((file_name, func_name, line))
-            if size_kb > 10:
+            if size_kb > 900:
                 result[tuple(path)] = size_kb
     return result
 
