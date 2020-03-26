@@ -13,7 +13,7 @@ PYTHON_VERSION := 3.8
 filprofiler/_filpreload.so: filprofiler/_filpreload.c target/release/libpymemprofile_api.a
 	gcc -c -std=c11 -fPIC $(shell python$(PYTHON_VERSION)-config --cflags) -fno-omit-frame-pointer filprofiler/_filpreload.c
 	mv -f _filpreload.o filprofiler/
-	gcc -shared $(shell python$(PYTHON_VERSION)-config --ldflags) -o $@ filprofiler/_filpreload.o target/release/libpymemprofile_api.a
+	gcc -shared -ldl -lpthread -lc -lm -o $@ filprofiler/_filpreload.o target/release/libpymemprofile_api.a
 
 target/release/libpymemprofile_api.a: Cargo.lock memapi/Cargo.toml memapi/src/*.rs
 	cargo build --release
@@ -42,7 +42,8 @@ docker-image:
 
 .PHONY: wheel
 wheel:
-	wheels/build-wheels.sh
+	docker run -u $(shell id -u):$(shell id -g) -v $(PWD):/src manylinux-rust /src/wheels/build-wheels.sh
+
 .PHONY: clean
 clean:
 	rm -f filprofiler/fil-python

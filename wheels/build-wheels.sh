@@ -1,13 +1,26 @@
 #!/bin/bash
 set -euo pipefail
+mkdir /tmp/home
+mkdir /tmp/wheel
+export HOME=/tmp/home
+cd /src
 mkdir -p dist
-rm -f filprofiler/fil-python
+make target/release/libpymemprofile_api.a
 
-#docker run -u "$(id -u):$(id -g)" -v "${PWD}:/src" -w /src bitnami/python:3.6-debian-9 wheels/build-wheel.sh 3.6m
-docker run -u "$(id -u):$(id -g)" -v "${PWD}:/src" -v "${HOME}/.cache/pip:/.cache/pip" -w /src bitnami/python:3.7-debian-9 wheels/build-wheel.sh 3.7m
-docker run -u "$(id -u):$(id -g)" -v "${PWD}:/src" -v "${HOME}/.cache/pip:/.cache/pip" -w /src bitnami/python:3.8-debian-9 wheels/build-wheel.sh 3.8
+rm -f filprofiler/_filpreload.so
 
-pip3 install auditwheel
-#auditwheel repair -w dist/ dist/filprofiler*36*whl
-auditwheel repair -w dist/ dist/filprofiler*37*whl
-auditwheel repair -w dist/ dist/filprofiler*38*whl
+PATH=/opt/python/cp36-cp36m/bin/:$PATH make -e PYTHON_VERSION=3.6 filprofiler/_filpreload.so
+/opt/python/cp36-cp36m/bin/python3 setup.py bdist_wheel -d /tmp/wheel
+rm -f filprofiler/_filpreload.so
+
+PATH=/opt/python/cp37-cp37m/bin/:$PATH make -e PYTHON_VERSION=3.7 filprofiler/_filpreload.so
+/opt/python/cp37-cp37m/bin/python3 setup.py bdist_wheel -d /tmp/wheel
+rm -f filprofiler/_filpreload.so
+
+PATH=/opt/python/cp38-cp38/bin/:$PATH make -e PYTHON_VERSION=3.8 filprofiler/_filpreload.so
+/opt/python/cp38-cp38/bin/python3 setup.py bdist_wheel -d /tmp/wheel
+rm -f filprofiler/_filpreload.so
+
+auditwheel addtag -w dist/ /tmp/wheel/filprofiler*36*whl
+auditwheel addtag -w dist/ /tmp/wheel/filprofiler*37*whl
+auditwheel addtag -w dist/ /tmp/wheel/filprofiler*38*whl
