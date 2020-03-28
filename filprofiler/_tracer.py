@@ -11,10 +11,8 @@ import webbrowser
 
 from ._utils import library_path
 
-# Load with RTLD_GLOBAL so _profiler.so has access to those symbols; explicit
-# linking may be possible but haven't done that yet, oh well.
-# pymemprofile = CDLL(library_path("libpymemprofile_api"), mode=RTLD_GLOBAL)
-preload = PyDLL(None)  # the executable
+# None effectively means RTLD_NEXT, it seems.
+preload = PyDLL(None)
 
 
 def start_tracing():
@@ -38,6 +36,7 @@ def _start_thread_trace(frame, event, arg):
 
 def stop_tracing(output_path: str):
     sys.setprofile(None)
+    threading.setprofile(None)
     dump_svg(output_path)
     preload.fil_shutting_down()
 
