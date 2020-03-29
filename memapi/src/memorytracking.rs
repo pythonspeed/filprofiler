@@ -46,7 +46,7 @@ impl FunctionId {
 
     fn get_filename(&self) -> &str {
         unsafe {
-            let loc = *self.function;
+            let loc = &*self.function;
             let slice = slice::from_raw_parts(loc.filename, loc.filename_length as usize);
             std::str::from_utf8_unchecked(slice)
         }
@@ -54,7 +54,7 @@ impl FunctionId {
 
     fn get_function_name(&self) -> &str {
         unsafe {
-            let loc = *self.function;
+            let loc = &*self.function;
             let slice = slice::from_raw_parts(loc.function_name, loc.function_name_length as usize);
             std::str::from_utf8_unchecked(slice)
         }
@@ -262,7 +262,6 @@ lazy_static! {
 
 /// Add to per-thread function stack:
 pub fn start_call(call_site: FunctionId, parent_line_number: u16, line_number: u16) {
-    let mut allocations = ALLOCATIONS.lock().unwrap();
     THREAD_CALLSTACK.with(|cs| {
         cs.borrow_mut()
             .start_call(parent_line_number, CallSiteId::new(call_site, line_number));

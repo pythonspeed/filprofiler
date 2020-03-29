@@ -13,6 +13,7 @@ from ._utils import library_path
 
 # None effectively means RTLD_NEXT, it seems.
 preload = PyDLL(None)
+preload.fil_initialize_from_python()
 
 
 def start_tracing():
