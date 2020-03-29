@@ -79,7 +79,7 @@ extern void pymemprofile_add_allocation(size_t address, size_t length,
                                         uint16_t line_number);
 extern void pymemprofile_free_allocation(size_t address);
 
-inline void start_call(struct FunctionLocation *loc, uint16_t line_number) {
+void start_call(struct FunctionLocation *loc, uint16_t line_number) {
   if (!will_i_be_reentrant) {
     will_i_be_reentrant = 1;
     uint16_t parent_line_number = 0;
@@ -87,13 +87,12 @@ inline void start_call(struct FunctionLocation *loc, uint16_t line_number) {
       PyFrameObject *f = current_frame->f_back;
       parent_line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
     }
-
     pymemprofile_start_call(parent_line_number, loc, line_number);
     will_i_be_reentrant = 0;
   }
 }
 
-inline void finish_call() {
+void finish_call() {
   if (!will_i_be_reentrant) {
     will_i_be_reentrant = 1;
     pymemprofile_finish_call();
@@ -202,19 +201,20 @@ fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
       The pointer address of the resulting struct can be used as an identifier.
     */
     struct FunctionLocation *loc = NULL;
+    assert(extra_code_index != -1);
     _PyCode_GetExtra((PyObject *)frame->f_code, extra_code_index,
                      (void **)&loc);
-    if (loc != NULL) {
+    if (loc == NULL) {
       // Ensure the two string never get garbage collected;
-      Py_IncRef(frame->f_code->co_filename);
-      Py_IncRef(frame->f_code->co_name);
+      Py_INCREF(frame->f_code->co_filename);
+      Py_INCREF(frame->f_code->co_name);
       loc = malloc(sizeof(struct FunctionLocation));
       loc->filename = PyUnicode_AsUTF8AndSize(frame->f_code->co_filename,
                                               &loc->filename_length);
       loc->function_name = PyUnicode_AsUTF8AndSize(frame->f_code->co_name,
                                                    &loc->function_name_length);
       _PyCode_SetExtra((PyObject *)frame->f_code, extra_code_index,
-                       (void **)&loc);
+                       (void*)loc);
     }
     start_call(loc, frame->f_lineno);
     break;

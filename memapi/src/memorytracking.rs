@@ -20,6 +20,7 @@ pub struct FunctionLocation {
 }
 
 impl FunctionLocation {
+    #[test]
     fn from_strings(filename: &str, function_name: &str) -> Self {
         FunctionLocation {
             filename: filename.as_ptr(),
@@ -384,6 +385,14 @@ mod tests {
                 prop_assert_eq!(tracker.current_allocated_bytes, expected_sum);
             }
         }
+    }
+
+    #[test]
+    fn functionlocation_and_functionid_strings() {
+        let func = FunctionLocation::from_strings("a", "af");
+        let fid = FunctionId::new(&func as *const FunctionLocation);
+        assert_eq!(fid.get_filename(), "a");
+        assert_eq!(fid.get_function_name(), "af");
     }
 
     #[test]
