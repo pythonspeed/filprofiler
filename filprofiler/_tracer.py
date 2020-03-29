@@ -1,4 +1,4 @@
-"""Trace code, so that libpymemprofile_api.so know's where we are."""
+"""Trace code, so that libpymemprofile_api know's where we are."""
 
 import atexit
 from ctypes import PyDLL
@@ -124,6 +124,8 @@ def trace(code, globals_, output_path: str):
     Given code (Python or code object), run it under the tracer until the
     program exits.
     """
+    # Use atexit rather than try/finally so threads that live beyond main
+    # thread also get profiled:
     atexit.register(stop_tracing, output_path)
     start_tracing()
     exec(code, globals_, None)
