@@ -2,30 +2,77 @@ use im::hashmap as imhashmap;
 use inferno::flamegraph;
 use itertools::Itertools;
 use libc;
-use rustc_hash::FxHashMap as HashMap;
-use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections;
-use std::fmt;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
+use std::slice;
 use std::sync::Mutex;
 
-type FunctionId = u32;
+/// A function location provided by the C code. Matches struct in _filpreload.c.
+#[repr(C)]
+pub struct FunctionLocation {
+    filename: *const u8,
+    filename_length: isize,
+    function_name: *const u8,
+    function_name_length: isize,
+}
+
+impl FunctionLocation {
+    fn from_strings(filename: &str, function_name: &str) -> Self {
+        FunctionLocation {
+            filename: filename.as_ptr(),
+            filename_length: filename.len() as isize,
+            function_name: function_name.as_ptr(),
+            function_name_length: function_name.len() as isize,
+        }
+    }
+}
+
+/// A Rust-y wrapper for FunctionLocation
+#[derive(Clone, Debug, PartialEq, Copy)]
+pub struct FunctionId {
+    function: *const FunctionLocation,
+}
+
+unsafe impl Send for FunctionId {}
+unsafe impl Sync for FunctionId {}
+
+impl FunctionId {
+    pub fn new(function: *const FunctionLocation) -> Self {
+        FunctionId { function }
+    }
+
+    fn get_filename(&self) -> &str {
+        unsafe {
+            let loc = *self.function;
+            let slice = slice::from_raw_parts(loc.filename, loc.filename_length as usize);
+            std::str::from_utf8_unchecked(slice)
+        }
+    }
+
+    fn get_function_name(&self) -> &str {
+        unsafe {
+            let loc = *self.function;
+            let slice = slice::from_raw_parts(loc.function_name, loc.function_name_length as usize);
+            std::str::from_utf8_unchecked(slice)
+        }
+    }
+}
 
 /// A specific location: file + function + line number.
 #[derive(Clone, Debug, PartialEq, Copy)]
 struct CallSiteId {
-    function_id: FunctionId,
+    function: FunctionId,
     /// Line number within the _file_, 1-indexed.
     line_number: u16,
 }
 
 impl CallSiteId {
-    fn new(function_id: FunctionId, line_number: u16) -> CallSiteId {
+    fn new(function: FunctionId, line_number: u16) -> CallSiteId {
         CallSiteId {
-            function_id,
+            function,
             line_number,
         }
     }
@@ -62,18 +109,18 @@ impl Callstack {
         }
     }
 
-    fn as_string(&self, id_to_callsite: &HashMap<FunctionId, Function>) -> String {
+    fn as_string(&self) -> String {
         if self.calls.is_empty() {
             "[No Python stack]".to_string()
         } else {
             self.calls
                 .iter()
-                // TODO include line number in output
                 .map(|id| {
-                    let function = id_to_callsite.get(&id.function_id).unwrap();
                     format!(
                         "{}:{} ({})",
-                        &function.file_name, id.line_number, &function.function_name
+                        id.function.get_filename(),
+                        id.line_number,
+                        id.function.get_function_name()
                     )
                 })
                 .join(";")
@@ -82,72 +129,6 @@ impl Callstack {
 }
 
 thread_local!(static THREAD_CALLSTACK: RefCell<Callstack> = RefCell::new(Callstack::new()));
-
-/// A particular place where a call happened.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Function<'a> {
-    file_name: Cow<'a, str>,
-    function_name: Cow<'a, str>,
-}
-
-impl<'a> Function<'a> {
-    pub fn new<S>(file_name: S, function_name: S) -> Function<'a>
-    where
-        S: Into<Cow<'a, str>>,
-    {
-        Function {
-            file_name: file_name.into(),
-            function_name: function_name.into(),
-        }
-    }
-}
-
-impl<'a> fmt::Display for Function<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{}", self.file_name, self.function_name)
-    }
-}
-
-/// Maps Functions to integer identifiers used in CallStacks.
-struct FunctionTracker {
-    max_id: FunctionId,
-    function_to_id: HashMap<Function<'static>, FunctionId>,
-}
-
-impl<'a> FunctionTracker {
-    fn new() -> Self {
-        FunctionTracker {
-            max_id: 0,
-            function_to_id: HashMap::default(),
-        }
-    }
-
-    /// Add a (possibly) new Function, returning its ID.
-    fn get_or_insert_id(&mut self, call_site: Function<'a>) -> FunctionId {
-        let max_id = &mut self.max_id;
-        if let Some(result) = self.function_to_id.get(&call_site) {
-            *result
-        } else {
-            let new_id = *max_id;
-            *max_id += 1;
-            let new_call_site = Function::new(
-                call_site.file_name.to_string(),
-                call_site.function_name.to_string(),
-            );
-            self.function_to_id.insert(new_call_site, new_id);
-            new_id
-        }
-    }
-
-    /// Get map from IDs to Functions.
-    fn get_reverse_map(&self) -> HashMap<FunctionId, Function> {
-        let mut result = HashMap::default();
-        for (call_site, csid) in &(self.function_to_id) {
-            result.insert(*csid, call_site.clone());
-        }
-        result
-    }
-}
 
 /// A specific call to malloc()/calloc().
 #[derive(Clone, Debug, PartialEq)]
@@ -162,7 +143,6 @@ struct AllocationTracker {
     peak_allocations: imhashmap::HashMap<usize, Allocation>,
     current_allocated_bytes: usize,
     peak_allocated_bytes: usize,
-    call_sites: FunctionTracker,
 }
 
 impl<'a> AllocationTracker {
@@ -172,7 +152,6 @@ impl<'a> AllocationTracker {
             peak_allocations: imhashmap::HashMap::default(),
             current_allocated_bytes: 0,
             peak_allocated_bytes: 0,
-            call_sites: FunctionTracker::new(),
         }
     }
 
@@ -200,9 +179,8 @@ impl<'a> AllocationTracker {
     fn combine_callstacks(&self) -> collections::HashMap<String, usize> {
         let mut by_call: collections::HashMap<String, usize> = collections::HashMap::new();
         let peak_allocations = &self.peak_allocations;
-        let id_to_callsite = self.call_sites.get_reverse_map();
         for Allocation { callstack, size } in peak_allocations.values() {
-            let callstack = callstack.as_string(&id_to_callsite);
+            let callstack = callstack.as_string();
             let entry = by_call.entry(callstack).or_insert(0);
             *entry += size;
         }
@@ -283,14 +261,11 @@ lazy_static! {
 }
 
 /// Add to per-thread function stack:
-pub fn start_call(call_site: Function<'static>, parent_line_number: u16, line_number: u16) {
+pub fn start_call(call_site: FunctionId, parent_line_number: u16, line_number: u16) {
     let mut allocations = ALLOCATIONS.lock().unwrap();
-    let function_id = allocations.call_sites.get_or_insert_id(call_site);
     THREAD_CALLSTACK.with(|cs| {
-        cs.borrow_mut().start_call(
-            parent_line_number,
-            CallSiteId::new(function_id, line_number),
-        );
+        cs.borrow_mut()
+            .start_call(parent_line_number, CallSiteId::new(call_site, line_number));
     });
 }
 
@@ -385,7 +360,7 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
 
 #[cfg(test)]
 mod tests {
-    use super::{AllocationTracker, CallSiteId, Callstack, Function, FunctionTracker};
+    use super::{AllocationTracker, CallSiteId, Callstack, FunctionId, FunctionLocation};
     use itertools::Itertools;
     use proptest::prelude::*;
     use std::collections;
@@ -414,11 +389,19 @@ mod tests {
 
     #[test]
     fn callstack_line_numbers() {
+        let func1 = FunctionLocation::from_strings("a", "af");
+        let func3 = FunctionLocation::from_strings("b", "bf");
+        let func5 = FunctionLocation::from_strings("c", "cf");
+
+        let fid1 = FunctionId::new(&func1 as *const FunctionLocation);
+        let fid3 = FunctionId::new(&func3 as *const FunctionLocation);
+        let fid5 = FunctionId::new(&func5 as *const FunctionLocation);
+
         // Parent line number does nothing if it's first call:
         let mut cs1 = Callstack::new();
-        let id1 = CallSiteId::new(1, 2);
-        let id2 = CallSiteId::new(3, 45);
-        let id3 = CallSiteId::new(5, 6);
+        let id1 = CallSiteId::new(fid1, 2);
+        let id2 = CallSiteId::new(fid3, 45);
+        let id3 = CallSiteId::new(fid5, 6);
         cs1.start_call(123, id1);
         assert_eq!(cs1.calls, vec![id1]);
 
@@ -433,17 +416,22 @@ mod tests {
         cs2.start_call(12, id3);
         assert_eq!(
             cs2.calls,
-            vec![CallSiteId::new(1, 10), CallSiteId::new(3, 12), id3]
+            vec![CallSiteId::new(fid1, 10), CallSiteId::new(fid3, 12), id3]
         );
     }
 
     #[test]
     fn peak_allocations_only_updated_on_new_peaks() {
+        let func1 = FunctionLocation::from_strings("a", "af");
+        let func3 = FunctionLocation::from_strings("b", "bf");
+        let fid1 = FunctionId::new(&func1 as *const FunctionLocation);
+        let fid3 = FunctionId::new(&func3 as *const FunctionLocation);
+
         let mut tracker = AllocationTracker::new();
         let mut cs1 = Callstack::new();
-        cs1.start_call(0, CallSiteId::new(1, 2));
+        cs1.start_call(0, CallSiteId::new(fid1, 2));
         let mut cs2 = Callstack::new();
-        cs2.start_call(0, CallSiteId::new(3, 4));
+        cs2.start_call(0, CallSiteId::new(fid3, 4));
 
         tracker.add_allocation(1, 1000, cs1.clone());
         // Peak should now match current allocations:
@@ -469,57 +457,22 @@ mod tests {
     }
 
     #[test]
-    fn functiontracker_notices_duplicate_functions() {
-        let function1 = Function::new("a", "af");
-        let function2 = Function::new("b", "af");
-        let function3 = Function::new("a", "bf");
-        let mut functions = FunctionTracker::new();
-        let id1 = functions.get_or_insert_id(function1.clone());
-        let id1b = functions.get_or_insert_id(function1.clone());
-        let id2 = functions.get_or_insert_id(function2.clone());
-        let id3 = functions.get_or_insert_id(function3.clone());
-        let id3b = functions.get_or_insert_id(function3.clone());
-        assert_eq!(id1, id1b);
-        assert_ne!(id1, id2);
-        assert_ne!(id1, id3);
-        assert_ne!(id2, id3);
-        assert_eq!(id3, id3b);
-        let mut expected = super::HashMap::default();
-        expected.insert(id1, function1);
-        expected.insert(id2, function2);
-        expected.insert(id3, function3);
-        assert_eq!(functions.get_reverse_map(), expected);
-    }
-
-    #[test]
     fn combine_callstacks_and_sum_allocations() {
-        let mut tracker = AllocationTracker::new();
-        let id1 = CallSiteId::new(
-            tracker
-                .call_sites
-                .get_or_insert_id(Function::new("a", "af")),
-            1,
-        );
-        // Same function, different line number—should be different item:
-        let id1_different = CallSiteId::new(
-            tracker
-                .call_sites
-                .get_or_insert_id(Function::new("a", "af")),
-            7,
-        );
-        let id2 = CallSiteId::new(
-            tracker
-                .call_sites
-                .get_or_insert_id(Function::new("b", "bf")),
-            2,
-        );
+        let func1 = FunctionLocation::from_strings("a", "af");
+        let func2 = FunctionLocation::from_strings("b", "bf");
+        let func3 = FunctionLocation::from_strings("c", "cf");
 
-        let id3 = CallSiteId::new(
-            tracker
-                .call_sites
-                .get_or_insert_id(Function::new("c", "cf")),
-            3,
-        );
+        let fid1 = FunctionId::new(&func1 as *const FunctionLocation);
+        let fid2 = FunctionId::new(&func2 as *const FunctionLocation);
+        let fid3 = FunctionId::new(&func3 as *const FunctionLocation);
+
+        let mut tracker = AllocationTracker::new();
+        let id1 = CallSiteId::new(fid1, 1);
+        // Same function, different line number—should be different item:
+        let id1_different = CallSiteId::new(fid1, 7);
+        let id2 = CallSiteId::new(fid2, 2);
+
+        let id3 = CallSiteId::new(fid3, 3);
         let mut cs1 = Callstack::new();
         cs1.start_call(0, id1);
         cs1.start_call(0, id2.clone());
