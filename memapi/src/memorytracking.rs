@@ -20,7 +20,7 @@ pub struct FunctionLocation {
 }
 
 impl FunctionLocation {
-    #[test]
+    #[cfg(test)]
     fn from_strings(filename: &str, function_name: &str) -> Self {
         FunctionLocation {
             filename: filename.as_ptr(),

@@ -6,6 +6,5 @@ members = [
 
 [profile.release]
 # Needed for profiling, disable for real release:
-debug = true
+#debug = true
 lto = true
-panic = "abort"
