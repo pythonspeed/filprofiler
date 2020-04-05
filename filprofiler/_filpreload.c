@@ -1,4 +1,6 @@
 #include "Python.h"
+#include "code.h"
+#include "object.h"
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
@@ -8,11 +10,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/mman.h>
-
-#if PY_VERSION_HEX < 0x03080000
-extern PyAPI_FUNC(int) _Py_UnixMain(int argc, char **argv);
-#define Py_BytesMain _Py_UnixMain
-#endif
 
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
@@ -25,9 +22,20 @@ static void (*underlying_real_free)(void *addr) = 0;
 // Note whether we've been initialized yet or not:
 static int initialized = 0;
 
+// ID of Python code object extra data:
+static Py_ssize_t extra_code_index = -1;
+
 static _Thread_local int will_i_be_reentrant = 0;
 // Current thread's Python state:
 static _Thread_local PyFrameObject *current_frame = NULL;
+
+// The file and function name responsible for an allocation.
+struct FunctionLocation {
+  const char *filename;
+  Py_ssize_t filename_length;
+  const char *function_name;
+  Py_ssize_t function_name_length;
+};
 
 static void __attribute__((constructor)) constructor() {
   if (initialized) {
@@ -61,7 +69,7 @@ static void __attribute__((constructor)) constructor() {
 extern void *__libc_malloc(size_t size);
 extern void *__libc_calloc(size_t nmemb, size_t size);
 extern void pymemprofile_start_call(uint16_t parent_line_number,
-                                    const char *filename, const char *funcname,
+                                    struct FunctionLocation *loc,
                                     uint16_t line_number);
 extern void pymemprofile_finish_call();
 extern void pymemprofile_new_line_number(uint16_t line_number);
@@ -71,9 +79,7 @@ extern void pymemprofile_add_allocation(size_t address, size_t length,
                                         uint16_t line_number);
 extern void pymemprofile_free_allocation(size_t address);
 
-__attribute__((visibility("default"))) void
-fil_start_call(const char *filename, const char *funcname,
-               uint16_t line_number) {
+void start_call(struct FunctionLocation *loc, uint16_t line_number) {
   if (!will_i_be_reentrant) {
     will_i_be_reentrant = 1;
     uint16_t parent_line_number = 0;
@@ -81,14 +87,12 @@ fil_start_call(const char *filename, const char *funcname,
       PyFrameObject *f = current_frame->f_back;
       parent_line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
     }
-
-    pymemprofile_start_call(parent_line_number, filename, funcname,
-                            line_number);
+    pymemprofile_start_call(parent_line_number, loc, line_number);
     will_i_be_reentrant = 0;
   }
 }
 
-__attribute__((visibility("default"))) void fil_finish_call() {
+void finish_call() {
   if (!will_i_be_reentrant) {
     will_i_be_reentrant = 1;
     pymemprofile_finish_call();
@@ -175,16 +179,48 @@ __attribute__((visibility("default"))) void free(void *addr) {
   }
 }
 
+// Call after Python gets going.
+__attribute__((visibility("default"))) void fil_initialize_from_python() {
+  extra_code_index = _PyEval_RequestCodeExtraIndex(NULL);
+}
+
 __attribute__((visibility("hidden"))) int
 fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
   switch (what) {
   case PyTrace_CALL:
+    // Store the current frame, so malloc() can look up line number:
     current_frame = frame;
-    fil_start_call(PyUnicode_AsUTF8(frame->f_code->co_filename),
-                   PyUnicode_AsUTF8(frame->f_code->co_name), frame->f_lineno);
+
+    /*
+      We want an efficient identifier for filename+fuction name. So we:
+
+      1. Incref the two string objects so they never get GC'ed.
+      2. Store references to the corresponding UTF8 strings on the code object
+         as extra info.
+
+      The pointer address of the resulting struct can be used as an identifier.
+    */
+    struct FunctionLocation *loc = NULL;
+    assert(extra_code_index != -1);
+    _PyCode_GetExtra((PyObject *)frame->f_code, extra_code_index,
+                     (void **)&loc);
+    if (loc == NULL) {
+      // Ensure the two string never get garbage collected;
+      Py_INCREF(frame->f_code->co_filename);
+      Py_INCREF(frame->f_code->co_name);
+      loc = malloc(sizeof(struct FunctionLocation));
+      loc->filename = PyUnicode_AsUTF8AndSize(frame->f_code->co_filename,
+                                              &loc->filename_length);
+      loc->function_name = PyUnicode_AsUTF8AndSize(frame->f_code->co_name,
+                                                   &loc->function_name_length);
+      _PyCode_SetExtra((PyObject *)frame->f_code, extra_code_index,
+                       (void*)loc);
+    }
+    start_call(loc, frame->f_lineno);
     break;
   case PyTrace_RETURN:
-    fil_finish_call();
+    finish_call();
+    // We're done with this frame, so set the parent frame:
     current_frame = frame->f_back;
     break;
   default:

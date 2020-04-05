@@ -1,6 +1,5 @@
 use std::ffi::CStr;
 use std::os::raw::c_char;
-use std::str;
 
 #[macro_use]
 extern crate lazy_static;
@@ -26,14 +25,11 @@ pub extern "C" fn pymemprofile_free_allocation(address: usize) {
 #[no_mangle]
 pub unsafe extern "C" fn pymemprofile_start_call(
     parent_line_number: u16,
-    file_name: *const c_char,
-    func_name: *const c_char,
+    function_loc: *const memorytracking::FunctionLocation,
     line_number: u16,
 ) {
-    let function_name = str::from_utf8_unchecked(CStr::from_ptr(func_name).to_bytes());
-    let module_name = str::from_utf8_unchecked(CStr::from_ptr(file_name).to_bytes());
-    let call_site = memorytracking::Function::new(module_name, function_name);
-    memorytracking::start_call(call_site, parent_line_number, line_number);
+    let fid = memorytracking::FunctionId::new(function_loc);
+    memorytracking::start_call(fid, parent_line_number, line_number);
 }
 
 #[no_mangle]

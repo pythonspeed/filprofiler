@@ -12,10 +12,8 @@ from os.path import abspath, dirname, join, exists
 from argparse import ArgumentParser
 import runpy
 import signal
-from shutil import which
 
 from ._utils import library_path
-from ._tracer import trace, dump_svg
 from . import __version__, __file__
 
 
@@ -23,6 +21,7 @@ def stage_1():
     """Setup environment variables, re-execute this script."""
     # Load the library:
     environ["LD_PRELOAD"] = library_path("_filpreload")
+    print(environ["LD_PRELOAD"])
     # Tracebacks when Rust crashes:
     environ["RUST_BACKTRACE"] = "1"
     # Route all allocations from Python through malloc() directly:
@@ -80,6 +79,11 @@ def stage_2():
             "__package__": None,
             "__cached__": None,
         }
+
+    # Only import here since we don't want the parent process accessing any of
+    # the _filpread.so code.
+    from ._tracer import trace, dump_svg
+
     signal.signal(
         signal.SIGUSR2, lambda *args: dump_svg(join(arguments.output_path, asctime()))
     )
