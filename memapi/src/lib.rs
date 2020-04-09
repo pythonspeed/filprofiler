@@ -25,10 +25,10 @@ pub extern "C" fn pymemprofile_free_allocation(address: usize) {
 #[no_mangle]
 pub unsafe extern "C" fn pymemprofile_start_call(
     parent_line_number: u16,
-    function_loc: *const memorytracking::FunctionLocation,
+    function_id: usize,
     line_number: u16,
 ) {
-    let fid = memorytracking::FunctionId::new(function_loc);
+    let fid = memorytracking::FunctionId::new(function_id);
     memorytracking::start_call(fid, parent_line_number, line_number);
 }
 

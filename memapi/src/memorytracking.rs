@@ -4,60 +4,46 @@ use itertools::Itertools;
 use libc;
 use std::cell::RefCell;
 use std::collections;
+use std::ffi::CStr;
 use std::fs;
 use std::io::Write;
+use std::os::raw::c_char;
 use std::path::Path;
-use std::slice;
 use std::sync::Mutex;
 
-/// A function location provided by the C code. Matches struct in _filpreload.c.
-#[repr(C)]
-pub struct FunctionLocation {
-    filename: *const u8,
-    filename_length: isize,
-    function_name: *const u8,
-    function_name_length: isize,
-}
-
-impl FunctionLocation {
-    #[cfg(test)]
-    fn from_strings(filename: &str, function_name: &str) -> Self {
-        FunctionLocation {
-            filename: filename.as_ptr(),
-            filename_length: filename.len() as isize,
-            function_name: function_name.as_ptr(),
-            function_name_length: function_name.len() as isize,
-        }
-    }
-}
-
-/// A Rust-y wrapper for FunctionLocation
+/// A Rust-y wrapper for a PyCodeObject*, passed in as a usize.
 #[derive(Clone, Debug, PartialEq, Copy)]
 pub struct FunctionId {
-    function: *const FunctionLocation,
+    function_id: usize,
+}
+
+extern "C" {
+    // Technically these take PyCodeObject*...
+    pub fn fil_file_name_from_id(function_id: usize) -> *const c_char;
+    pub fn fil_function_name_from_id(function_id: usize) -> *const c_char;
 }
 
 unsafe impl Send for FunctionId {}
 unsafe impl Sync for FunctionId {}
 
 impl FunctionId {
-    pub fn new(function: *const FunctionLocation) -> Self {
-        FunctionId { function }
+    pub fn new(function_id: usize) -> Self {
+        FunctionId { function_id }
     }
 
     fn get_filename(&self) -> &str {
         unsafe {
-            let loc = &*self.function;
-            let slice = slice::from_raw_parts(loc.filename, loc.filename_length as usize);
-            std::str::from_utf8_unchecked(slice)
+            CStr::from_ptr(fil_file_name_from_id(self.function_id))
+                .to_str()
+                .unwrap()
         }
     }
 
     fn get_function_name(&self) -> &str {
         unsafe {
-            let loc = &*self.function;
-            let slice = slice::from_raw_parts(loc.function_name, loc.function_name_length as usize);
-            std::str::from_utf8_unchecked(slice)
+            CStr::from_ptr(fil_function_name_from_id(self.function_id))
+                .to_str()
+                .unwrap()
         }
     }
 }
@@ -360,10 +346,12 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
 
 #[cfg(test)]
 mod tests {
-    use super::{AllocationTracker, CallSiteId, Callstack, FunctionId, FunctionLocation};
+    use super::{AllocationTracker, CallSiteId, Callstack, FunctionId};
     use itertools::Itertools;
     use proptest::prelude::*;
     use std::collections;
+    use std::ffi::CString;
+    use std::os::raw::c_char;
 
     proptest! {
         #[test]
@@ -388,22 +376,10 @@ mod tests {
     }
 
     #[test]
-    fn functionlocation_and_functionid_strings() {
-        let func = FunctionLocation::from_strings("a", "af");
-        let fid = FunctionId::new(&func as *const FunctionLocation);
-        assert_eq!(fid.get_filename(), "a");
-        assert_eq!(fid.get_function_name(), "af");
-    }
-
-    #[test]
     fn callstack_line_numbers() {
-        let func1 = FunctionLocation::from_strings("a", "af");
-        let func3 = FunctionLocation::from_strings("b", "bf");
-        let func5 = FunctionLocation::from_strings("c", "cf");
-
-        let fid1 = FunctionId::new(&func1 as *const FunctionLocation);
-        let fid3 = FunctionId::new(&func3 as *const FunctionLocation);
-        let fid5 = FunctionId::new(&func5 as *const FunctionLocation);
+        let fid1 = FunctionId::new(1);
+        let fid3 = FunctionId::new(3);
+        let fid5 = FunctionId::new(5);
 
         // Parent line number does nothing if it's first call:
         let mut cs1 = Callstack::new();
@@ -430,10 +406,8 @@ mod tests {
 
     #[test]
     fn peak_allocations_only_updated_on_new_peaks() {
-        let func1 = FunctionLocation::from_strings("a", "af");
-        let func3 = FunctionLocation::from_strings("b", "bf");
-        let fid1 = FunctionId::new(&func1 as *const FunctionLocation);
-        let fid3 = FunctionId::new(&func3 as *const FunctionLocation);
+        let fid1 = FunctionId::new(1);
+        let fid3 = FunctionId::new(3);
 
         let mut tracker = AllocationTracker::new();
         let mut cs1 = Callstack::new();
@@ -464,15 +438,35 @@ mod tests {
         assert_eq!(tracker.peak_allocated_bytes, 2123);
     }
 
+    #[no_mangle]
+    fn fil_file_name_from_id(function_id: usize) -> *const c_char {
+        let s = match function_id {
+            1 => "a\0",
+            2 => "b\0",
+            3 => "b\0",
+            5 => "c\0",
+            _ => "x\0",
+        };
+        s.as_ptr() as *const c_char
+    }
+
+    #[no_mangle]
+    pub fn fil_function_name_from_id(function_id: usize) -> *const c_char {
+        let s = match function_id {
+            1 => "af\0",
+            2 => "bf\0",
+            3 => "bf\0",
+            5 => "cf\0",
+            _ => "xf\0",
+        };
+        s.as_ptr() as *const c_char
+    }
+
     #[test]
     fn combine_callstacks_and_sum_allocations() {
-        let func1 = FunctionLocation::from_strings("a", "af");
-        let func2 = FunctionLocation::from_strings("b", "bf");
-        let func3 = FunctionLocation::from_strings("c", "cf");
-
-        let fid1 = FunctionId::new(&func1 as *const FunctionLocation);
-        let fid2 = FunctionId::new(&func2 as *const FunctionLocation);
-        let fid3 = FunctionId::new(&func3 as *const FunctionLocation);
+        let fid1 = FunctionId::new(1);
+        let fid2 = FunctionId::new(3);
+        let fid3 = FunctionId::new(5);
 
         let mut tracker = AllocationTracker::new();
         let id1 = CallSiteId::new(fid1, 1);

@@ -38,6 +38,9 @@ struct FunctionLocation {
 };
 
 static void __attribute__((constructor)) constructor() {
+  // Validate our assumptions:
+  assert(sizeof(size_t) == sizeof(void *));
+
   if (initialized) {
     return;
   }
@@ -66,10 +69,17 @@ static void __attribute__((constructor)) constructor() {
   unsetenv("LD_PRELOAD");
 }
 
-extern void *__libc_malloc(size_t size);
-extern void *__libc_calloc(size_t nmemb, size_t size);
+// Calls that Rust will do to get filenames and the like:
+const char *fil_function_name_from_id(PyCodeObject *code_object) {
+  return PyUnicode_AsUTF8(code_object->co_filename);
+}
+
+const char *fil_file_name_from_id(PyCodeObject *code_object) {
+  return PyUnicode_AsUTF8(code_object->co_name);
+}
+
 extern void pymemprofile_start_call(uint16_t parent_line_number,
-                                    struct FunctionLocation *loc,
+                                    size_t codeobject_id,
                                     uint16_t line_number);
 extern void pymemprofile_finish_call();
 extern void pymemprofile_new_line_number(uint16_t line_number);
@@ -79,7 +89,7 @@ extern void pymemprofile_add_allocation(size_t address, size_t length,
                                         uint16_t line_number);
 extern void pymemprofile_free_allocation(size_t address);
 
-void start_call(struct FunctionLocation *loc, uint16_t line_number) {
+void start_call(PyCodeObject* loc, uint16_t line_number) {
   if (!will_i_be_reentrant) {
     will_i_be_reentrant = 1;
     uint16_t parent_line_number = 0;
@@ -87,7 +97,7 @@ void start_call(struct FunctionLocation *loc, uint16_t line_number) {
       PyFrameObject *f = current_frame->f_back;
       parent_line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
     }
-    pymemprofile_start_call(parent_line_number, loc, line_number);
+    pymemprofile_start_call(parent_line_number, (size_t)loc, line_number);
     will_i_be_reentrant = 0;
   }
 }
@@ -192,31 +202,21 @@ fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
     current_frame = frame;
 
     /*
-      We want an efficient identifier for filename+fuction name. So we:
-
-      1. Incref the two string objects so they never get GC'ed.
-      2. Store references to the corresponding UTF8 strings on the code object
-         as extra info.
-
-      The pointer address of the resulting struct can be used as an identifier.
+      We want an efficient identifier for filename+fuction name. So we use the
+      code object pointer address.
     */
-    struct FunctionLocation *loc = NULL;
+    int seen = 0;
     assert(extra_code_index != -1);
     _PyCode_GetExtra((PyObject *)frame->f_code, extra_code_index,
-                     (void **)&loc);
-    if (loc == NULL) {
-      // Ensure the two string never get garbage collected;
-      Py_INCREF(frame->f_code->co_filename);
-      Py_INCREF(frame->f_code->co_name);
-      loc = malloc(sizeof(struct FunctionLocation));
-      loc->filename = PyUnicode_AsUTF8AndSize(frame->f_code->co_filename,
-                                              &loc->filename_length);
-      loc->function_name = PyUnicode_AsUTF8AndSize(frame->f_code->co_name,
-                                                   &loc->function_name_length);
+                     (void **)&seen);
+    if (!seen) {
+      // Ensure the code object never gets garbage collected:
+      Py_INCREF(frame->f_code);
+      // Set marker indicating we've done that.
       _PyCode_SetExtra((PyObject *)frame->f_code, extra_code_index,
-                       (void*)loc);
+                       (void*)1);
     }
-    start_call(loc, frame->f_lineno);
+    start_call(frame->f_code, frame->f_lineno);
     break;
   case PyTrace_RETURN:
     finish_call();
