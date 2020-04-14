@@ -42,13 +42,19 @@ pub extern "C" fn pymemprofile_new_line_number(line_number: u16) {
     memorytracking::new_line_number(line_number);
 }
 
+/// # Safety
+/// Intended for use from C.
 #[no_mangle]
-pub extern "C" fn pymemprofile_reset() {
-    memorytracking::reset();
+pub unsafe extern "C" fn pymemprofile_reset(default_path: *const c_char) {
+    let path = CStr::from_ptr(default_path)
+        .to_str()
+        .expect("Path wasn't UTF-8")
+        .to_string();
+    memorytracking::reset(path);
 }
 
 /// # Safety
-/// Intended for use from C APIs, what can I say.
+/// Intended for use from C.
 #[no_mangle]
 pub unsafe extern "C" fn pymemprofile_dump_peak_to_flamegraph(path: *const c_char) {
     let path = CStr::from_ptr(path)

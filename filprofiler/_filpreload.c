@@ -109,10 +109,10 @@ fil_new_line_number(uint16_t line_number) {
   }
 }
 
-__attribute__((visibility("default"))) void fil_reset() {
+__attribute__((visibility("default"))) void fil_reset(const char* default_path) {
   if (!will_i_be_reentrant) {
     will_i_be_reentrant = 1;
-    pymemprofile_reset();
+    pymemprofile_reset(default_path);
     will_i_be_reentrant = 0;
   }
 }
