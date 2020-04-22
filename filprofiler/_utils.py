@@ -1,7 +1,7 @@
 """Utilities."""
 
 from importlib.util import find_spec
-import datetime
+from datetime import datetime
 
 
 def library_path(name):

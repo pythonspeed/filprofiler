@@ -211,6 +211,7 @@ impl<'a> AllocationTracker {
     ) {
         eprintln!("=fil-profile= Preparing to write to {}", path);
         let directory_path = Path::new(path);
+
         if !directory_path.exists() {
             fs::create_dir(directory_path)
                 .expect("=fil-profile= Couldn't create the output directory.");
@@ -252,7 +253,7 @@ impl<'a> AllocationTracker {
             }
         }
         let svg_path = directory_path
-            .join(format!("{}-reversed.prof", base_filename))
+            .join(format!("{}-reversed.svg", base_filename))
             .to_str()
             .unwrap()
             .to_string();

@@ -20,7 +20,9 @@ def get_allocations(
     ],
 ):
     """Parses peak-memory.prof, returns mapping from callstack to size in KiB."""
-    assert sorted(os.listdir(output_directory)) == sorted(expected_files)
+    assert sorted(os.listdir(glob(str(output_directory / "*"))[0])) == sorted(
+        expected_files
+    )
     result = {}
     with open(glob(str(output_directory / "*" / "peak-memory.prof"))[0]) as f:
         for line in f:

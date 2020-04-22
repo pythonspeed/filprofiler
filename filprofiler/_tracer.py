@@ -39,15 +39,13 @@ def _start_thread_trace(frame, event, arg):
 def stop_tracing(output_path: str):
     sys.setprofile(None)
     threading.setprofile(None)
-    dump_svg(output_path)
     preload.fil_shutting_down()
+    dump_svg(output_path)
 
 
 def dump_svg(output_path: str):
-    now = datetime.now()
-    output_path = os.path.join(output_path, now.isoformat(timespec="milliseconds"))
-    path = output_path.encode("utf-8")
-    preload.fil_dump_peak_to_flamegraph(path)
+    output_path = os.path.join(output_path, timestamp_now())
+    preload.fil_dump_peak_to_flamegraph(output_path.encode("utf-8"))
     for svg_path in [
         os.path.join(output_path, "peak-memory.svg"),
         os.path.join(output_path, "peak-memory-reversed.svg"),

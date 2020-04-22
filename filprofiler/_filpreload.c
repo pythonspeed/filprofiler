@@ -119,11 +119,7 @@ __attribute__((visibility("default"))) void fil_reset(const char* default_path) 
 
 __attribute__((visibility("default"))) void
 fil_dump_peak_to_flamegraph(const char *path) {
-  if (!will_i_be_reentrant) {
-    will_i_be_reentrant = 1;
-    pymemprofile_dump_peak_to_flamegraph(path);
-    will_i_be_reentrant = 0;
-  }
+  pymemprofile_dump_peak_to_flamegraph(path);
 }
 
 __attribute__((visibility("hidden"))) void add_allocation(size_t address,
