@@ -53,7 +53,7 @@ Run it like this:
 
   $ fil-profile -m yourpackage --your-arg=2
 
-For more info visit https://pythonspeed.com/products/filprofiler/
+For more info visit https://pythonspeed.com/products/filmemoryprofiler/
 """
 
 

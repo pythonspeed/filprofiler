@@ -34,7 +34,7 @@ setup(
     ],
     python_requires=">=3.6",
     license="Apache 2.0",
-    url="https://pythonspeed.com/products/filprofiler/",
+    url="https://pythonspeed.com/products/filmemoryprofiler/",
     maintainer="Itamar Turner-Trauring",
     maintainer_email="itamar@pythonspeed.com",
 )

@@ -25,7 +25,7 @@ Just do:
 $ fil-profile yourscript.py --input-file=yourfile
 ```
 
-For more information see https://pythonspeed.com/products/filprofiler/
+For more information see https://pythonspeed.com/products/filmemoryprofiler/
 
 ## License
 
