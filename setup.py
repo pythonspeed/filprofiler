@@ -44,4 +44,5 @@ setup(
     maintainer="Itamar Turner-Trauring",
     maintainer_email="itamar@pythonspeed.com",
     long_description=read("README.md"),
+    long_description_content_type="text/markdown",
 )
