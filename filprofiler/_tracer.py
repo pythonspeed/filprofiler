@@ -104,12 +104,28 @@ def dump_svg(output_path: str):
 
 <div><iframe id="peak-reversed" src="peak-memory-reversed.svg" width="100%" height="200" scrolling="auto" frameborder="0"></iframe><br>
 <p><input type="button" onclick="fullScreen('#peak-reversed');" value="Full screen"></p></div>
-            </div>
+
+<h2>Understanding the graphs</h2>
+<p>The flame graphs shows the callstacks responsible for allocations at peak.</p>
+
+<p>The wider (and the redder) the bar, the more memory was allocated by that function or its callers.
+If the bar is 100% of width, that's all the allocated memory.</p>
+
+<p>The first graph shows the normal callgraph: if <tt>main()</tt> calls <tt>g()</tt> calls <tt>f()</tt>, let's say, then <tt>main()</tt> will be at the top.
+The second graph shows the reverse callgraph, from <tt>f()</tt> upwards.</p>
+
+<p>Why is the second graph useful? If <tt>f()</tt> is called from multiple places, in the first graph it will show up multiple times, at the bottom.
+In the second reversed graph all calls to <tt>f()</tt> will be merged together.</p>
+
+<p>Need help reducing your data processing application's memory use? Check out tips and tricks <a href="https://pythonspeed.com/datascience/">here</a>.</p>
+</body>
+</html>
 """.format(
                 now=now.ctime(), argv=" ".join(map(shlex.quote, sys.argv))
             )
         )
 
+    print("=fil-profile= Wrote HTML report to " + index_path, file=sys.stderr)
     try:
         webbrowser.open(index_path)
     except webbrowser.Error:
@@ -117,7 +133,7 @@ def dump_svg(output_path: str):
             "=fil-profile= Failed to open browser. You can find the new run at:",
             file=sys.stderr,
         )
-        print("=fil-profile= " + index_path, fil=sys.stderr)
+        print("=fil-profile= " + index_path, file=sys.stderr)
 
 
 def trace(code, globals_, output_path: str):

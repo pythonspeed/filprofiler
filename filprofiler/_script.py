@@ -145,7 +145,8 @@ def stage_2():
         signal.SIGUSR2, lambda *args: dump_svg(join(arguments.output_path, asctime()))
     )
     print(
-        "=fil-profile= Run the following command to write out peak memory usage: "
+        "=fil-profile= Memory usage will be written out at exit, and opened automatically in a browser.\n"
+        "=fil-profile= You can also run the following command while the program is still running to write out peak memory usage up to that point: "
         "kill -s SIGUSR2 {}".format(getpid()),
         file=sys.stderr,
     )
