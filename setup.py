@@ -14,6 +14,7 @@ setup(
             extra_link_args=["-export-dynamic"],
         )
     ],
+    package_data={"filprofiler": ["licenses.txt"],},
     use_scm_version=True,
     setup_requires=["setuptools_scm"],
     extras_require={

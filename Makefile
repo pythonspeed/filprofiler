@@ -44,3 +44,8 @@ clean:
 	rm -rf target
 	rm -rf filprofiler/*.so
 	python setup.py clean
+
+.PHONY: licenses
+licenses:
+	cd memapi && cargo lichking check
+	cd memapi && cargo lichking bundle --file ../filprofiler/licenses.txt

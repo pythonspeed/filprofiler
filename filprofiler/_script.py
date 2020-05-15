@@ -9,7 +9,7 @@ import sys
 from time import asctime
 from os import environ, execv, getpid, makedirs
 from os.path import abspath, dirname, join, exists
-from argparse import ArgumentParser
+from argparse import ArgumentParser, RawDescriptionHelpFormatter
 import runpy
 import signal
 
@@ -17,11 +17,50 @@ from ._utils import library_path
 from . import __version__, __file__
 
 
+LICENSE = """\
+Copyright 2020 Hyphenated Enterprises LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this program except in compliance with the License.
+You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+
+Uses additional open source libraries with the following licenses.
+"""
+
+HELP = """\
+If you have a program that you usually run like this:
+
+  $ python yourprogram.py --the-arg=x
+
+Run it like this:
+
+  $ fil-profile yourprogram.py --the-arg=x
+
+If you have a program that you usually run like this:
+
+  $ python -m yourpackage --your-arg=2
+
+Run it like this:
+
+  $ fil-profile -m yourpackage --your-arg=2
+
+For more info visit https://pythonspeed.com/products/filprofiler/
+"""
+
+
 def stage_1():
     """Setup environment variables, re-execute this script."""
     # Load the library:
     environ["LD_PRELOAD"] = library_path("_filpreload")
-    print(environ["LD_PRELOAD"])
     # Tracebacks when Rust crashes:
     environ["RUST_BACKTRACE"] = "1"
     # Route all allocations from Python through malloc() directly:
@@ -43,14 +82,22 @@ def stage_1():
 def stage_2():
     """Main CLI interface. Presumes LD_PRELOAD etc. has been set by stage_1()."""
     usage = "fil-profile [-o /path/to/output-dir/] [-m module | /path/to/script.py ] [arg] ..."
-    parser = ArgumentParser(usage=usage)
+    parser = ArgumentParser(
+        usage=usage, epilog=HELP, formatter_class=RawDescriptionHelpFormatter
+    )
     parser.add_argument("--version", action="version", version=__version__)
+    parser.add_argument(
+        "--license",
+        action="store_true",
+        default=False,
+        help="Print licensing information",
+    )
     parser.add_argument(
         "-o",
         dest="output_path",
         action="store",
         default="fil-result",
-        help="Directory where the profiling results written.",
+        help="Directory where the profiling results written",
     )
     parser.add_argument(
         "-m",
@@ -61,6 +108,13 @@ def stage_2():
     )
     parser.add_argument("args", metavar="ARG", nargs="*")
     arguments = parser.parse_args()
+    if arguments.license:
+        print(LICENSE)
+        with open(join(dirname(__file__), "licenses.txt")) as f:
+            for line in f:
+                print(line, end="")
+        sys.exit(0)
+
     if arguments.module:
         # Not quite the same as what python -m does, but pretty close:
         sys.argv = [arguments.module] + arguments.args
@@ -68,6 +122,9 @@ def stage_2():
         globals_ = {"run_module": runpy.run_module, "module_name": arguments.module}
     else:
         sys.argv = args = arguments.args
+        if len(args) == 0:
+            parser.print_help()
+            sys.exit(2)
         script = args[0]
         # Make directory where script is importable:
         sys.path.insert(0, dirname(abspath(script)))
