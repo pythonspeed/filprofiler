@@ -20,4 +20,21 @@ setup(
     extras_require={
         "dev": ["pytest", "pampy", "numpy", "scikit-image", "cython", "black"],
     },
+    description="A memory profiler for data batch processing applications.",
+    classifiers=[
+        "Intended Audience :: Developers",
+        "License :: OSI Approved :: Apache Software License",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.6",
+        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: Implementation :: CPython",
+    ],
+    python_requires=">=3.6",
+    license="Apache 2.0",
+    url="https://pythonspeed.com/products/filprofiler/",
+    maintainer="Itamar Turner-Trauring",
+    maintainer_email="itamar@pythonspeed.com",
 )
