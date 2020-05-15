@@ -1,6 +1,12 @@
 from os.path import join
 from setuptools import setup, Extension
 
+
+def read(path):
+    with open(path) as f:
+        return f.read()
+
+
 setup(
     name="filprofiler",
     packages=["filprofiler"],
@@ -37,4 +43,5 @@ setup(
     url="https://pythonspeed.com/products/filmemoryprofiler/",
     maintainer="Itamar Turner-Trauring",
     maintainer_email="itamar@pythonspeed.com",
+    long_description=read("README.md"),
 )
