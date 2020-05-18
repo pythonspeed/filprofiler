@@ -80,11 +80,22 @@ def dump_svg(output_path: str):
     }}
   </style>
   <script>
+   function compatRequestFullscreen(elem) {{
+       if (elem.requestFullscreen) {{
+           return elem.requestFullscreen();
+       }} else if (elem.webkitRequestFullscreen) {{
+           return elem.webkitRequestFullscreen();
+       }} else if (elem.mozRequestFullScreen) {{
+           return elem.mozRequestFullScreen();
+       }} else if (elem.msRequestFullscreen) {{
+           return elem.msRequestFullscreen();
+       }}
+   }}
    function fullScreen(id) {{
        var elem = document.querySelector(id);
        var currentHeight = elem.style.height;
        elem.style.height = "100%";
-       elem.requestFullscreen().finally(
+       compatRequestFullscreen(elem).finally(
            (info) => {{elem.style.height = currentHeight;}}
        );
    }}
