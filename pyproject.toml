@@ -1,2 +1,15 @@
+[build-system]
+requires = ["setuptools>=42", "wheel", "setuptools_scm[toml]>=3.4"]
+
 [tool.setuptools_scm]
 write_to = "filprofiler/_version.py"
+
+[tool.towncrier]
+package = 'filprofiler'
+package_dir = '.'
+filename = 'CHANGELOG.md'
+directory = ".changelog"
+title_format = "# {name} {version} ({project_date})"
+issue_format = "[#{issue}](https://gitlab.com/pythonspeed/filprofiler/-/issues/{issue}"
+start_string = "<!-- TOWNCRIER -->\n"
+underlines = ["", "##", "###"]

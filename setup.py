@@ -24,7 +24,15 @@ setup(
     use_scm_version=True,
     setup_requires=["setuptools_scm"],
     extras_require={
-        "dev": ["pytest", "pampy", "numpy", "scikit-image", "cython", "black"],
+        "dev": [
+            "pytest",
+            "pampy",
+            "numpy",
+            "scikit-image",
+            "cython",
+            "black",
+            "towncrier",
+        ],
     },
     description="A memory profiler for data batch processing applications.",
     classifiers=[
