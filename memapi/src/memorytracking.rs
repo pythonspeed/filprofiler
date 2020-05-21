@@ -118,10 +118,10 @@ impl Callstack {
                 .iter()
                 .map(|id| {
                     format!(
-                        "{}:{} ({})",
-                        id.function.get_filename(),
-                        id.line_number,
-                        id.function.get_function_name()
+                        "{filename}:{function} ({line});TB@@{filename}:{line}@@TB",
+                        filename = id.function.get_filename(),
+                        line = id.line_number,
+                        function = id.function.get_function_name(),
                     )
                 })
                 .join(";")
