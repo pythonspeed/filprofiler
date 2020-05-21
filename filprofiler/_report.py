@@ -11,19 +11,29 @@ import sys
 from datetime import datetime
 
 
+def update_svg(svg_path: str):
+    """Fix up the SVGs.
+
+    1. Add an appropriate subtitle.
+    2. Add source code lines.
+    """
+    with open(svg_path) as f:
+        data = f.read().replace(
+            "SUBTITLE-HERE",
+            """Made with the Fil memory profiler. <a href="https://pythonspeed.com/products/filmemoryprofiler/" style="text-decoration: underline;" target="_parent">Try it on your code!</a>""",
+        )
+    with open(svg_path, "w") as f:
+        f.write(data)
+
+
 def render_report(output_path: str, now: datetime) -> str:
     """Write out the HTML index and improve the SVGs."""
     for svg_path in [
         os.path.join(output_path, "peak-memory.svg"),
         os.path.join(output_path, "peak-memory-reversed.svg"),
     ]:
-        with open(svg_path) as f:
-            data = f.read().replace(
-                "SUBTITLE-HERE",
-                """Made with the Fil memory profiler. <a href="https://pythonspeed.com/products/filmemoryprofiler/" style="text-decoration: underline;" target="_parent">Try it on your code!</a>""",
-            )
-            with open(svg_path, "w") as f:
-                f.write(data)
+        update_svg(svg_path)
+
     index_path = os.path.join(output_path, "index.html")
     with open(index_path, "w") as index:
         index.write(
