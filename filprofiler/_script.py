@@ -6,7 +6,6 @@ Command-line tools. Because of LD_PRELOAD, it's actually a two stage setup:
 """
 
 import sys
-from time import asctime
 from os import environ, execv, getpid, makedirs
 from os.path import abspath, dirname, join, exists
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
@@ -139,11 +138,9 @@ def stage_2():
 
     # Only import here since we don't want the parent process accessing any of
     # the _filpread.so code.
-    from ._tracer import trace, dump_svg
+    from ._tracer import trace, create_report
 
-    signal.signal(
-        signal.SIGUSR2, lambda *args: dump_svg(join(arguments.output_path, asctime()))
-    )
+    signal.signal(signal.SIGUSR2, lambda *args: create_report(arguments.output_path))
     print(
         "=fil-profile= Memory usage will be written out at exit, and opened automatically in a browser.\n"
         "=fil-profile= You can also run the following command while the program is still running to write out peak memory usage up to that point: "

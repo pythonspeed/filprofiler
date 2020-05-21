@@ -31,7 +31,7 @@ setup(
             "scikit-image",
             "cython",
             "black",
-            "towncrier",
+            "towncrier==19.9.0rc1",
         ],
     },
     description="A memory profiler for data batch processing applications.",
