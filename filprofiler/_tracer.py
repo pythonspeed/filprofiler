@@ -37,15 +37,16 @@ def _start_thread_trace(frame, event, arg):
 def stop_tracing(output_path: str):
     sys.setprofile(None)
     threading.setprofile(None)
+    create_report(output_path)
+    preload.fil_shutting_down()
+
+
+def create_report(output_path: str):
     now = datetime.now()
     output_path = os.path.join(output_path, now.isoformat(timespec="milliseconds"))
     preload.fil_dump_peak_to_flamegraph(output_path.encode("utf-8"))
     index_path = render_report(output_path, now)
-    display_report(index_path)
-    preload.fil_shutting_down()
 
-
-def display_report(index_path: str):
     print("=fil-profile= Wrote HTML report to " + index_path, file=sys.stderr)
     try:
         webbrowser.open(index_path)
