@@ -118,7 +118,7 @@ impl Callstack {
                 .iter()
                 .map(|id| {
                     format!(
-                        "{filename}:{function} ({line});TB@@{filename}:{line}@@TB",
+                        "{filename}:{line} ({function});TB@@{filename}:{line}@@TB",
                         filename = id.function.get_filename(),
                         line = id.line_number,
                         function = id.function.get_function_name(),
@@ -496,9 +496,15 @@ mod tests {
         tracker.add_allocation(4, 6000, cs3.clone());
 
         let mut expected: collections::HashMap<String, usize> = collections::HashMap::new();
-        expected.insert("a:1 (af);b:2 (bf)".to_string(), 51000);
-        expected.insert("c:3 (cf)".to_string(), 234);
-        expected.insert("a:7 (af);b:2 (bf)".to_string(), 6000);
+        expected.insert(
+            "a:1 (af);TB@@a:1@@TB;b:2 (bf);TB@@b:2@@TB".to_string(),
+            51000,
+        );
+        expected.insert("c:3 (cf);TB@@c:3@@TB".to_string(), 234);
+        expected.insert(
+            "a:7 (af);TB@@a:7@@TB;b:2 (bf);TB@@b:2@@TB".to_string(),
+            6000,
+        );
         assert_eq!(expected, tracker.combine_callstacks());
     }
 }
