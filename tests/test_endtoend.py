@@ -151,5 +151,7 @@ print(subprocess.check_output(["env"]))
 """
         )
         script_file.flush()
-        result = check_output(["fil-profile", "-o", mkdtemp(), str(script_file.name)])
+        result = check_output(
+            ["fil-profile", "-o", mkdtemp(), "run", str(script_file.name)]
+        )
         assert b"LD_PRELOAD" not in result
