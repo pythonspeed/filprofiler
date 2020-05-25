@@ -42,7 +42,7 @@ If you have a program that you usually run like this:
 
 Run it like this:
 
-  $ fil-profile yourprogram.py --the-arg=x
+  $ fil-profile run yourprogram.py --the-arg=x
 
 If you have a program that you usually run like this:
 
@@ -50,7 +50,7 @@ If you have a program that you usually run like this:
 
 Run it like this:
 
-  $ fil-profile -m yourpackage --your-arg=2
+  $ fil-profile run -m yourpackage --your-arg=2
 
 For more info visit https://pythonspeed.com/products/filmemoryprofiler/
 """
@@ -79,7 +79,7 @@ def stage_1():
 
 
 PARSER = ArgumentParser(
-    usage="fil-profile [-o /path/to/output-dir/] [-m module | /path/to/script.py ] [arg] ...",
+    usage="fil-profile [-o output-path] run [-m module | /path/to/script.py ] [arg] ...",
     epilog=HELP,
     formatter_class=RawDescriptionHelpFormatter,
     allow_abbrev=False,
