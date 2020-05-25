@@ -8,7 +8,7 @@ Command-line tools. Because of LD_PRELOAD, it's actually a two stage setup:
 import sys
 from os import environ, execv, getpid, makedirs
 from os.path import abspath, dirname, join, exists
-from argparse import ArgumentParser, RawDescriptionHelpFormatter
+from argparse import ArgumentParser, RawDescriptionHelpFormatter, REMAINDER
 import runpy
 import signal
 
@@ -42,7 +42,7 @@ If you have a program that you usually run like this:
 
 Run it like this:
 
-  $ fil-profile yourprogram.py --the-arg=x
+  $ fil-profile run yourprogram.py --the-arg=x
 
 If you have a program that you usually run like this:
 
@@ -50,7 +50,7 @@ If you have a program that you usually run like this:
 
 Run it like this:
 
-  $ fil-profile -m yourpackage --your-arg=2
+  $ fil-profile run -m yourpackage --your-arg=2
 
 For more info visit https://pythonspeed.com/products/filmemoryprofiler/
 """
@@ -78,35 +78,41 @@ def stage_1():
     )
 
 
+PARSER = ArgumentParser(
+    usage="fil-profile [-o output-path] run [-m module | /path/to/script.py ] [arg] ...",
+    epilog=HELP,
+    formatter_class=RawDescriptionHelpFormatter,
+    allow_abbrev=False,
+)
+PARSER.add_argument("--version", action="version", version=__version__)
+PARSER.add_argument(
+    "--license", action="store_true", default=False, help="Print licensing information",
+)
+PARSER.add_argument(
+    "-o",
+    dest="output_path",
+    action="store",
+    default="fil-result",
+    help="Directory where the profiling results written",
+)
+subparsers = PARSER.add_subparsers(help="sub-command help")
+parser_run = subparsers.add_parser(
+    "run", help="Run a Python script or package", prefix_chars=[""], add_help=False,
+)
+# parser_run.add_argument(
+#     "-m",
+#     dest="module",
+#     action="store",
+#     help="Profile a module, equivalent to running with 'python -m <module>'",
+#     default="",
+# )
+parser_run.add_argument("rest", nargs=REMAINDER)
+del subparsers, parser_run
+
+
 def stage_2():
     """Main CLI interface. Presumes LD_PRELOAD etc. has been set by stage_1()."""
-    usage = "fil-profile [-o /path/to/output-dir/] [-m module | /path/to/script.py ] [arg] ..."
-    parser = ArgumentParser(
-        usage=usage, epilog=HELP, formatter_class=RawDescriptionHelpFormatter
-    )
-    parser.add_argument("--version", action="version", version=__version__)
-    parser.add_argument(
-        "--license",
-        action="store_true",
-        default=False,
-        help="Print licensing information",
-    )
-    parser.add_argument(
-        "-o",
-        dest="output_path",
-        action="store",
-        default="fil-result",
-        help="Directory where the profiling results written",
-    )
-    parser.add_argument(
-        "-m",
-        dest="module",
-        action="store",
-        help="Profile a module, equivalent to running with 'python -m <module>'",
-        default="",
-    )
-    parser.add_argument("args", metavar="ARG", nargs="*")
-    arguments = parser.parse_args()
+    arguments = PARSER.parse_args()
     if arguments.license:
         print(LICENSE)
         with open(join(dirname(__file__), "licenses.txt")) as f:
@@ -114,17 +120,21 @@ def stage_2():
                 print(line, end="")
         sys.exit(0)
 
-    if arguments.module:
+    if arguments.rest[0] == "-m":
         # Not quite the same as what python -m does, but pretty close:
-        sys.argv = [arguments.module] + arguments.args
-        code = "run_module(module_name, run_name='__main__')"
-        globals_ = {"run_module": runpy.run_module, "module_name": arguments.module}
-    else:
-        sys.argv = args = arguments.args
-        if len(args) == 0:
-            parser.print_help()
+        if len(arguments.rest) == 1:
+            PARSER.print_help()
             sys.exit(2)
-        script = args[0]
+        module = arguments.rest[1]
+        sys.argv = [module] + arguments.rest[2:]
+        code = "run_module(module_name, run_name='__main__')"
+        globals_ = {"run_module": runpy.run_module, "module_name": module}
+    else:
+        sys.argv = rest = arguments.rest
+        if len(rest) == 0:
+            PARSER.print_help()
+            sys.exit(2)
+        script = rest[0]
         # Make directory where script is importable:
         sys.path.insert(0, dirname(abspath(script)))
         with open(script, "rb") as script_file:
