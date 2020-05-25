@@ -22,7 +22,7 @@ $ python yourscript.py --input-file=yourfile
 Just do:
 
 ```
-$ fil-profile yourscript.py --input-file=yourfile
+$ fil-profile run yourscript.py --input-file=yourfile
 ```
 
 For more information see https://pythonspeed.com/products/filmemoryprofiler/
