@@ -4,6 +4,7 @@ from subprocess import check_call, check_output
 from tempfile import mkdtemp, NamedTemporaryFile
 from pathlib import Path
 from glob import glob
+from typing import Union
 
 from pampy import match, _ as ANY
 import pytest
@@ -36,10 +37,12 @@ def get_allocations(output_directory: Path):
     return result
 
 
-def profile(script: Path, *arguments: str) -> Path:
+def profile(script: Union[Path, str], *arguments: str, **kwargs) -> Path:
     """Run fil-profile on given script, return path to output directory."""
     output = Path(mkdtemp())
-    check_call(["fil-profile", "-o", str(output), str(script)] + list(arguments))
+    check_call(
+        ["fil-profile", "-o", str(output), str(script)] + list(arguments), **kwargs
+    )
     return output
 
 
@@ -121,6 +124,21 @@ def test_malloc_in_c_extension():
     path = ((script, "<module>", 12), (script, "main", 9))
 
     assert match(allocations, {path: big}, as_mb) == pytest.approx(50, 0.1)
+
+
+def test_minus_m():
+    """
+    `fil-profile -m package` runs the package.
+    """
+    dir = Path("python-benchmarks")
+    script = (dir / "malloc.py").absolute()
+    output_dir = profile("-m", "malloc", cwd=dir)
+    allocations = get_allocations(output_dir)
+    stripped_allocations = {k[3:]: v for (k, v) in allocations.items()}
+    script = str(script)
+    path = ((script, "<module>", 12), (script, "main", 9))
+
+    assert match(stripped_allocations, {path: big}, as_mb) == pytest.approx(50, 0.1)
 
 
 def test_ld_preload_disabled_for_subprocesses():
