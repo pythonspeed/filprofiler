@@ -37,12 +37,10 @@ def get_allocations(output_directory: Path):
     return result
 
 
-def profile(script: Union[Path, str], *arguments: str, **kwargs) -> Path:
+def profile(*arguments: str, **kwargs) -> Path:
     """Run fil-profile on given script, return path to output directory."""
     output = Path(mkdtemp())
-    check_call(
-        ["fil-profile", "-o", str(output), str(script)] + list(arguments), **kwargs
-    )
+    check_call(["fil-profile", "-o", str(output), "run"] + list(arguments), **kwargs)
     return output
 
 
@@ -117,13 +115,13 @@ def test_malloc_in_c_extension():
     (NumPy uses Python memory APIs, so is not sufficient to test this.)
     """
     script = Path("python-benchmarks") / "malloc.py"
-    output_dir = profile(script)
+    output_dir = profile(script, "--size", "70")
     allocations = get_allocations(output_dir)
 
     script = str(script)
-    path = ((script, "<module>", 12), (script, "main", 9))
+    path = ((script, "<module>", 16), (script, "main", 13))
 
-    assert match(allocations, {path: big}, as_mb) == pytest.approx(50, 0.1)
+    assert match(allocations, {path: big}, as_mb) == pytest.approx(70, 0.1)
 
 
 def test_minus_m():
@@ -132,11 +130,11 @@ def test_minus_m():
     """
     dir = Path("python-benchmarks")
     script = (dir / "malloc.py").absolute()
-    output_dir = profile("-m", "malloc", cwd=dir)
+    output_dir = profile("-m", "malloc", "--size", "50", cwd=dir)
     allocations = get_allocations(output_dir)
     stripped_allocations = {k[3:]: v for (k, v) in allocations.items()}
     script = str(script)
-    path = ((script, "<module>", 12), (script, "main", 9))
+    path = ((script, "<module>", 16), (script, "main", 13))
 
     assert match(stripped_allocations, {path: big}, as_mb) == pytest.approx(50, 0.1)
 
