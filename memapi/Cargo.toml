@@ -15,7 +15,7 @@ lazy_static = "1.4.0"
 rustc-hash = "1.0.1"
 
 [dependencies.inferno]
-version = "0.9.5"
+version = "0.9.9"
 default-features = false
 
 [dev-dependencies]

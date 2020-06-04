@@ -1,3 +1,10 @@
+# Fil 0.3.2 (2020-06-04)
+
+### Features
+
+- Hovering over a frame now shows the relevant details on top, where it's visible.
+
+
 # Fil 0.3.1 (2020-05-25)
 
 
