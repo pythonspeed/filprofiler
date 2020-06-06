@@ -7,6 +7,7 @@ MAKEFLAGS += --no-builtin-rules
 .PHONY: build
 build: target/release/libpymemprofile_api.a
 	pip install -e .
+	rm -rf build/
 	python setup.py build_ext --inplace
 
 target/release/libpymemprofile_api.a: Cargo.lock memapi/Cargo.toml memapi/src/*.rs
@@ -44,3 +45,8 @@ clean:
 	rm -rf target
 	rm -rf filprofiler/*.so
 	python setup.py clean
+
+.PHONY: licenses
+licenses:
+	cd memapi && cargo lichking check
+	cd memapi && cargo lichking bundle --file ../filprofiler/licenses.txt
