@@ -17,6 +17,7 @@
 // Underlying APIs we're wrapping:
 static void *(*underlying_real_malloc)(size_t length) = 0;
 static void *(*underlying_real_calloc)(size_t nmemb, size_t length) = 0;
+static void *(*underlying_real_realloc)(void *addr, size_t length) = 0;
 static void (*underlying_real_free)(void *addr) = 0;
 
 // Note whether we've been initialized yet or not:
@@ -54,6 +55,11 @@ static void __attribute__((constructor)) constructor() {
   underlying_real_calloc = dlsym(RTLD_NEXT, "calloc");
   if (!underlying_real_calloc) {
     fprintf(stderr, "Couldn't load calloc(): %s\n", dlerror());
+    exit(1);
+  }
+  underlying_real_realloc = dlsym(RTLD_NEXT, "realloc");
+  if (!underlying_real_realloc) {
+    fprintf(stderr, "Couldn't load realloc(): %s\n", dlerror());
     exit(1);
   }
   underlying_real_free = dlsym(RTLD_NEXT, "free");
@@ -162,6 +168,23 @@ __attribute__((visibility("default"))) void *calloc(size_t nmemb, size_t size) {
   return result;
 }
 
+__attribute__((visibility("default"))) void *realloc(void *addr, size_t size) {
+  if (unlikely(!initialized)) {
+    fprintf(stderr, "BUG: We don't handle realloc() during initialization.\n");
+    abort();
+  }
+  void *result = underlying_real_realloc(addr, size);
+  if (!will_i_be_reentrant && initialized) {
+    will_i_be_reentrant = 1;
+    // Sometimes you'll get same address, so if we did remove first and then
+    // added, it would remove the entry erroneously.
+    pymemprofile_free_allocation((size_t)addr);
+    add_allocation((size_t)result, size);
+    will_i_be_reentrant = 0;
+  }
+  return result;
+}
+
 __attribute__((visibility("default"))) void free(void *addr) {
   if (unlikely(!initialized)) {
     // Well, we're going to leak a little memory, but, such is life...
@@ -194,7 +217,8 @@ fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
       2. Store references to the corresponding UTF8 strings on the code object
          as extra info.
 
-      The pointer address of the resulting struct can be used as an identifier.
+      The pointer address of the resulting struct can be used as an
+      identifier.
     */
     struct FunctionLocation *loc = NULL;
     assert(extra_code_index != -1);
@@ -210,7 +234,7 @@ fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
       loc->function_name = PyUnicode_AsUTF8AndSize(frame->f_code->co_name,
                                                    &loc->function_name_length);
       _PyCode_SetExtra((PyObject *)frame->f_code, extra_code_index,
-                       (void*)loc);
+                       (void *)loc);
     }
     start_call(loc, frame->f_lineno);
     break;
