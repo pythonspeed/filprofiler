@@ -119,9 +119,10 @@ def test_malloc_in_c_extension():
     allocations = get_allocations(output_dir)
 
     script = str(script)
-    path = ((script, "<module>", 16), (script, "main", 13))
+    path = ((script, "<module>", 21), (script, "main", 17))
 
-    assert match(allocations, {path: big}, as_mb) == pytest.approx(70, 0.1)
+    # The realloc() in the scripts adds 10 to the 70:
+    assert match(allocations, {path: big}, as_mb) == pytest.approx(70 + 10, 0.1)
 
 
 def test_minus_m():
@@ -134,9 +135,11 @@ def test_minus_m():
     allocations = get_allocations(output_dir)
     stripped_allocations = {k[3:]: v for (k, v) in allocations.items()}
     script = str(script)
-    path = ((script, "<module>", 16), (script, "main", 13))
+    path = ((script, "<module>", 21), (script, "main", 17))
 
-    assert match(stripped_allocations, {path: big}, as_mb) == pytest.approx(50, 0.1)
+    assert match(stripped_allocations, {path: big}, as_mb) == pytest.approx(
+        50 + 10, 0.1
+    )
 
 
 def test_ld_preload_disabled_for_subprocesses():
