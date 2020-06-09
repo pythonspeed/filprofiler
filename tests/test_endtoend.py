@@ -5,6 +5,7 @@ from tempfile import mkdtemp, NamedTemporaryFile
 from pathlib import Path
 from glob import glob
 import os
+from typing import Union
 
 from pampy import match, _ as ANY
 import pytest
@@ -34,6 +35,8 @@ def get_allocations(
                 result[calls] = size_kb
                 continue
             for call in calls.split(";"):
+                if call.startswith("TB@@"):
+                    continue
                 part1, func_name = call.rsplit(" ", 1)
                 assert func_name[0] == "("
                 assert func_name[-1] == ")"
@@ -46,15 +49,18 @@ def get_allocations(
     return result
 
 
-def profile(script: Path, *arguments: str, expect_exit_code=0) -> Path:
+def profile(*arguments: str, expect_exit_code=0, **kwargs) -> Path:
     """Run fil-profile on given script, return path to output directory."""
     output = Path(mkdtemp())
     try:
-        check_call(["fil-profile", "-o", str(output), str(script)] + list(arguments))
+        check_call(
+            ["fil-profile", "-o", str(output), "run"] + list(arguments), **kwargs
+        )
         exit_code = 0
     except CalledProcessError as e:
         exit_code = e.returncode
     assert exit_code == expect_exit_code
+
     return output
 
 
@@ -129,13 +135,28 @@ def test_malloc_in_c_extension():
     (NumPy uses Python memory APIs, so is not sufficient to test this.)
     """
     script = Path("python-benchmarks") / "malloc.py"
-    output_dir = profile(script)
+    output_dir = profile(script, "--size", "70")
     allocations = get_allocations(output_dir)
 
     script = str(script)
-    path = ((script, "<module>", 12), (script, "main", 9))
+    path = ((script, "<module>", 16), (script, "main", 13))
 
-    assert match(allocations, {path: big}, as_mb) == pytest.approx(50, 0.1)
+    assert match(allocations, {path: big}, as_mb) == pytest.approx(70, 0.1)
+
+
+def test_minus_m():
+    """
+    `fil-profile -m package` runs the package.
+    """
+    dir = Path("python-benchmarks")
+    script = (dir / "malloc.py").absolute()
+    output_dir = profile("-m", "malloc", "--size", "50", cwd=dir)
+    allocations = get_allocations(output_dir)
+    stripped_allocations = {k[3:]: v for (k, v) in allocations.items()}
+    script = str(script)
+    path = ((script, "<module>", 16), (script, "main", 13))
+
+    assert match(stripped_allocations, {path: big}, as_mb) == pytest.approx(50, 0.1)
 
 
 def test_ld_preload_disabled_for_subprocesses():
@@ -150,7 +171,9 @@ print(subprocess.check_output(["env"]))
 """
         )
         script_file.flush()
-        result = check_output(["fil-profile", "-o", mkdtemp(), str(script_file.name)])
+        result = check_output(
+            ["fil-profile", "-o", mkdtemp(), "run", str(script_file.name)]
+        )
         assert b"LD_PRELOAD" not in result
 
 

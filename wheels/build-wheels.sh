@@ -19,6 +19,7 @@ rm -rf build
 
 /opt/python/cp38-cp38/bin/python3 setup.py bdist_wheel -d /tmp/wheel
 
-auditwheel addtag -w dist/ /tmp/wheel/filprofiler*36*whl
-auditwheel addtag -w dist/ /tmp/wheel/filprofiler*37*whl
-auditwheel addtag -w dist/ /tmp/wheel/filprofiler*38*whl
+auditwheel repair --plat manylinux1_x86_64 -w dist/ /tmp/wheel/filprofiler*cp36*whl
+auditwheel repair --plat manylinux1_x86_64 -w dist/ /tmp/wheel/filprofiler*cp37*whl
+auditwheel repair --plat manylinux1_x86_64 -w dist/ /tmp/wheel/filprofiler*cp38*whl
+

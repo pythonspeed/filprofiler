@@ -136,7 +136,7 @@ dependencies = [
 
 [[package]]
 name = "inferno"
-version = "0.9.5"
+version = "0.9.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "ahash 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -254,7 +254,7 @@ name = "pymemprofile_api"
 version = "0.1.0"
 dependencies = [
  "im 14.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "inferno 0.9.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "inferno 0.9.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "itertools 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -578,7 +578,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum fuchsia-cprng 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "a06f77d526c1a601b7c4cdd98f54b5eaabffc14d5f2f0296febdc7f357c6d3ba"
 "checksum getrandom 0.1.14 (registry+https://github.com/rust-lang/crates.io-index)" = "7abc8dd8451921606d809ba32e95b6111925cd2906060d2dcc29c070220503eb"
 "checksum im 14.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "e302bf26ba21de289e808230f80fe799fd371268d853783ee7f844c7cb5704b7"
-"checksum inferno 0.9.5 (registry+https://github.com/rust-lang/crates.io-index)" = "3c3f0094070905dbcaa8cf432fb90de45118282603f4d4c3a7fa865ab63a5d61"
+"checksum inferno 0.9.9 (registry+https://github.com/rust-lang/crates.io-index)" = "2b2a71c56e4c218f2a1d36bc5177cbfdedf89697ac68610ac3c8452cde152231"
 "checksum itertools 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)" = "f56a2d0bc861f9165be4eb3442afd3c236d8a98afd426f65d92324ae1091a484"
 "checksum itoa 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)" = "501266b7edd0174f8530248f87f99c88fbe60ca4ef3dd486835b8d8d53136f7f"
 "checksum lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
