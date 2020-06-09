@@ -17,7 +17,7 @@
 // Underlying APIs we're wrapping:
 static void *(*underlying_real_malloc)(size_t length) = 0;
 static void *(*underlying_real_calloc)(size_t nmemb, size_t length) = 0;
-static void *(*underlying_real_realloc)(void* addr, size_t length) = 0;
+static void *(*underlying_real_realloc)(void *addr, size_t length) = 0;
 static void (*underlying_real_free)(void *addr) = 0;
 
 // Note whether we've been initialized yet or not:
@@ -190,74 +190,74 @@ __attribute__((visibility("default"))) void *realloc(void *addr, size_t size) {
 }
 
 __attribute__((visibility("default"))) void free(void *addr) {
-    if (unlikely(!initialized)) {
-      // Well, we're going to leak a little memory, but, such is life...
-      return;
-    }
-    underlying_real_free(addr);
-    if (!will_i_be_reentrant) {
-      will_i_be_reentrant = 1;
-      pymemprofile_free_allocation((size_t)addr);
-      will_i_be_reentrant = 0;
-    }
+  if (unlikely(!initialized)) {
+    // Well, we're going to leak a little memory, but, such is life...
+    return;
   }
-
-  // Call after Python gets going.
-  __attribute__((visibility("default"))) void fil_initialize_from_python() {
-    extra_code_index = _PyEval_RequestCodeExtraIndex(NULL);
-  }
-
-  __attribute__((visibility("hidden"))) int fil_tracer(
-      PyObject * obj, PyFrameObject * frame, int what, PyObject *arg) {
-    switch (what) {
-    case PyTrace_CALL:
-      // Store the current frame, so malloc() can look up line number:
-      current_frame = frame;
-
-      /*
-        We want an efficient identifier for filename+fuction name. So we:
-
-        1. Incref the two string objects so they never get GC'ed.
-        2. Store references to the corresponding UTF8 strings on the code object
-           as extra info.
-
-        The pointer address of the resulting struct can be used as an
-        identifier.
-      */
-      struct FunctionLocation *loc = NULL;
-      assert(extra_code_index != -1);
-      _PyCode_GetExtra((PyObject *)frame->f_code, extra_code_index,
-                       (void **)&loc);
-      if (loc == NULL) {
-        // Ensure the two string never get garbage collected;
-        Py_INCREF(frame->f_code->co_filename);
-        Py_INCREF(frame->f_code->co_name);
-        loc = malloc(sizeof(struct FunctionLocation));
-        loc->filename = PyUnicode_AsUTF8AndSize(frame->f_code->co_filename,
-                                                &loc->filename_length);
-        loc->function_name = PyUnicode_AsUTF8AndSize(
-            frame->f_code->co_name, &loc->function_name_length);
-        _PyCode_SetExtra((PyObject *)frame->f_code, extra_code_index,
-                         (void *)loc);
-      }
-      start_call(loc, frame->f_lineno);
-      break;
-    case PyTrace_RETURN:
-      finish_call();
-      // We're done with this frame, so set the parent frame:
-      current_frame = frame->f_back;
-      break;
-    default:
-      break;
-    }
-    return 0;
-  }
-
-  __attribute__((visibility("default"))) void register_fil_tracer() {
-    PyEval_SetProfile(fil_tracer, Py_None);
-  }
-
-  __attribute__((visibility("default"))) void fil_shutting_down() {
-    // We're shutting down, so things like PyCode_Addr2Line won't work:
+  underlying_real_free(addr);
+  if (!will_i_be_reentrant) {
     will_i_be_reentrant = 1;
+    pymemprofile_free_allocation((size_t)addr);
+    will_i_be_reentrant = 0;
   }
+}
+
+// Call after Python gets going.
+__attribute__((visibility("default"))) void fil_initialize_from_python() {
+  extra_code_index = _PyEval_RequestCodeExtraIndex(NULL);
+}
+
+__attribute__((visibility("hidden"))) int
+fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
+  switch (what) {
+  case PyTrace_CALL:
+    // Store the current frame, so malloc() can look up line number:
+    current_frame = frame;
+
+    /*
+      We want an efficient identifier for filename+fuction name. So we:
+
+      1. Incref the two string objects so they never get GC'ed.
+      2. Store references to the corresponding UTF8 strings on the code object
+         as extra info.
+
+      The pointer address of the resulting struct can be used as an
+      identifier.
+    */
+    struct FunctionLocation *loc = NULL;
+    assert(extra_code_index != -1);
+    _PyCode_GetExtra((PyObject *)frame->f_code, extra_code_index,
+                     (void **)&loc);
+    if (loc == NULL) {
+      // Ensure the two string never get garbage collected;
+      Py_INCREF(frame->f_code->co_filename);
+      Py_INCREF(frame->f_code->co_name);
+      loc = malloc(sizeof(struct FunctionLocation));
+      loc->filename = PyUnicode_AsUTF8AndSize(frame->f_code->co_filename,
+                                              &loc->filename_length);
+      loc->function_name = PyUnicode_AsUTF8AndSize(frame->f_code->co_name,
+                                                   &loc->function_name_length);
+      _PyCode_SetExtra((PyObject *)frame->f_code, extra_code_index,
+                       (void *)loc);
+    }
+    start_call(loc, frame->f_lineno);
+    break;
+  case PyTrace_RETURN:
+    finish_call();
+    // We're done with this frame, so set the parent frame:
+    current_frame = frame->f_back;
+    break;
+  default:
+    break;
+  }
+  return 0;
+}
+
+__attribute__((visibility("default"))) void register_fil_tracer() {
+  PyEval_SetProfile(fil_tracer, Py_None);
+}
+
+__attribute__((visibility("default"))) void fil_shutting_down() {
+  // We're shutting down, so things like PyCode_Addr2Line won't work:
+  will_i_be_reentrant = 1;
+}
