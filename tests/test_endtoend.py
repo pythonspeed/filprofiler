@@ -19,13 +19,14 @@ def get_allocations(
         "index.html",
         "peak-memory.prof",
     ],
+    prof_file="peak-memory.prof",
 ):
     """Parses peak-memory.prof, returns mapping from callstack to size in KiB."""
     assert sorted(os.listdir(glob(str(output_directory / "*"))[0])) == sorted(
         expected_files
     )
     result = {}
-    with open(glob(str(output_directory / "*" / "peak-memory.prof"))[0]) as f:
+    with open(glob(str(output_directory / "*" / prof_file))[0]) as f:
         for line in f:
             *calls, size_kb = line.split(" ")
             calls = " ".join(calls)
@@ -186,10 +187,11 @@ def test_out_of_memory():
     written out.
     """
     script = Path("python-benchmarks") / "oom.py"
-    output_dir = profile(script, expect_exit_code=245)
+    output_dir = profile(script, expect_exit_code=5)
     allocations = get_allocations(
         output_dir,
-        ["out-of-memory.svg", "out-of-memory-reversed.svg", "out-of-memory.prof"],
+        ["out-of-memory.svg", "out-of-memory-reversed.svg", "out-of-memory.prof",],
+        "out-of-memory.prof",
     )
 
     import threading
@@ -197,11 +199,11 @@ def test_out_of_memory():
 
     ones = (numpy.core.numeric.__file__, "ones", ANY)
     script = str(script)
-    expected_small_alloc = ((script, "__main__", 9), ones)
-    toobig_alloc = ((script, "__main__", 14), ones)
+    expected_small_alloc = ((script, "<module>", 9), ones)
+    toobig_alloc = ((script, "<module>", 14), ones)
 
     assert match(allocations, {expected_small_alloc: big}, as_mb) == pytest.approx(
-        200, 0.1
+        100, 0.1
     )
     assert match(allocations, {toobig_alloc: big}, as_mb) == pytest.approx(
         1024 * 1024 * 1024, 0.1

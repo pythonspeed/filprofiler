@@ -276,23 +276,30 @@ impl<'a> AllocationTracker {
     }
 
     /// Uh-oh, we just ran out of memory.
-    fn out_of_memory(&mut self) {
+    fn oom_break_glass(&mut self) {
         // Get some emergency memory:
         self.spare_memory.shrink_to_fit();
+        // fork()
+    }
+
+    /// Dump information about where we are.
+    fn oom_dump(&mut self) {
         // free() all the things, so we have memory to dump an SVG. These should
         // only be _Python_ objects, Rust code shouldn't be tracked here since
         // we prevent reentrancy. We're not going to return to Python so
         // free()ing should be OK.
-        unsafe {
-            for address in self.current_allocations.keys() {
-                libc::free(*address as *mut ffi::c_void);
-            }
-        }
+
+        //unsafe {
+        //    for address in self.current_allocations.keys() {
+        //        libc::free(*address as *mut ffi::c_void);
+        //    }
+        //}
         self.dump_to_flamegraph(
             &self.default_path,
             &self.current_allocations,
             "out-of-memory",
-        )
+        );
+        std::process::exit(5);
     }
 }
 
@@ -329,8 +336,7 @@ pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16) {
     if address == 0 {
         // Uh-oh, we're out of memory.
         let allocations = &mut ALLOCATIONS.lock().unwrap();
-        allocations.out_of_memory();
-        return;
+        allocations.oom_break_glass();
     }
 
     let mut callstack: Callstack = THREAD_CALLSTACK.with(|cs| (*cs.borrow()).clone());
@@ -339,6 +345,11 @@ pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16) {
     }
     let mut allocations = ALLOCATIONS.lock().unwrap();
     allocations.add_allocation(address, size, callstack);
+
+    if address == 0 {
+        // Uh-oh, we're out of memory.
+        allocations.oom_dump();
+    }
 }
 
 /// Free an existing allocation.
