@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 
 from skimage import data
@@ -6,6 +8,7 @@ from skimage.feature.register_translation import _upsampled_dft
 from scipy.ndimage import fourier_shift
 from skimage.transform import rescale
 
+start = time.time()
 image = data.camera()
 image = rescale(image, 4, anti_aliasing=True)
 
@@ -31,6 +34,7 @@ shift, error, diffphase = register_translation(image, offset_image, 100)
 # Calculate the upsampled DFT, again to show what the algorithm is doing
 # behind the scenes.  Constants correspond to calculated values in routine.
 # See source code for details.
-cc_image = _upsampled_dft(image_product, 150, 100, (shift*100)+75).conj()
+cc_image = _upsampled_dft(image_product, 150, 100, (shift * 100) + 75).conj()
 
 print(f"Detected subpixel offset (y, x): {shift}")
+print(f"Elapsed {time.time() - start}")
