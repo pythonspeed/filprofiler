@@ -1,3 +1,16 @@
+# Fil 0.3.3 (2020-06-10)
+
+
+### Features
+
+- Allocations from the `realloc()` allocation API are now tracked by Fil. ([#43](https://gitlab.com/pythonspeed/filprofiler/-/issues/43))
+
+
+### Bugfixes
+
+- Fix a bug that corrupted the SVGs. ([#47](https://gitlab.com/pythonspeed/filprofiler/-/issues/47))
+
+
 # Fil 0.3.2 (2020-06-04)
 
 ### Features
