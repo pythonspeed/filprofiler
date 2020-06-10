@@ -116,19 +116,28 @@ impl Callstack {
         }
     }
 
-    fn as_string(&self) -> String {
+    fn as_string(&self, to_be_post_processed: bool) -> String {
         if self.calls.is_empty() {
             "[No Python stack]".to_string()
         } else {
             self.calls
                 .iter()
                 .map(|id| {
-                    format!(
-                        "{filename}:{line} ({function});TB@@{filename}:{line}@@TB",
-                        filename = id.function.get_filename(),
-                        line = id.line_number,
-                        function = id.function.get_function_name(),
-                    )
+                    if to_be_post_processed {
+                        format!(
+                            "{filename}:{line} ({function});TB@@{filename}:{line}@@TB",
+                            filename = id.function.get_filename(),
+                            line = id.line_number,
+                            function = id.function.get_function_name(),
+                        )
+                    } else {
+                        format!(
+                            "{filename}:{line} ({function})",
+                            filename = id.function.get_filename(),
+                            line = id.line_number,
+                            function = id.function.get_function_name()
+                        )
+                    }
                 })
                 .join(";")
         }
@@ -192,10 +201,11 @@ impl<'a> AllocationTracker {
     fn combine_callstacks(
         &self,
         allocations: &imhashmap::HashMap<usize, Allocation>,
+        to_be_post_processed: bool,
     ) -> collections::HashMap<String, usize> {
         let mut by_call: collections::HashMap<String, usize> = collections::HashMap::new();
         for Allocation { callstack, size } in allocations.values() {
-            let callstack = callstack.as_string();
+            let callstack = callstack.as_string(to_be_post_processed);
             let entry = by_call.entry(callstack).or_insert(0);
             *entry += size;
         }
@@ -205,7 +215,13 @@ impl<'a> AllocationTracker {
     /// Dump all callstacks in peak memory usage to various files describing the
     /// memory usage.
     fn dump_peak_to_flamegraph(&self, path: &str) {
-        self.dump_to_flamegraph(path, &self.peak_allocations, "peak-memory");
+        self.dump_to_flamegraph(
+            path,
+            &self.peak_allocations,
+            "peak-memory",
+            "Peak Tracked Memory Usage",
+            true,
+        );
     }
 
     fn dump_to_flamegraph(
@@ -213,6 +229,8 @@ impl<'a> AllocationTracker {
         path: &str,
         allocations: &imhashmap::HashMap<usize, Allocation>,
         base_filename: &str,
+        title: &str,
+        to_be_post_processed: bool,
     ) {
         eprintln!("=fil-profile= Preparing to write to {}", path);
         let directory_path = Path::new(path);
@@ -223,7 +241,7 @@ impl<'a> AllocationTracker {
         } else if !directory_path.is_dir() {
             panic!("=fil-profile= Output path must be a directory.");
         }
-        let by_call = self.combine_callstacks(allocations);
+        let by_call = self.combine_callstacks(allocations, to_be_post_processed);
         let lines: Vec<String> = by_call
             .iter()
             .map(|(callstack, size)| format!("{} {}", callstack, *size))
@@ -246,6 +264,8 @@ impl<'a> AllocationTracker {
             &svg_path,
             self.peak_allocated_bytes,
             false,
+            title,
+            to_be_post_processed,
         ) {
             Ok(_) => {
                 eprintln!(
@@ -267,6 +287,8 @@ impl<'a> AllocationTracker {
             &svg_path,
             self.peak_allocated_bytes,
             true,
+            title,
+            to_be_post_processed,
         ) {
             Ok(_) => {
                 eprintln!(
@@ -299,7 +321,6 @@ impl<'a> AllocationTracker {
                 libc::_exit(5);
             }
 
-            eprintln!(
             eprintln!("=fil-profile= Next, we'll free large memory allocations.");
             // free() all the things, so we have memory to dump an SVG. These should
             // only be _Python_ objects, Rust code shouldn't be tracked here since
@@ -320,6 +341,8 @@ impl<'a> AllocationTracker {
             &self.default_path,
             &self.current_allocations,
             "out-of-memory",
+            "Current allocations at out-of-memory time",
+            false,
         );
         unsafe {
             libc::_exit(5);
@@ -410,10 +433,13 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
     path: &str,
     peak_bytes: usize,
     reversed: bool,
+    title: &str,
+    to_be_post_processed: bool,
 ) -> std::io::Result<()> {
     let mut file = std::fs::File::create(path)?;
     let title = format!(
-        "Peak Tracked Memory Usage{} ({:.1} MiB)",
+        "{}{} ({:.1} MiB)",
+        title,
         if reversed { ", Reversed" } else { "" },
         peak_bytes as f64 / (1024.0 * 1024.0)
     );
@@ -423,12 +449,14 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
         font_size: 16,
         font_type: "mono".to_string(),
         frame_height: 22,
-        subtitle: Some("SUBTITLE-HERE".to_string()),
         reverse_stack_order: reversed,
         color_diffusion: true,
         direction: flamegraph::Direction::Inverted,
         ..Default::default()
     };
+    if to_be_post_processed {
+        options.subtitle = Some("SUBTITLE-HERE".to_string());
+    }
     if let Err(e) = flamegraph::from_lines(&mut options, lines, &file) {
         Err(std::io::Error::new(
             std::io::ErrorKind::Other,
@@ -589,7 +617,16 @@ mod tests {
         );
         assert_eq!(
             expected,
-            tracker.combine_callstacks(&tracker.peak_allocations)
+            tracker.combine_callstacks(&tracker.peak_allocations, true)
+        );
+
+        let mut expected2: collections::HashMap<String, usize> = collections::HashMap::new();
+        expected2.insert("a:1 (af);b:2 (bf)".to_string(), 51000);
+        expected2.insert("c:3 (cf)".to_string(), 234);
+        expected2.insert("a:7 (af);b:2 (bf)".to_string(), 6000);
+        assert_eq!(
+            expected2,
+            tracker.combine_callstacks(&tracker.peak_allocations, false)
         );
     }
 }
