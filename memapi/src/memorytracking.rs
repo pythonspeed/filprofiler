@@ -92,6 +92,11 @@ impl Callstack {
         Callstack { calls: Vec::new() }
     }
 
+    /// Is this a Python call?
+    fn in_python(&self) -> bool {
+        !self.calls.is_empty()
+    }
+
     fn start_call(&mut self, parent_line_number: u16, callsite_id: CallSiteId) {
         if parent_line_number != 0 {
             if let Some(mut call) = self.calls.last_mut() {
@@ -284,22 +289,41 @@ impl<'a> AllocationTracker {
 
     /// Dump information about where we are.
     fn oom_dump(&mut self) {
-        // free() all the things, so we have memory to dump an SVG. These should
-        // only be _Python_ objects, Rust code shouldn't be tracked here since
-        // we prevent reentrancy. We're not going to return to Python so
-        // free()ing should be OK.
+        unsafe {
+            // We want to free memory, but that can corrupt other threads. So first,
+            // fork() to get rid of the threads.
+            eprintln!("=fil-profile= Out of memory. First, we'll try to fork() and exit parent.");
+            let pid = libc::fork();
+            if pid != 0 && pid != -1 {
+                // We successfully forked, and we're the parent. Just exit.
+                libc::_exit(5);
+            }
 
-        //unsafe {
-        //    for address in self.current_allocations.keys() {
-        //        libc::free(*address as *mut ffi::c_void);
-        //    }
-        //}
+            eprintln!(
+            eprintln!("=fil-profile= Next, we'll free large memory allocations.");
+            // free() all the things, so we have memory to dump an SVG. These should
+            // only be _Python_ objects, Rust code shouldn't be tracked here since
+            // we prevent reentrancy. We're not going to return to Python so
+            // free()ing should be OK.
+            for (address, allocation) in self.current_allocations.iter() {
+                // Only clear large allocations that came out of a Python stack,
+                // to reduce chances of deallocating random important things.
+                if allocation.callstack.in_python() && allocation.size > 300000 {
+                    libc::free(*address as *mut ffi::c_void);
+                }
+            }
+        }
+        eprintln!(
+            "=fil-profile= And now, we'll dump out SVGs. Note that no HTML file will be written."
+        );
         self.dump_to_flamegraph(
             &self.default_path,
             &self.current_allocations,
             "out-of-memory",
         );
-        std::process::exit(5);
+        unsafe {
+            libc::_exit(5);
+        }
     }
 }
 

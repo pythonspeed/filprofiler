@@ -228,7 +228,7 @@ fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
       // Ensure the two string never get garbage collected;
       Py_INCREF(frame->f_code->co_filename);
       Py_INCREF(frame->f_code->co_name);
-      loc = malloc(sizeof(struct FunctionLocation));
+      loc = underlying_real_malloc(sizeof(struct FunctionLocation));
       loc->filename = PyUnicode_AsUTF8AndSize(frame->f_code->co_filename,
                                               &loc->filename_length);
       loc->function_name = PyUnicode_AsUTF8AndSize(frame->f_code->co_name,

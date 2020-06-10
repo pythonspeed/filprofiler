@@ -5,7 +5,7 @@ from tempfile import mkdtemp, NamedTemporaryFile
 from pathlib import Path
 from glob import glob
 import os
-from typing import Union
+import time
 
 from pampy import match, _ as ANY
 import pytest
@@ -187,7 +187,8 @@ def test_out_of_memory():
     written out.
     """
     script = Path("python-benchmarks") / "oom.py"
-    output_dir = profile(script, expect_exit_code=5)
+    output_dir = profile(script, expect_exit_code=5)  # -signal.SIGABRT)
+    time.sleep(10)  # wait for child process to finish
     allocations = get_allocations(
         output_dir,
         ["out-of-memory.svg", "out-of-memory-reversed.svg", "out-of-memory.prof",],
