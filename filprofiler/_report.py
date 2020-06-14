@@ -14,8 +14,7 @@ import sys
 from xml.sax.saxutils import escape
 
 
-LINE_REFERENCE = re.compile(r"TB@@([^:]+):(\d+)@@TB")
-SPACES = re.compile("^( *)(.*)")
+LINE_REFERENCE = re.compile(r"\<title\>TB@@([^:]+):(\d+)@@TB")
 
 
 def replace_code_references(string: str) -> str:
@@ -27,7 +26,7 @@ def replace_code_references(string: str) -> str:
     def replace_with_code(match):
         filename, line = match.group(1, 2)
         line = int(line)
-        return "&#160;&#160;&#160;&#160;" + escape(
+        return "<title>&#160;&#160;&#160;&#160;" + escape(
             linecache.getline(filename, line).strip()
         )
 

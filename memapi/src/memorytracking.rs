@@ -452,6 +452,9 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
         reverse_stack_order: reversed,
         color_diffusion: true,
         direction: flamegraph::Direction::Inverted,
+        // Maybe disable this some day, but for now it makes debugging much
+        // easier:
+        pretty_xml: true,
         ..Default::default()
     };
     if to_be_post_processed {
