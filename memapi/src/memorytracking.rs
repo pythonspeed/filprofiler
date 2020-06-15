@@ -33,7 +33,7 @@ impl FunctionLocation {
 }
 
 /// A Rust-y wrapper for FunctionLocation
-#[derive(Clone, Debug, PartialEq, Copy)]
+#[derive(Clone, Debug, PartialEq, Eq, Copy, Hash)]
 pub struct FunctionId {
     function: *const FunctionLocation,
 }
@@ -64,7 +64,7 @@ impl FunctionId {
 }
 
 /// A specific location: file + function + line number.
-#[derive(Clone, Debug, PartialEq, Copy)]
+#[derive(Clone, Debug, PartialEq, Eq, Copy, Hash)]
 struct CallSiteId {
     function: FunctionId,
     /// Line number within the _file_, 1-indexed.
@@ -82,7 +82,7 @@ impl CallSiteId {
 
 /// The current Python callstack. We use IDs instead of Function objects for
 /// performance reasons.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct Callstack {
     calls: Vec<CallSiteId>,
 }
@@ -203,13 +203,15 @@ impl<'a> AllocationTracker {
         allocations: &imhashmap::HashMap<usize, Allocation>,
         to_be_post_processed: bool,
     ) -> collections::HashMap<String, usize> {
-        let mut by_call: collections::HashMap<String, usize> = collections::HashMap::new();
+        let mut by_call: collections::HashMap<&Callstack, usize> = collections::HashMap::new();
         for Allocation { callstack, size } in allocations.values() {
-            let callstack = callstack.as_string(to_be_post_processed);
             let entry = by_call.entry(callstack).or_insert(0);
             *entry += size;
         }
         by_call
+            .iter()
+            .map(|(callstack, size)| (callstack.as_string(to_be_post_processed), *size))
+            .collect()
     }
 
     /// Dump all callstacks in peak memory usage to various files describing the
