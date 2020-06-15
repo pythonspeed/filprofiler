@@ -115,21 +115,23 @@ fil_new_line_number(uint16_t line_number) {
   }
 }
 
-__attribute__((visibility("default"))) void fil_reset() {
+__attribute__((visibility("default"))) void fil_reset(const char* default_path) {
   if (!will_i_be_reentrant) {
     will_i_be_reentrant = 1;
-    pymemprofile_reset();
+    pymemprofile_reset(default_path);
     will_i_be_reentrant = 0;
   }
 }
 
 __attribute__((visibility("default"))) void
 fil_dump_peak_to_flamegraph(const char *path) {
-  if (!will_i_be_reentrant) {
-    will_i_be_reentrant = 1;
-    pymemprofile_dump_peak_to_flamegraph(path);
-    will_i_be_reentrant = 0;
-  }
+  // This maybe called after we're done, when will_i_be_reentrant is permanently
+  // set to 1, or might be called mid-way through code run. Either way we want
+  // to prevent reentrant malloc() calls, but we want to run regardless.
+  int current_reentrant_status = will_i_be_reentrant;
+  will_i_be_reentrant = 1;
+  pymemprofile_dump_peak_to_flamegraph(path);
+  will_i_be_reentrant = current_reentrant_status;
 }
 
 __attribute__((visibility("hidden"))) void add_allocation(size_t address,
@@ -232,7 +234,7 @@ fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
       // Ensure the two string never get garbage collected;
       Py_INCREF(frame->f_code->co_filename);
       Py_INCREF(frame->f_code->co_name);
-      loc = malloc(sizeof(struct FunctionLocation));
+      loc = underlying_real_malloc(sizeof(struct FunctionLocation));
       loc->filename = PyUnicode_AsUTF8AndSize(frame->f_code->co_filename,
                                               &loc->filename_length);
       loc->function_name = PyUnicode_AsUTF8AndSize(frame->f_code->co_name,

@@ -1,3 +1,4 @@
+use core::ffi;
 use im::hashmap as imhashmap;
 use inferno::flamegraph;
 use itertools::Itertools;
@@ -91,6 +92,11 @@ impl Callstack {
         Callstack { calls: Vec::new() }
     }
 
+    /// Is this a Python call?
+    fn in_python(&self) -> bool {
+        !self.calls.is_empty()
+    }
+
     fn start_call(&mut self, parent_line_number: u16, callsite_id: CallSiteId) {
         if parent_line_number != 0 {
             if let Some(mut call) = self.calls.last_mut() {
@@ -110,19 +116,28 @@ impl Callstack {
         }
     }
 
-    fn as_string(&self) -> String {
+    fn as_string(&self, to_be_post_processed: bool) -> String {
         if self.calls.is_empty() {
             "[No Python stack]".to_string()
         } else {
             self.calls
                 .iter()
                 .map(|id| {
-                    format!(
-                        "{filename}:{line} ({function});TB@@{filename}:{line}@@TB",
-                        filename = id.function.get_filename(),
-                        line = id.line_number,
-                        function = id.function.get_function_name(),
-                    )
+                    if to_be_post_processed {
+                        format!(
+                            "{filename}:{line} ({function});TB@@{filename}:{line}@@TB",
+                            filename = id.function.get_filename(),
+                            line = id.line_number,
+                            function = id.function.get_function_name(),
+                        )
+                    } else {
+                        format!(
+                            "{filename}:{line} ({function})",
+                            filename = id.function.get_filename(),
+                            line = id.line_number,
+                            function = id.function.get_function_name()
+                        )
+                    }
                 })
                 .join(";")
         }
@@ -144,15 +159,21 @@ struct AllocationTracker {
     peak_allocations: imhashmap::HashMap<usize, Allocation>,
     current_allocated_bytes: usize,
     peak_allocated_bytes: usize,
+    // Some spare memory in case we run out:
+    spare_memory: Vec<u8>,
+    // Default directory to write out data lacking other info:
+    default_path: String,
 }
 
 impl<'a> AllocationTracker {
-    fn new() -> AllocationTracker {
+    fn new(default_path: String) -> AllocationTracker {
         AllocationTracker {
             current_allocations: imhashmap::HashMap::default(),
             peak_allocations: imhashmap::HashMap::default(),
             current_allocated_bytes: 0,
             peak_allocated_bytes: 0,
+            spare_memory: Vec::with_capacity(16 * 1024 * 1024),
+            default_path,
         }
     }
 
@@ -177,11 +198,14 @@ impl<'a> AllocationTracker {
 
     /// Combine Callstacks and make them human-readable. Duplicate callstacks
     /// have their allocated memory summed.
-    fn combine_callstacks(&self) -> collections::HashMap<String, usize> {
+    fn combine_callstacks(
+        &self,
+        allocations: &imhashmap::HashMap<usize, Allocation>,
+        to_be_post_processed: bool,
+    ) -> collections::HashMap<String, usize> {
         let mut by_call: collections::HashMap<String, usize> = collections::HashMap::new();
-        let peak_allocations = &self.peak_allocations;
-        for Allocation { callstack, size } in peak_allocations.values() {
-            let callstack = callstack.as_string();
+        for Allocation { callstack, size } in allocations.values() {
+            let callstack = callstack.as_string(to_be_post_processed);
             let entry = by_call.entry(callstack).or_insert(0);
             *entry += size;
         }
@@ -191,21 +215,39 @@ impl<'a> AllocationTracker {
     /// Dump all callstacks in peak memory usage to various files describing the
     /// memory usage.
     fn dump_peak_to_flamegraph(&self, path: &str) {
+        self.dump_to_flamegraph(
+            path,
+            &self.peak_allocations,
+            "peak-memory",
+            "Peak Tracked Memory Usage",
+            true,
+        );
+    }
+
+    fn dump_to_flamegraph(
+        &self,
+        path: &str,
+        allocations: &imhashmap::HashMap<usize, Allocation>,
+        base_filename: &str,
+        title: &str,
+        to_be_post_processed: bool,
+    ) {
         eprintln!("=fil-profile= Preparing to write to {}", path);
         let directory_path = Path::new(path);
+
         if !directory_path.exists() {
             fs::create_dir(directory_path)
                 .expect("=fil-profile= Couldn't create the output directory.");
         } else if !directory_path.is_dir() {
             panic!("=fil-profile= Output path must be a directory.");
         }
-        let by_call = self.combine_callstacks();
+        let by_call = self.combine_callstacks(allocations, to_be_post_processed);
         let lines: Vec<String> = by_call
             .iter()
             .map(|(callstack, size)| format!("{} {}", callstack, *size))
             .collect();
         let raw_path = directory_path
-            .join("peak-memory.prof")
+            .join(format!("{}.prof", base_filename))
             .to_str()
             .unwrap()
             .to_string();
@@ -213,7 +255,7 @@ impl<'a> AllocationTracker {
             eprintln!("=fil-profile= Error writing raw profiling data: {}", e);
         }
         let svg_path = directory_path
-            .join("peak-memory.svg")
+            .join(format!("{}.svg", base_filename))
             .to_str()
             .unwrap()
             .to_string();
@@ -222,6 +264,8 @@ impl<'a> AllocationTracker {
             &svg_path,
             self.peak_allocated_bytes,
             false,
+            title,
+            to_be_post_processed,
         ) {
             Ok(_) => {
                 eprintln!(
@@ -234,7 +278,7 @@ impl<'a> AllocationTracker {
             }
         }
         let svg_path = directory_path
-            .join("peak-memory-reversed.svg")
+            .join(format!("{}-reversed.svg", base_filename))
             .to_str()
             .unwrap()
             .to_string();
@@ -243,6 +287,8 @@ impl<'a> AllocationTracker {
             &svg_path,
             self.peak_allocated_bytes,
             true,
+            title,
+            to_be_post_processed,
         ) {
             Ok(_) => {
                 eprintln!(
@@ -255,10 +301,58 @@ impl<'a> AllocationTracker {
             }
         }
     }
+
+    /// Uh-oh, we just ran out of memory.
+    fn oom_break_glass(&mut self) {
+        // Get some emergency memory:
+        self.spare_memory.shrink_to_fit();
+        // fork()
+    }
+
+    /// Dump information about where we are.
+    fn oom_dump(&mut self) {
+        unsafe {
+            // We want to free memory, but that can corrupt other threads. So first,
+            // fork() to get rid of the threads.
+            eprintln!("=fil-profile= Out of memory. First, we'll try to fork() and exit parent.");
+            let pid = libc::fork();
+            if pid != 0 && pid != -1 {
+                // We successfully forked, and we're the parent. Just exit.
+                libc::_exit(5);
+            }
+
+            eprintln!("=fil-profile= Next, we'll free large memory allocations.");
+            // free() all the things, so we have memory to dump an SVG. These should
+            // only be _Python_ objects, Rust code shouldn't be tracked here since
+            // we prevent reentrancy. We're not going to return to Python so
+            // free()ing should be OK.
+            for (address, allocation) in self.current_allocations.iter() {
+                // Only clear large allocations that came out of a Python stack,
+                // to reduce chances of deallocating random important things.
+                if allocation.callstack.in_python() && allocation.size > 300000 {
+                    libc::free(*address as *mut ffi::c_void);
+                }
+            }
+        }
+        eprintln!(
+            "=fil-profile= And now, we'll dump out SVGs. Note that no HTML file will be written."
+        );
+        self.dump_to_flamegraph(
+            &self.default_path,
+            &self.current_allocations,
+            "out-of-memory",
+            "Current allocations at out-of-memory time",
+            false,
+        );
+        unsafe {
+            libc::_exit(5);
+        }
+    }
 }
 
 lazy_static! {
-    static ref ALLOCATIONS: Mutex<AllocationTracker> = Mutex::new(AllocationTracker::new());
+    static ref ALLOCATIONS: Mutex<AllocationTracker> =
+        Mutex::new(AllocationTracker::new("/tmp".to_string()));
 }
 
 /// Add to per-thread function stack:
@@ -286,12 +380,23 @@ pub fn new_line_number(line_number: u16) {
 
 /// Add a new allocation based off the current callstack.
 pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16) {
+    if address == 0 {
+        // Uh-oh, we're out of memory.
+        let allocations = &mut ALLOCATIONS.lock().unwrap();
+        allocations.oom_break_glass();
+    }
+
     let mut callstack: Callstack = THREAD_CALLSTACK.with(|cs| (*cs.borrow()).clone());
     if line_number != 0 && !callstack.calls.is_empty() {
         callstack.new_line_number(line_number);
     }
     let mut allocations = ALLOCATIONS.lock().unwrap();
     allocations.add_allocation(address, size, callstack);
+
+    if address == 0 {
+        // Uh-oh, we're out of memory.
+        allocations.oom_dump();
+    }
 }
 
 /// Free an existing allocation.
@@ -301,8 +406,8 @@ pub fn free_allocation(address: usize) {
 }
 
 /// Reset internal state.
-pub fn reset() {
-    *ALLOCATIONS.lock().unwrap() = AllocationTracker::new();
+pub fn reset(default_path: String) {
+    *ALLOCATIONS.lock().unwrap() = AllocationTracker::new(default_path);
 }
 
 /// Dump all callstacks in peak memory usage to format used by flamegraph.
@@ -328,10 +433,13 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
     path: &str,
     peak_bytes: usize,
     reversed: bool,
+    title: &str,
+    to_be_post_processed: bool,
 ) -> std::io::Result<()> {
     let mut file = std::fs::File::create(path)?;
     let title = format!(
-        "Peak Tracked Memory Usage{} ({:.1} MiB)",
+        "{}{} ({:.1} MiB)",
+        title,
         if reversed { ", Reversed" } else { "" },
         peak_bytes as f64 / (1024.0 * 1024.0)
     );
@@ -341,7 +449,6 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
         font_size: 16,
         font_type: "mono".to_string(),
         frame_height: 22,
-        subtitle: Some("SUBTITLE-HERE".to_string()),
         reverse_stack_order: reversed,
         color_diffusion: true,
         direction: flamegraph::Direction::Inverted,
@@ -350,6 +457,9 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
         pretty_xml: true,
         ..Default::default()
     };
+    if to_be_post_processed {
+        options.subtitle = Some("SUBTITLE-HERE".to_string());
+    }
     if let Err(e) = flamegraph::from_lines(&mut options, lines, &file) {
         Err(std::io::Error::new(
             std::io::ErrorKind::Other,
@@ -376,7 +486,7 @@ mod tests {
             // Allocations to free.
             free_indices in prop::collection::vec(any::<prop::sample::Index>(), 5..10)
         ) {
-            let mut tracker = AllocationTracker::new();
+            let mut tracker = AllocationTracker::new(".".to_string());
             for i in 0..allocated_sizes.len() {
                 tracker.add_allocation(i as usize,*allocated_sizes.get(i).unwrap(), Callstack::new());
             }
@@ -438,7 +548,7 @@ mod tests {
         let fid1 = FunctionId::new(&func1 as *const FunctionLocation);
         let fid3 = FunctionId::new(&func3 as *const FunctionLocation);
 
-        let mut tracker = AllocationTracker::new();
+        let mut tracker = AllocationTracker::new(".".to_string());
         let mut cs1 = Callstack::new();
         cs1.start_call(0, CallSiteId::new(fid1, 2));
         let mut cs2 = Callstack::new();
@@ -477,7 +587,7 @@ mod tests {
         let fid2 = FunctionId::new(&func2 as *const FunctionLocation);
         let fid3 = FunctionId::new(&func3 as *const FunctionLocation);
 
-        let mut tracker = AllocationTracker::new();
+        let mut tracker = AllocationTracker::new(".".to_string());
         let id1 = CallSiteId::new(fid1, 1);
         // Same function, different line number—should be different item:
         let id1_different = CallSiteId::new(fid1, 7);
@@ -508,6 +618,18 @@ mod tests {
             "a:7 (af);TB@@a:7@@TB;b:2 (bf);TB@@b:2@@TB".to_string(),
             6000,
         );
-        assert_eq!(expected, tracker.combine_callstacks());
+        assert_eq!(
+            expected,
+            tracker.combine_callstacks(&tracker.peak_allocations, true)
+        );
+
+        let mut expected2: collections::HashMap<String, usize> = collections::HashMap::new();
+        expected2.insert("a:1 (af);b:2 (bf)".to_string(), 51000);
+        expected2.insert("c:3 (cf)".to_string(), 234);
+        expected2.insert("a:7 (af);b:2 (bf)".to_string(), 6000);
+        assert_eq!(
+            expected2,
+            tracker.combine_callstacks(&tracker.peak_allocations, false)
+        );
     }
 }
