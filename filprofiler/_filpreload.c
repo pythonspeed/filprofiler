@@ -125,7 +125,13 @@ __attribute__((visibility("default"))) void fil_reset(const char* default_path) 
 
 __attribute__((visibility("default"))) void
 fil_dump_peak_to_flamegraph(const char *path) {
+  // This maybe called after we're done, when will_i_be_reentrant is permanently
+  // set to 1, or might be called mid-way through code run. Either way we want
+  // to prevent reentrant malloc() calls, but we want to run regardless.
+  int current_reentrant_status = will_i_be_reentrant;
+  will_i_be_reentrant = 1;
   pymemprofile_dump_peak_to_flamegraph(path);
+  will_i_be_reentrant = current_reentrant_status;
 }
 
 __attribute__((visibility("hidden"))) void add_allocation(size_t address,
