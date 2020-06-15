@@ -172,7 +172,7 @@ impl<'a> AllocationTracker {
             peak_allocations: imhashmap::HashMap::default(),
             current_allocated_bytes: 0,
             peak_allocated_bytes: 0,
-            spare_memory: Vec::with_capacity(256 * 1024),
+            spare_memory: Vec::with_capacity(16 * 1024 * 1024),
             default_path,
         }
     }
