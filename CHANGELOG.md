@@ -1,3 +1,12 @@
+# Fil 0.4.0 (2020-06-15)
+
+
+### Features
+
+- Fil now helps debug out-of-memory crashes by dumping memory usage at the time of the crash to an SVG. This feature is experimental. ([#48](https://gitlab.com/pythonspeed/filprofiler/-/issues/48))
+- Generating the report should run faster. ([#49](https://gitlab.com/pythonspeed/filprofiler/-/issues/49))
+
+
 # Fil 0.3.3 (2020-06-10)
 
 

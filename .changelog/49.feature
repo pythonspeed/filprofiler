@@ -1,1 +1,0 @@
-Generating the report should run faster.
