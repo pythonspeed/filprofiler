@@ -43,6 +43,7 @@ clean:
 	rm -f filprofiler/fil-python
 	rm -rf target
 	rm -rf filprofiler/*.so
+	rm -rf filprofiler/*.dylib
 	python setup.py clean
 
 .PHONY: licenses

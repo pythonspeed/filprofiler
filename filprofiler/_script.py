@@ -60,6 +60,7 @@ def stage_1():
     """Setup environment variables, re-execute this script."""
     # Load the library:
     environ["LD_PRELOAD"] = library_path("_filpreload")
+    environ["DYLD_INSERT_LIBRARIES"] = library_path("_filpreload")
     # Tracebacks when Rust crashes:
     environ["RUST_BACKTRACE"] = "1"
     # Route all allocations from Python through malloc() directly:

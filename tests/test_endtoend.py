@@ -179,6 +179,7 @@ print(subprocess.check_output(["env"]))
             ["fil-profile", "-o", mkdtemp(), "run", str(script_file.name)]
         )
         assert b"LD_PRELOAD" not in result
+        assert b"DYLD_INSERT_LIBRARIES" not in result
 
 
 def test_out_of_memory():

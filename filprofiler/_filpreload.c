@@ -70,6 +70,7 @@ static void __attribute__((constructor)) constructor() {
 
   initialized = 1;
   unsetenv("LD_PRELOAD");
+  unsetenv("DYLD_INSERT_LIBRARIES");
 }
 
 extern void *__libc_malloc(size_t size);
