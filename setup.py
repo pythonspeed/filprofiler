@@ -1,5 +1,12 @@
 from os.path import join
 from setuptools import setup, Extension
+from distutils import sysconfig
+
+
+if sys.platform == "darwin":
+    # Want a .dylib, not a .so:
+    vars = sysconfig.get_config_vars()
+    vars["LDSHARED"] = vars["LDSHARED"].replace("-bundle", "-dynamiclib")
 
 
 def read(path):
