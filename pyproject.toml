@@ -11,6 +11,6 @@ filename = 'CHANGELOG.md'
 directory = ".changelog"
 template = ".changelog/template.md"
 title_format = "# Fil {version} ({project_date})"
-issue_format = "[#{issue}](https://gitlab.com/pythonspeed/filprofiler/-/issues/{issue})"
+issue_format = "[#{issue}](https://github.com/pythonspeed/filprofiler/issues/{issue})"
 start_string = "<!-- TOWNCRIER -->\n"
 underlines = ["", "", ""]
