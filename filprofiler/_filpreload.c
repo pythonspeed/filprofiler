@@ -6,7 +6,6 @@
 #endif
 #include "frameobject.h"
 #include <dlfcn.h>
-#include <malloc.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/mman.h>
