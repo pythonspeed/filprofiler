@@ -24,9 +24,13 @@ jobs:
       - uses: "actions-rs/toolchain@v1"
         with:
           toolchain: stable
-      - name: "Install dependencies"
+      - name: "Install dependencies and code"
         run: |
           make venv
+          . venv/bin/activate
+          make
+          pip install -e .[dev]
       - name: "Run tests"
         run: |
+          . venv/bin/activate
           make test
