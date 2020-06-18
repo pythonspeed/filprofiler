@@ -1,6 +1,7 @@
 from os.path import join
 from setuptools import setup, Extension
 from distutils import sysconfig
+import sys
 
 
 if sys.platform == "darwin":
