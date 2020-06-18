@@ -54,6 +54,10 @@ $ fil-profile run oom.py
 =fil-profile= Wrote memory usage flamegraph to fil-result/2020-06-15T12:37:13.033/out-of-memory.svg
 ```
 
+## You've found where memory usage is coming from—now what?
+
+If you're using data processing or scientific computing libraries, I have written a relevant [guide to reducing memory usage](https://pythonspeed.com/datascience/).
+
 ## License
 
 Copyright 2020 Hyphenated Enterprises LLC
