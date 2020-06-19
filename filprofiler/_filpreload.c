@@ -10,6 +10,12 @@
 #include <stdio.h>
 #include <sys/mman.h>
 
+#ifdef __APPLE__
+#define SYMBOL_PREFIX(func) reimplemented_ ##func
+#else
+#define SYMBOL_PREFIX(func) func
+#endif
+
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
@@ -72,8 +78,6 @@ static void __attribute__((constructor)) constructor() {
   unsetenv("DYLD_INSERT_LIBRARIES");
 }
 
-extern void *__libc_malloc(size_t size);
-extern void *__libc_calloc(size_t nmemb, size_t size);
 extern void pymemprofile_start_call(uint16_t parent_line_number,
                                     struct FunctionLocation *loc,
                                     uint16_t line_number);
@@ -145,7 +149,7 @@ __attribute__((visibility("hidden"))) void add_allocation(size_t address,
 }
 
 // Override memory-allocation functions:
-__attribute__((visibility("default"))) void *malloc(size_t size) {
+__attribute__((visibility("default"))) void *SYMBOL_PREFIX(malloc)(size_t size) {
   if (unlikely(!initialized)) {
     return mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
                 -1, 0);
@@ -159,7 +163,7 @@ __attribute__((visibility("default"))) void *malloc(size_t size) {
   return result;
 }
 
-__attribute__((visibility("default"))) void *calloc(size_t nmemb, size_t size) {
+__attribute__((visibility("default"))) void *SYMBOL_PREFIX(calloc)(size_t nmemb, size_t size) {
   if (unlikely(!initialized)) {
     return mmap(NULL, nmemb * size, PROT_READ | PROT_WRITE,
                 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -174,7 +178,7 @@ __attribute__((visibility("default"))) void *calloc(size_t nmemb, size_t size) {
   return result;
 }
 
-__attribute__((visibility("default"))) void *realloc(void *addr, size_t size) {
+__attribute__((visibility("default"))) void *SYMBOL_PREFIX(realloc)(void *addr, size_t size) {
   if (unlikely(!initialized)) {
     fprintf(stderr, "BUG: We don't handle realloc() during initialization.\n");
     abort();
@@ -191,7 +195,7 @@ __attribute__((visibility("default"))) void *realloc(void *addr, size_t size) {
   return result;
 }
 
-__attribute__((visibility("default"))) void free(void *addr) {
+__attribute__((visibility("default"))) void SYMBOL_PREFIX(free)(void *addr) {
   if (unlikely(!initialized)) {
     // Well, we're going to leak a little memory, but, such is life...
     return;
@@ -203,6 +207,16 @@ __attribute__((visibility("default"))) void free(void *addr) {
     will_i_be_reentrant = 0;
   }
 }
+
+#ifdef __APPLE__
+#define DYLD_INTERPOSE(_replacement,_replacee)                          \
+  __attribute__((used)) static struct{ const void* replacement; const void* replacee; } _interpose_##_replacee \
+  __attribute__ ((section ("__DATA,__interpose"))) = { (const void*)(unsigned long)&_replacement, (const void*)(unsigned long)&_replacee };
+DYLD_INTERPOSE(SYMBOL_PREFIX(malloc), malloc)
+DYLD_INTERPOSE(SYMBOL_PREFIX(calloc), calloc)
+DYLD_INTERPOSE(SYMBOL_PREFIX(realloc), realloc)
+DYLD_INTERPOSE(SYMBOL_PREFIX(free), free)
+#endif
 
 // Call after Python gets going.
 __attribute__((visibility("default"))) void fil_initialize_from_python() {
