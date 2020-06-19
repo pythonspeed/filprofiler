@@ -31,10 +31,11 @@ static int initialized = 0;
 // ID of Python code object extra data:
 static Py_ssize_t extra_code_index = -1;
 
-static _Thread_local int will_i_be_reentrant = 0;
+static int will_i_be_reentrant = 0;
+
 
 // Current thread's Python state:
-static _Thread_local PyFrameObject *current_frame = NULL;
+static PyFrameObject *current_frame = NULL;
 
 // The file and function name responsible for an allocation.
 struct FunctionLocation {
@@ -152,8 +153,12 @@ __attribute__((visibility("hidden"))) void add_allocation(size_t address,
 // Override memory-allocation functions:
 __attribute__((visibility("default"))) void *SYMBOL_PREFIX(malloc)(size_t size) {
   if (unlikely(!initialized)) {
+    #ifdef __APPLE__
+    return malloc(size);
+    #else
     return mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
                 -1, 0);
+    #endif
   }
   void *result = underlying_real_malloc(size);
   if (!will_i_be_reentrant && initialized) {
@@ -166,8 +171,12 @@ __attribute__((visibility("default"))) void *SYMBOL_PREFIX(malloc)(size_t size) 
 
 __attribute__((visibility("default"))) void *SYMBOL_PREFIX(calloc)(size_t nmemb, size_t size) {
   if (unlikely(!initialized)) {
+    #ifdef __APPLE__
+    return calloc(nmemb, size);
+    #else
     return mmap(NULL, nmemb * size, PROT_READ | PROT_WRITE,
                 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    #endif
   }
   void *result = underlying_real_calloc(nmemb, size);
   size_t allocated = nmemb * size;
@@ -181,6 +190,9 @@ __attribute__((visibility("default"))) void *SYMBOL_PREFIX(calloc)(size_t nmemb,
 
 __attribute__((visibility("default"))) void *SYMBOL_PREFIX(realloc)(void *addr, size_t size) {
   if (unlikely(!initialized)) {
+    #ifdef __APPLE__
+    return realloc(addr, size);
+    #else
     void* result = mmap(NULL, size, PROT_READ | PROT_WRITE,
                         MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (addr != NULL) {
@@ -189,6 +201,7 @@ __attribute__((visibility("default"))) void *SYMBOL_PREFIX(realloc)(void *addr, 
       memcpy(result, addr, size);
     }
     return result;
+    #endif
   }
   void *result = underlying_real_realloc(addr, size);
   if (!will_i_be_reentrant && initialized) {
@@ -204,7 +217,11 @@ __attribute__((visibility("default"))) void *SYMBOL_PREFIX(realloc)(void *addr, 
 
 __attribute__((visibility("default"))) void SYMBOL_PREFIX(free)(void *addr) {
   if (unlikely(!initialized)) {
-    // Well, we're going to leak a little memory, but, such is life...
+    #ifdef __APPLE__
+    free(addr);
+    #else
+    // We're going to leak a little memory, but, such is life...
+    #endif
     return;
   }
   underlying_real_free(addr);
