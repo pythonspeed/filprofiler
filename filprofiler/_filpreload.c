@@ -77,11 +77,11 @@ static void __attribute__((constructor)) constructor() {
 
 // Calls that Rust will do to get filenames and the like:
 const char *fil_function_name_from_id(PyCodeObject *code_object) {
-  return PyUnicode_AsUTF8(code_object->co_filename);
+  return PyUnicode_AsUTF8(code_object->co_name);
 }
 
 const char *fil_file_name_from_id(PyCodeObject *code_object) {
-  return PyUnicode_AsUTF8(code_object->co_name);
+  return PyUnicode_AsUTF8(code_object->co_filename);
 }
 
 extern void pymemprofile_start_call(uint16_t parent_line_number,
@@ -230,7 +230,7 @@ fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
       We want an efficient identifier for filename+fuction name. So we use the
       code object pointer address.
     */
-    int seen = 0;
+    uint64_t seen = 0;
     assert(extra_code_index != -1);
     _PyCode_GetExtra((PyObject *)frame->f_code, extra_code_index,
                      (void **)&seen);
@@ -238,8 +238,9 @@ fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
       // Ensure the code object never gets garbage collected:
       Py_INCREF(frame->f_code);
       // Set marker indicating we've done that.
+      seen = 1;
       _PyCode_SetExtra((PyObject *)frame->f_code, extra_code_index,
-                       (void*)1);
+                       (void*)seen);
     }
     start_call(frame->f_code, frame->f_lineno);
     break;

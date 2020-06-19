@@ -13,7 +13,7 @@ use std::path::Path;
 use std::sync::Mutex;
 
 /// A Rust-y wrapper for a PyCodeObject*, passed in as a usize.
-#[derive(Clone, Debug, PartialEq, Copy)]
+#[derive(Clone, Debug, PartialEq, Eq, Copy, Hash)]
 pub struct FunctionId {
     function_id: usize,
 }
@@ -465,7 +465,6 @@ mod tests {
     use itertools::Itertools;
     use proptest::prelude::*;
     use std::collections;
-    use std::ffi::CString;
     use std::os::raw::c_char;
 
     proptest! {
