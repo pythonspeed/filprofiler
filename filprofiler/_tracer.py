@@ -8,11 +8,10 @@ import sys
 import threading
 import webbrowser
 
-from ._utils import timestamp_now
+from ._utils import timestamp_now, library_path
 from ._report import render_report
 
-# None effectively means RTLD_NEXT, it seems.
-preload = PyDLL(None)
+preload = PyDLL(library_path("_filpreload"))
 preload.fil_initialize_from_python()
 
 

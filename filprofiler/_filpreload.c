@@ -32,6 +32,7 @@ static int initialized = 0;
 static Py_ssize_t extra_code_index = -1;
 
 static _Thread_local int will_i_be_reentrant = 0;
+
 // Current thread's Python state:
 static _Thread_local PyFrameObject *current_frame = NULL;
 
@@ -75,7 +76,7 @@ static void __attribute__((constructor)) constructor() {
 
   initialized = 1;
   unsetenv("LD_PRELOAD");
-  unsetenv("DYLD_INSERT_LIBRARIES");
+  //unsetenv("DYLD_INSERT_LIBRARIES");
 }
 
 extern void pymemprofile_start_call(uint16_t parent_line_number,
