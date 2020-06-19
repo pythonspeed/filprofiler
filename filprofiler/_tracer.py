@@ -8,6 +8,7 @@ import sys
 import threading
 import webbrowser
 
+from ._utils import timestamp_now
 from ._report import render_report
 
 # None effectively means RTLD_NEXT, it seems.
@@ -15,8 +16,9 @@ preload = PyDLL(None)
 preload.fil_initialize_from_python()
 
 
-def start_tracing():
-    preload.fil_reset()
+def start_tracing(output_path: str):
+    path = os.path.join(output_path, timestamp_now()).encode("utf-8")
+    preload.fil_reset(path)
     threading.setprofile(_start_thread_trace)
     preload.register_fil_tracer()
 
@@ -37,8 +39,8 @@ def _start_thread_trace(frame, event, arg):
 def stop_tracing(output_path: str):
     sys.setprofile(None)
     threading.setprofile(None)
-    create_report(output_path)
     preload.fil_shutting_down()
+    create_report(output_path)
 
 
 def create_report(output_path: str):
@@ -66,5 +68,5 @@ def trace(code, globals_, output_path: str):
     # Use atexit rather than try/finally so threads that live beyond main
     # thread also get profiled:
     atexit.register(stop_tracing, output_path)
-    start_tracing()
+    start_tracing(output_path)
     exec(code, globals_, None)

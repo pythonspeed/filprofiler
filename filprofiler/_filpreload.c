@@ -17,6 +17,7 @@
 // Underlying APIs we're wrapping:
 static void *(*underlying_real_malloc)(size_t length) = 0;
 static void *(*underlying_real_calloc)(size_t nmemb, size_t length) = 0;
+static void *(*underlying_real_realloc)(void *addr, size_t length) = 0;
 static void (*underlying_real_free)(void *addr) = 0;
 
 // Note whether we've been initialized yet or not:
@@ -57,6 +58,11 @@ static void __attribute__((constructor)) constructor() {
   underlying_real_calloc = dlsym(RTLD_NEXT, "calloc");
   if (!underlying_real_calloc) {
     fprintf(stderr, "Couldn't load calloc(): %s\n", dlerror());
+    exit(1);
+  }
+  underlying_real_realloc = dlsym(RTLD_NEXT, "realloc");
+  if (!underlying_real_realloc) {
+    fprintf(stderr, "Couldn't load realloc(): %s\n", dlerror());
     exit(1);
   }
   underlying_real_free = dlsym(RTLD_NEXT, "free");
@@ -119,21 +125,23 @@ fil_new_line_number(uint16_t line_number) {
   }
 }
 
-__attribute__((visibility("default"))) void fil_reset() {
+__attribute__((visibility("default"))) void fil_reset(const char* default_path) {
   if (!will_i_be_reentrant) {
     will_i_be_reentrant = 1;
-    pymemprofile_reset();
+    pymemprofile_reset(default_path);
     will_i_be_reentrant = 0;
   }
 }
 
 __attribute__((visibility("default"))) void
 fil_dump_peak_to_flamegraph(const char *path) {
-  if (!will_i_be_reentrant) {
-    will_i_be_reentrant = 1;
-    pymemprofile_dump_peak_to_flamegraph(path);
-    will_i_be_reentrant = 0;
-  }
+  // This maybe called after we're done, when will_i_be_reentrant is permanently
+  // set to 1, or might be called mid-way through code run. Either way we want
+  // to prevent reentrant malloc() calls, but we want to run regardless.
+  int current_reentrant_status = will_i_be_reentrant;
+  will_i_be_reentrant = 1;
+  pymemprofile_dump_peak_to_flamegraph(path);
+  will_i_be_reentrant = current_reentrant_status;
 }
 
 __attribute__((visibility("hidden"))) void add_allocation(size_t address,
@@ -171,6 +179,23 @@ __attribute__((visibility("default"))) void *calloc(size_t nmemb, size_t size) {
   if (!will_i_be_reentrant && initialized) {
     will_i_be_reentrant = 1;
     add_allocation((size_t)result, allocated);
+    will_i_be_reentrant = 0;
+  }
+  return result;
+}
+
+__attribute__((visibility("default"))) void *realloc(void *addr, size_t size) {
+  if (unlikely(!initialized)) {
+    fprintf(stderr, "BUG: We don't handle realloc() during initialization.\n");
+    abort();
+  }
+  void *result = underlying_real_realloc(addr, size);
+  if (!will_i_be_reentrant && initialized) {
+    will_i_be_reentrant = 1;
+    // Sometimes you'll get same address, so if we did remove first and then
+    // added, it would remove the entry erroneously.
+    pymemprofile_free_allocation((size_t)addr);
+    add_allocation((size_t)result, size);
     will_i_be_reentrant = 0;
   }
   return result;

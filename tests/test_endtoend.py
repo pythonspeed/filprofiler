@@ -1,19 +1,32 @@
 """End-to-end tests."""
 
-from subprocess import check_call, check_output
+from subprocess import check_call, check_output, CalledProcessError
 from tempfile import mkdtemp, NamedTemporaryFile
 from pathlib import Path
 from glob import glob
-from typing import Union
+import os
+import time
 
 from pampy import match, _ as ANY
 import pytest
 
 
-def get_allocations(output_directory: Path):
+def get_allocations(
+    output_directory: Path,
+    expected_files=[
+        "peak-memory.svg",
+        "peak-memory-reversed.svg",
+        "index.html",
+        "peak-memory.prof",
+    ],
+    prof_file="peak-memory.prof",
+):
     """Parses peak-memory.prof, returns mapping from callstack to size in KiB."""
+    assert sorted(os.listdir(glob(str(output_directory / "*"))[0])) == sorted(
+        expected_files
+    )
     result = {}
-    with open(glob(str(output_directory / "*" / "peak-memory.prof"))[0]) as f:
+    with open(glob(str(output_directory / "*" / prof_file))[0]) as f:
         for line in f:
             *calls, size_kb = line.split(" ")
             calls = " ".join(calls)
@@ -37,10 +50,18 @@ def get_allocations(output_directory: Path):
     return result
 
 
-def profile(*arguments: str, **kwargs) -> Path:
+def profile(*arguments: str, expect_exit_code=0, **kwargs) -> Path:
     """Run fil-profile on given script, return path to output directory."""
     output = Path(mkdtemp())
-    check_call(["fil-profile", "-o", str(output), "run"] + list(arguments), **kwargs)
+    try:
+        check_call(
+            ["fil-profile", "-o", str(output), "run"] + list(arguments), **kwargs
+        )
+        exit_code = 0
+    except CalledProcessError as e:
+        exit_code = e.returncode
+    assert exit_code == expect_exit_code
+
     return output
 
 
@@ -119,9 +140,10 @@ def test_malloc_in_c_extension():
     allocations = get_allocations(output_dir)
 
     script = str(script)
-    path = ((script, "<module>", 16), (script, "main", 13))
+    path = ((script, "<module>", 21), (script, "main", 17))
 
-    assert match(allocations, {path: big}, as_mb) == pytest.approx(70, 0.1)
+    # The realloc() in the scripts adds 10 to the 70:
+    assert match(allocations, {path: big}, as_mb) == pytest.approx(70 + 10, 0.1)
 
 
 def test_minus_m():
@@ -134,9 +156,11 @@ def test_minus_m():
     allocations = get_allocations(output_dir)
     stripped_allocations = {k[3:]: v for (k, v) in allocations.items()}
     script = str(script)
-    path = ((script, "<module>", 16), (script, "main", 13))
+    path = ((script, "<module>", 21), (script, "main", 17))
 
-    assert match(stripped_allocations, {path: big}, as_mb) == pytest.approx(50, 0.1)
+    assert match(stripped_allocations, {path: big}, as_mb) == pytest.approx(
+        50 + 10, 0.1
+    )
 
 
 def test_ld_preload_disabled_for_subprocesses():
@@ -155,3 +179,33 @@ print(subprocess.check_output(["env"]))
             ["fil-profile", "-o", mkdtemp(), "run", str(script_file.name)]
         )
         assert b"LD_PRELOAD" not in result
+
+
+def test_out_of_memory():
+    """
+    If an allocation is run that runs out of memory, current allocations are
+    written out.
+    """
+    script = Path("python-benchmarks") / "oom.py"
+    output_dir = profile(script, expect_exit_code=5)  # -signal.SIGABRT)
+    time.sleep(10)  # wait for child process to finish
+    allocations = get_allocations(
+        output_dir,
+        ["out-of-memory.svg", "out-of-memory-reversed.svg", "out-of-memory.prof",],
+        "out-of-memory.prof",
+    )
+
+    import threading
+    import numpy.core.numeric
+
+    ones = (numpy.core.numeric.__file__, "ones", ANY)
+    script = str(script)
+    expected_small_alloc = ((script, "<module>", 9), ones)
+    toobig_alloc = ((script, "<module>", 14), ones)
+
+    assert match(allocations, {expected_small_alloc: big}, as_mb) == pytest.approx(
+        100, 0.1
+    )
+    assert match(allocations, {toobig_alloc: big}, as_mb) == pytest.approx(
+        1024 * 1024 * 1024, 0.1
+    )
