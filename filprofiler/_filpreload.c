@@ -180,8 +180,14 @@ __attribute__((visibility("default"))) void *SYMBOL_PREFIX(calloc)(size_t nmemb,
 
 __attribute__((visibility("default"))) void *SYMBOL_PREFIX(realloc)(void *addr, size_t size) {
   if (unlikely(!initialized)) {
-    fprintf(stderr, "BUG: We don't handle realloc() during initialization.\n");
-    abort();
+    void* result = mmap(NULL, size, PROT_READ | PROT_WRITE,
+                        MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (addr != NULL) {
+      // Why someone should realloc() with null pointer I don't know.
+      // But they sometimes do.
+      memcpy(result, addr, size);
+    }
+    return result;
   }
   void *result = underlying_real_realloc(addr, size);
   if (!will_i_be_reentrant && initialized) {
