@@ -31,11 +31,37 @@ static int initialized = 0;
 // ID of Python code object extra data:
 static Py_ssize_t extra_code_index = -1;
 
-static int will_i_be_reentrant = 0;
+#ifdef __APPLE__
+static pthread_key_t will_i_be_reentrant;
+static pthread_once_t will_i_be_reentrant_once = PTHREAD_ONCE_INIT;
 
+static void make_pthread_key()
+{
+  pthread_key_create(&will_i_be_reentrant, (void*)0);
+}
+
+uint64_t inline am_i_reentrant() {
+  (void) pthread_once(&will_i_be_reentrant_once, make_pthread_key);
+  return (int) pthread_getspecific(will_i_be_reentrant);
+}
+
+void inline set_will_i_be_reentrant(uint64_t i) {
+  pthread_setspecific(will_i_be_reentrant, (void*)i);
+}
+#else
+static _Thread_local int will_i_be_reentrant = 0;
+
+int inline am_i_reentrant() {
+  return will_i_be_reentrant;
+}
+
+void inline set_will_i_be_reentrant(int i) {
+  will_i_be_reentrant = i;
+}
+#endif
 
 // Current thread's Python state:
-static PyFrameObject *current_frame = NULL;
+static _Thread_local PyFrameObject *current_frame = NULL;
 
 // The file and function name responsible for an allocation.
 struct FunctionLocation {
@@ -92,40 +118,40 @@ extern void pymemprofile_add_allocation(size_t address, size_t length,
 extern void pymemprofile_free_allocation(size_t address);
 
 void start_call(struct FunctionLocation *loc, uint16_t line_number) {
-  if (!will_i_be_reentrant) {
-    will_i_be_reentrant = 1;
+  if (!am_i_reentrant()) {
+    set_will_i_be_reentrant(1);
     uint16_t parent_line_number = 0;
     if (current_frame != NULL && current_frame->f_back != NULL) {
       PyFrameObject *f = current_frame->f_back;
       parent_line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
     }
     pymemprofile_start_call(parent_line_number, loc, line_number);
-    will_i_be_reentrant = 0;
+    set_will_i_be_reentrant(0);
   }
 }
 
 void finish_call() {
-  if (!will_i_be_reentrant) {
-    will_i_be_reentrant = 1;
+  if (!am_i_reentrant()) {
+    set_will_i_be_reentrant(1);
     pymemprofile_finish_call();
-    will_i_be_reentrant = 0;
+    set_will_i_be_reentrant(0);
   }
 }
 
 __attribute__((visibility("default"))) void
 fil_new_line_number(uint16_t line_number) {
-  if (!will_i_be_reentrant) {
-    will_i_be_reentrant = 1;
+  if (!am_i_reentrant()) {
+    set_will_i_be_reentrant(1);
     pymemprofile_new_line_number(line_number);
-    will_i_be_reentrant = 0;
+    set_will_i_be_reentrant(0);
   }
 }
 
 __attribute__((visibility("default"))) void fil_reset(const char* default_path) {
-  if (!will_i_be_reentrant) {
-    will_i_be_reentrant = 1;
+  if (!am_i_reentrant()) {
+    set_will_i_be_reentrant(1);
     pymemprofile_reset(default_path);
-    will_i_be_reentrant = 0;
+    set_will_i_be_reentrant(0);
   }
 }
 
@@ -134,8 +160,8 @@ fil_dump_peak_to_flamegraph(const char *path) {
   // This maybe called after we're done, when will_i_be_reentrant is permanently
   // set to 1, or might be called mid-way through code run. Either way we want
   // to prevent reentrant malloc() calls, but we want to run regardless.
-  int current_reentrant_status = will_i_be_reentrant;
-  will_i_be_reentrant = 1;
+  int current_reentrant_status = am_i_reentrant();
+  set_will_i_be_reentrant(1);
   pymemprofile_dump_peak_to_flamegraph(path);
   will_i_be_reentrant = current_reentrant_status;
 }
@@ -161,10 +187,10 @@ __attribute__((visibility("default"))) void *SYMBOL_PREFIX(malloc)(size_t size) 
     #endif
   }
   void *result = underlying_real_malloc(size);
-  if (!will_i_be_reentrant && initialized) {
-    will_i_be_reentrant = 1;
+  if (!am_i_reentrant() && initialized) {
+    set_will_i_be_reentrant(1);
     add_allocation((size_t)result, size);
-    will_i_be_reentrant = 0;
+    set_will_i_be_reentrant(0);
   }
   return result;
 }
@@ -180,10 +206,10 @@ __attribute__((visibility("default"))) void *SYMBOL_PREFIX(calloc)(size_t nmemb,
   }
   void *result = underlying_real_calloc(nmemb, size);
   size_t allocated = nmemb * size;
-  if (!will_i_be_reentrant && initialized) {
-    will_i_be_reentrant = 1;
+  if (!am_i_reentrant() && initialized) {
+    set_will_i_be_reentrant(1);
     add_allocation((size_t)result, allocated);
-    will_i_be_reentrant = 0;
+    set_will_i_be_reentrant(0);
   }
   return result;
 }
@@ -204,13 +230,13 @@ __attribute__((visibility("default"))) void *SYMBOL_PREFIX(realloc)(void *addr, 
     #endif
   }
   void *result = underlying_real_realloc(addr, size);
-  if (!will_i_be_reentrant && initialized) {
-    will_i_be_reentrant = 1;
+  if (!am_i_reentrant() && initialized) {
+    set_will_i_be_reentrant(1);
     // Sometimes you'll get same address, so if we did remove first and then
     // added, it would remove the entry erroneously.
     pymemprofile_free_allocation((size_t)addr);
     add_allocation((size_t)result, size);
-    will_i_be_reentrant = 0;
+    set_will_i_be_reentrant(0);
   }
   return result;
 }
@@ -225,10 +251,10 @@ __attribute__((visibility("default"))) void SYMBOL_PREFIX(free)(void *addr) {
     return;
   }
   underlying_real_free(addr);
-  if (!will_i_be_reentrant) {
-    will_i_be_reentrant = 1;
+  if (!am_i_reentrant()) {
+    set_will_i_be_reentrant(1);
     pymemprofile_free_allocation((size_t)addr);
-    will_i_be_reentrant = 0;
+    set_will_i_be_reentrant(0);
   }
 }
 
@@ -299,5 +325,5 @@ __attribute__((visibility("default"))) void register_fil_tracer() {
 
 __attribute__((visibility("default"))) void fil_shutting_down() {
   // We're shutting down, so things like PyCode_Addr2Line won't work:
-  will_i_be_reentrant = 1;
+  set_will_i_be_reentrant(1);
 }

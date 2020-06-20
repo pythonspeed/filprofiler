@@ -10,7 +10,4 @@ def test_library_path():
     """The library is found and has the right suffix."""
     path = library_path("_filpreload")
     assert os.path.exists(path)
-    if sys.platform == "darwin":
-        assert path.endswith(".dylib")
-    else:
-        assert path.endswith(".so")
+    assert path.endswith(".so")
