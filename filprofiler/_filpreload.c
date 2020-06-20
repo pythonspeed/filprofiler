@@ -32,6 +32,7 @@ static int initialized = 0;
 static Py_ssize_t extra_code_index = -1;
 
 #ifdef __APPLE__
+#include <pthread.h>
 static pthread_key_t will_i_be_reentrant;
 static pthread_once_t will_i_be_reentrant_once = PTHREAD_ONCE_INIT;
 
