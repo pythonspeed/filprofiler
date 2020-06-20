@@ -50,7 +50,7 @@ def create_report(output_path: str):
 
     print("=fil-profile= Wrote HTML report to " + index_path, file=sys.stderr)
     try:
-        webbrowser.open(index_path)
+        webbrowser.open("file://" + os.path.abspath(index_path))
     except webbrowser.Error:
         print(
             "=fil-profile= Failed to open browser. You can find the new run at:",
