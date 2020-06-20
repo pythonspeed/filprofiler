@@ -104,6 +104,7 @@ static void __attribute__((constructor)) constructor() {
 
   initialized = 1;
   unsetenv("LD_PRELOAD");
+  // This seems to break things... revisit at some point.
   //unsetenv("DYLD_INSERT_LIBRARIES");
 }
 
