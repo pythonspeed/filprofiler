@@ -19,6 +19,9 @@ jobs:
 
     steps:
       - uses: "actions/checkout@v2"
+        with:
+          # We need tags to get the correct code version:
+          fetch-depth: 0
       - uses: "actions/setup-python@v1"
         with:
           python-version: "${{ matrix.python-version }}"
@@ -38,11 +41,38 @@ jobs:
           . venv/bin/activate
           make test
       - name: "Build wheel"
+        if: startsWith(matrix.os, 'mac')
         run: |
             set -euo pipefail
             . venv/bin/activate
             make wheel
+      - name: "Build manylinux wheel"
+        if: startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.8')
+        run: |
+            set -euo pipefail
+            . venv/bin/activate
+            make manylinux-wheel
       - uses: actions/upload-artifact@v2
         with:
           name: "${{ matrix.os }}-${{ matrix.python-version }}-wheel"
           path: dist/*.whl
+      # - name: Publish distribution 📦 to Test PyPI
+      #   if: (startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.8')) || startsWith(matrix.os, 'mac')
+      #   env:
+      #     TWINE_USERNAME: __token__
+      #     TWINE_PASSWORD: ${{ secrets.TEST_PYPI_TOKEN }}
+      #   run: |
+      #       set -euo pipefail
+      #       . venv/bin/activate
+      #       twine check dist/*.whl
+      #       twine upload --repository testpypi dist/*.whl
+      - name: Publish distribution 📦 to PyPI
+        if: startsWith(github.event.ref, 'refs/tags') && ((startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.8')) || startsWith(matrix.os, 'mac'))
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: |
+            set -euo pipefail
+            . venv/bin/activate
+            twine check dist/*.whl
+            twine upload --repository pypi dist/*.whl
