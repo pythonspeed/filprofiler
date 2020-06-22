@@ -1,11 +1,12 @@
 """End-to-end tests."""
 
-from subprocess import check_call, check_output, CalledProcessError
+from subprocess import check_call, check_output, CalledProcessError, run, PIPE
 from tempfile import mkdtemp, NamedTemporaryFile
 from pathlib import Path
 from glob import glob
 import os
 import time
+import sys
 
 from pampy import match, _ as ANY
 import pytest
@@ -179,6 +180,8 @@ print(subprocess.check_output(["env"]))
             ["fil-profile", "-o", mkdtemp(), "run", str(script_file.name)]
         )
         assert b"LD_PRELOAD" not in result
+        # Not actually done at the moment, though perhaps it should be:
+        # assert b"DYLD_INSERT_LIBRARIES" not in result
 
 
 def test_out_of_memory():
@@ -187,7 +190,7 @@ def test_out_of_memory():
     written out.
     """
     script = Path("python-benchmarks") / "oom.py"
-    output_dir = profile(script, expect_exit_code=5)  # -signal.SIGABRT)
+    output_dir = profile(script, expect_exit_code=5)
     time.sleep(10)  # wait for child process to finish
     allocations = get_allocations(
         output_dir,
@@ -209,3 +212,34 @@ def test_out_of_memory():
     assert match(allocations, {toobig_alloc: big}, as_mb) == pytest.approx(
         1024 * 1024 * 1024, 0.1
     )
+
+
+def test_external_behavior():
+    """
+    1. Stdout and stderr from the code is printed normally.
+    2. Fil only adds stderr lines prefixed with =fil-profile=
+    3. A browser is launched with file:// URL pointing to an HTML file.
+    """
+    script = Path("python-benchmarks") / "printer.py"
+    env = os.environ.copy()
+    f = NamedTemporaryFile("r+")
+    # A custom "browser" that just writes the URL to a file:
+    env["BROWSER"] = "{} %s {}".format(
+        Path("python-benchmarks") / "write-to-file.py", f.name
+    )
+    output_dir = Path(mkdtemp())
+    result = run(
+        ["fil-profile", "-o", str(output_dir), "run", str(script)],
+        env=env,
+        stdout=PIPE,
+        stderr=PIPE,
+        check=True,
+        encoding=sys.getdefaultencoding(),
+    )
+    assert result.stdout == "Hello, world.\n"
+    for line in result.stderr.splitlines():
+        assert line.startswith("=fil-profile= ")
+    url = f.read()
+    assert url.startswith("file://")
+    assert url.endswith(".html")
+    assert os.path.exists(url[len("file://") :])

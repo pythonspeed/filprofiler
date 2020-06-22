@@ -36,6 +36,10 @@ docker-image:
 
 .PHONY: wheel
 wheel:
+	python setup.py bdist_wheel
+
+.PHONY: manylinux-wheel
+manylinux-wheel:
 	docker run -u $(shell id -u):$(shell id -g) -v $(PWD):/src manylinux-rust /src/wheels/build-wheels.sh
 
 .PHONY: clean
@@ -43,9 +47,11 @@ clean:
 	rm -f filprofiler/fil-python
 	rm -rf target
 	rm -rf filprofiler/*.so
+	rm -rf filprofiler/*.dylib
 	python setup.py clean
 
 .PHONY: licenses
 licenses:
 	cd memapi && cargo lichking check
-	cd memapi && cargo lichking bundle --file ../filprofiler/licenses.txt
+	cd memapi && cargo lichking bundle --file ../filprofiler/licenses.txt || true
+	cat extra-licenses/APSL.txt >> filprofiler/licenses.txt

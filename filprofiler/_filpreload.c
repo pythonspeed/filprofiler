@@ -6,15 +6,20 @@
 #endif
 #include "frameobject.h"
 #include <dlfcn.h>
-#include <malloc.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/mman.h>
 
+#ifdef __APPLE__
+#define SYMBOL_PREFIX(func) reimplemented_##func
+#else
+#define SYMBOL_PREFIX(func) func
+#endif
+
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
-// Underlying APIs we're wrapping:
+// Underlying APIs we're wrapping; not used on macOS:
 static void *(*underlying_real_malloc)(size_t length) = 0;
 static void *(*underlying_real_calloc)(size_t nmemb, size_t length) = 0;
 static void *(*underlying_real_realloc)(void *addr, size_t length) = 0;
@@ -26,7 +31,32 @@ static int initialized = 0;
 // ID of Python code object extra data:
 static Py_ssize_t extra_code_index = -1;
 
+#ifdef __APPLE__
+#include <pthread.h>
+#include "interpose.h"
+static pthread_key_t will_i_be_reentrant;
+static pthread_once_t will_i_be_reentrant_once = PTHREAD_ONCE_INIT;
+
+static void make_pthread_key() {
+  pthread_key_create(&will_i_be_reentrant, (void *)0);
+}
+
+static inline uint64_t am_i_reentrant() {
+  (void)pthread_once(&will_i_be_reentrant_once, make_pthread_key);
+  return (int)pthread_getspecific(will_i_be_reentrant);
+}
+
+static inline void set_will_i_be_reentrant(uint64_t i) {
+  pthread_setspecific(will_i_be_reentrant, (void *)i);
+}
+#else
 static _Thread_local int will_i_be_reentrant = 0;
+
+static inline int am_i_reentrant() { return will_i_be_reentrant; }
+
+static inline void set_will_i_be_reentrant(int i) { will_i_be_reentrant = i; }
+#endif
+
 // Current thread's Python state:
 static _Thread_local PyFrameObject *current_frame = NULL;
 
@@ -70,10 +100,10 @@ static void __attribute__((constructor)) constructor() {
 
   initialized = 1;
   unsetenv("LD_PRELOAD");
+  // This seems to break things... revisit at some point.
+  // unsetenv("DYLD_INSERT_LIBRARIES");
 }
 
-extern void *__libc_malloc(size_t size);
-extern void *__libc_calloc(size_t nmemb, size_t size);
 extern void pymemprofile_start_call(uint16_t parent_line_number,
                                     struct FunctionLocation *loc,
                                     uint16_t line_number);
@@ -86,40 +116,41 @@ extern void pymemprofile_add_allocation(size_t address, size_t length,
 extern void pymemprofile_free_allocation(size_t address);
 
 void start_call(struct FunctionLocation *loc, uint16_t line_number) {
-  if (!will_i_be_reentrant) {
-    will_i_be_reentrant = 1;
+  if (!am_i_reentrant()) {
+    set_will_i_be_reentrant(1);
     uint16_t parent_line_number = 0;
     if (current_frame != NULL && current_frame->f_back != NULL) {
       PyFrameObject *f = current_frame->f_back;
       parent_line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
     }
     pymemprofile_start_call(parent_line_number, loc, line_number);
-    will_i_be_reentrant = 0;
+    set_will_i_be_reentrant(0);
   }
 }
 
 void finish_call() {
-  if (!will_i_be_reentrant) {
-    will_i_be_reentrant = 1;
+  if (!am_i_reentrant()) {
+    set_will_i_be_reentrant(1);
     pymemprofile_finish_call();
-    will_i_be_reentrant = 0;
+    set_will_i_be_reentrant(0);
   }
 }
 
 __attribute__((visibility("default"))) void
 fil_new_line_number(uint16_t line_number) {
-  if (!will_i_be_reentrant) {
-    will_i_be_reentrant = 1;
+  if (!am_i_reentrant()) {
+    set_will_i_be_reentrant(1);
     pymemprofile_new_line_number(line_number);
-    will_i_be_reentrant = 0;
+    set_will_i_be_reentrant(0);
   }
 }
 
-__attribute__((visibility("default"))) void fil_reset(const char* default_path) {
-  if (!will_i_be_reentrant) {
-    will_i_be_reentrant = 1;
+__attribute__((visibility("default"))) void
+fil_reset(const char *default_path) {
+  if (!am_i_reentrant()) {
+    set_will_i_be_reentrant(1);
     pymemprofile_reset(default_path);
-    will_i_be_reentrant = 0;
+    set_will_i_be_reentrant(0);
   }
 }
 
@@ -128,10 +159,10 @@ fil_dump_peak_to_flamegraph(const char *path) {
   // This maybe called after we're done, when will_i_be_reentrant is permanently
   // set to 1, or might be called mid-way through code run. Either way we want
   // to prevent reentrant malloc() calls, but we want to run regardless.
-  int current_reentrant_status = will_i_be_reentrant;
-  will_i_be_reentrant = 1;
+  int current_reentrant_status = am_i_reentrant();
+  set_will_i_be_reentrant(1);
   pymemprofile_dump_peak_to_flamegraph(path);
-  will_i_be_reentrant = current_reentrant_status;
+  set_will_i_be_reentrant(current_reentrant_status);
 }
 
 __attribute__((visibility("hidden"))) void add_allocation(size_t address,
@@ -145,64 +176,96 @@ __attribute__((visibility("hidden"))) void add_allocation(size_t address,
 }
 
 // Override memory-allocation functions:
-__attribute__((visibility("default"))) void *malloc(size_t size) {
+__attribute__((visibility("default"))) void *
+SYMBOL_PREFIX(malloc)(size_t size) {
   if (unlikely(!initialized)) {
+#ifdef __APPLE__
+    return malloc(size);
+#else
     return mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
                 -1, 0);
+#endif
   }
   void *result = underlying_real_malloc(size);
-  if (!will_i_be_reentrant && initialized) {
-    will_i_be_reentrant = 1;
+  if (!am_i_reentrant() && initialized) {
+    set_will_i_be_reentrant(1);
     add_allocation((size_t)result, size);
-    will_i_be_reentrant = 0;
+    set_will_i_be_reentrant(0);
   }
   return result;
 }
 
-__attribute__((visibility("default"))) void *calloc(size_t nmemb, size_t size) {
+__attribute__((visibility("default"))) void *
+SYMBOL_PREFIX(calloc)(size_t nmemb, size_t size) {
   if (unlikely(!initialized)) {
+#ifdef __APPLE__
+    return calloc(nmemb, size);
+#else
     return mmap(NULL, nmemb * size, PROT_READ | PROT_WRITE,
                 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+#endif
   }
   void *result = underlying_real_calloc(nmemb, size);
   size_t allocated = nmemb * size;
-  if (!will_i_be_reentrant && initialized) {
-    will_i_be_reentrant = 1;
+  if (!am_i_reentrant() && initialized) {
+    set_will_i_be_reentrant(1);
     add_allocation((size_t)result, allocated);
-    will_i_be_reentrant = 0;
+    set_will_i_be_reentrant(0);
   }
   return result;
 }
 
-__attribute__((visibility("default"))) void *realloc(void *addr, size_t size) {
+__attribute__((visibility("default"))) void *
+SYMBOL_PREFIX(realloc)(void *addr, size_t size) {
   if (unlikely(!initialized)) {
-    fprintf(stderr, "BUG: We don't handle realloc() during initialization.\n");
-    abort();
+#ifdef __APPLE__
+    return realloc(addr, size);
+#else
+    void *result = mmap(NULL, size, PROT_READ | PROT_WRITE,
+                        MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (addr != NULL) {
+      // Why someone should realloc() with null pointer I don't know.
+      // But they sometimes do.
+      memcpy(result, addr, size);
+    }
+    return result;
+#endif
   }
   void *result = underlying_real_realloc(addr, size);
-  if (!will_i_be_reentrant && initialized) {
-    will_i_be_reentrant = 1;
+  if (!am_i_reentrant() && initialized) {
+    set_will_i_be_reentrant(1);
     // Sometimes you'll get same address, so if we did remove first and then
     // added, it would remove the entry erroneously.
     pymemprofile_free_allocation((size_t)addr);
     add_allocation((size_t)result, size);
-    will_i_be_reentrant = 0;
+    set_will_i_be_reentrant(0);
   }
   return result;
 }
 
-__attribute__((visibility("default"))) void free(void *addr) {
+__attribute__((visibility("default"))) void SYMBOL_PREFIX(free)(void *addr) {
   if (unlikely(!initialized)) {
-    // Well, we're going to leak a little memory, but, such is life...
+#ifdef __APPLE__
+    free(addr);
+#else
+// We're going to leak a little memory, but, such is life...
+#endif
     return;
   }
   underlying_real_free(addr);
-  if (!will_i_be_reentrant) {
-    will_i_be_reentrant = 1;
+  if (!am_i_reentrant()) {
+    set_will_i_be_reentrant(1);
     pymemprofile_free_allocation((size_t)addr);
-    will_i_be_reentrant = 0;
+    set_will_i_be_reentrant(0);
   }
 }
+
+#ifdef __APPLE__
+DYLD_INTERPOSE(SYMBOL_PREFIX(malloc), malloc)
+DYLD_INTERPOSE(SYMBOL_PREFIX(calloc), calloc)
+DYLD_INTERPOSE(SYMBOL_PREFIX(realloc), realloc)
+DYLD_INTERPOSE(SYMBOL_PREFIX(free), free)
+#endif
 
 // Call after Python gets going.
 __attribute__((visibility("default"))) void fil_initialize_from_python() {
@@ -261,5 +324,5 @@ __attribute__((visibility("default"))) void register_fil_tracer() {
 
 __attribute__((visibility("default"))) void fil_shutting_down() {
   // We're shutting down, so things like PyCode_Addr2Line won't work:
-  will_i_be_reentrant = 1;
+  set_will_i_be_reentrant(1);
 }
