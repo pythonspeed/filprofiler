@@ -11,7 +11,7 @@
 #include <sys/mman.h>
 
 #ifdef __APPLE__
-#define SYMBOL_PREFIX(func) reimplemented_ ##func
+#define SYMBOL_PREFIX(func) reimplemented_##func
 #else
 #define SYMBOL_PREFIX(func) func
 #endif
@@ -36,29 +36,24 @@ static Py_ssize_t extra_code_index = -1;
 static pthread_key_t will_i_be_reentrant;
 static pthread_once_t will_i_be_reentrant_once = PTHREAD_ONCE_INIT;
 
-static void make_pthread_key()
-{
-  pthread_key_create(&will_i_be_reentrant, (void*)0);
+static void make_pthread_key() {
+  pthread_key_create(&will_i_be_reentrant, (void *)0);
 }
 
-uint64_t inline am_i_reentrant() {
-  (void) pthread_once(&will_i_be_reentrant_once, make_pthread_key);
-  return (int) pthread_getspecific(will_i_be_reentrant);
+static inline uint64_t am_i_reentrant() {
+  (void)pthread_once(&will_i_be_reentrant_once, make_pthread_key);
+  return (int)pthread_getspecific(will_i_be_reentrant);
 }
 
-void inline set_will_i_be_reentrant(uint64_t i) {
-  pthread_setspecific(will_i_be_reentrant, (void*)i);
+static inline void set_will_i_be_reentrant(uint64_t i) {
+  pthread_setspecific(will_i_be_reentrant, (void *)i);
 }
 #else
 static _Thread_local int will_i_be_reentrant = 0;
 
-int inline am_i_reentrant() {
-  return will_i_be_reentrant;
-}
+static inline int am_i_reentrant() { return will_i_be_reentrant; }
 
-void inline set_will_i_be_reentrant(int i) {
-  will_i_be_reentrant = i;
-}
+static inline void set_will_i_be_reentrant(int i) { will_i_be_reentrant = i; }
 #endif
 
 // Current thread's Python state:
@@ -105,7 +100,7 @@ static void __attribute__((constructor)) constructor() {
   initialized = 1;
   unsetenv("LD_PRELOAD");
   // This seems to break things... revisit at some point.
-  //unsetenv("DYLD_INSERT_LIBRARIES");
+  // unsetenv("DYLD_INSERT_LIBRARIES");
 }
 
 extern void pymemprofile_start_call(uint16_t parent_line_number,
@@ -149,7 +144,8 @@ fil_new_line_number(uint16_t line_number) {
   }
 }
 
-__attribute__((visibility("default"))) void fil_reset(const char* default_path) {
+__attribute__((visibility("default"))) void
+fil_reset(const char *default_path) {
   if (!am_i_reentrant()) {
     set_will_i_be_reentrant(1);
     pymemprofile_reset(default_path);
@@ -179,14 +175,15 @@ __attribute__((visibility("hidden"))) void add_allocation(size_t address,
 }
 
 // Override memory-allocation functions:
-__attribute__((visibility("default"))) void *SYMBOL_PREFIX(malloc)(size_t size) {
+__attribute__((visibility("default"))) void *
+SYMBOL_PREFIX(malloc)(size_t size) {
   if (unlikely(!initialized)) {
-    #ifdef __APPLE__
+#ifdef __APPLE__
     return malloc(size);
-    #else
+#else
     return mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
                 -1, 0);
-    #endif
+#endif
   }
   void *result = underlying_real_malloc(size);
   if (!am_i_reentrant() && initialized) {
@@ -197,14 +194,15 @@ __attribute__((visibility("default"))) void *SYMBOL_PREFIX(malloc)(size_t size) 
   return result;
 }
 
-__attribute__((visibility("default"))) void *SYMBOL_PREFIX(calloc)(size_t nmemb, size_t size) {
+__attribute__((visibility("default"))) void *
+SYMBOL_PREFIX(calloc)(size_t nmemb, size_t size) {
   if (unlikely(!initialized)) {
-    #ifdef __APPLE__
+#ifdef __APPLE__
     return calloc(nmemb, size);
-    #else
+#else
     return mmap(NULL, nmemb * size, PROT_READ | PROT_WRITE,
                 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    #endif
+#endif
   }
   void *result = underlying_real_calloc(nmemb, size);
   size_t allocated = nmemb * size;
@@ -216,12 +214,13 @@ __attribute__((visibility("default"))) void *SYMBOL_PREFIX(calloc)(size_t nmemb,
   return result;
 }
 
-__attribute__((visibility("default"))) void *SYMBOL_PREFIX(realloc)(void *addr, size_t size) {
+__attribute__((visibility("default"))) void *
+SYMBOL_PREFIX(realloc)(void *addr, size_t size) {
   if (unlikely(!initialized)) {
-    #ifdef __APPLE__
+#ifdef __APPLE__
     return realloc(addr, size);
-    #else
-    void* result = mmap(NULL, size, PROT_READ | PROT_WRITE,
+#else
+    void *result = mmap(NULL, size, PROT_READ | PROT_WRITE,
                         MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (addr != NULL) {
       // Why someone should realloc() with null pointer I don't know.
@@ -229,7 +228,7 @@ __attribute__((visibility("default"))) void *SYMBOL_PREFIX(realloc)(void *addr, 
       memcpy(result, addr, size);
     }
     return result;
-    #endif
+#endif
   }
   void *result = underlying_real_realloc(addr, size);
   if (!am_i_reentrant() && initialized) {
@@ -245,11 +244,11 @@ __attribute__((visibility("default"))) void *SYMBOL_PREFIX(realloc)(void *addr, 
 
 __attribute__((visibility("default"))) void SYMBOL_PREFIX(free)(void *addr) {
   if (unlikely(!initialized)) {
-    #ifdef __APPLE__
+#ifdef __APPLE__
     free(addr);
-    #else
-    // We're going to leak a little memory, but, such is life...
-    #endif
+#else
+// We're going to leak a little memory, but, such is life...
+#endif
     return;
   }
   underlying_real_free(addr);
@@ -261,9 +260,13 @@ __attribute__((visibility("default"))) void SYMBOL_PREFIX(free)(void *addr) {
 }
 
 #ifdef __APPLE__
-#define DYLD_INTERPOSE(_replacement,_replacee)                          \
-  __attribute__((used)) static struct{ const void* replacement; const void* replacee; } _interpose_##_replacee \
-  __attribute__ ((section ("__DATA,__interpose"))) = { (const void*)(unsigned long)&_replacement, (const void*)(unsigned long)&_replacee };
+#define DYLD_INTERPOSE(_replacement, _replacee)                                \
+  __attribute__((used)) static struct {                                        \
+    const void *replacement;                                                   \
+    const void *replacee;                                                      \
+  } _interpose_##_replacee __attribute__((section("__DATA,__interpose"))) = {  \
+      (const void *)(unsigned long)&_replacement,                              \
+      (const void *)(unsigned long)&_replacee};
 DYLD_INTERPOSE(SYMBOL_PREFIX(malloc), malloc)
 DYLD_INTERPOSE(SYMBOL_PREFIX(calloc), calloc)
 DYLD_INTERPOSE(SYMBOL_PREFIX(realloc), realloc)
