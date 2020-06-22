@@ -19,7 +19,7 @@
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
-// Underlying APIs we're wrapping:
+// Underlying APIs we're wrapping; not used on macOS:
 static void *(*underlying_real_malloc)(size_t length) = 0;
 static void *(*underlying_real_calloc)(size_t nmemb, size_t length) = 0;
 static void *(*underlying_real_realloc)(void *addr, size_t length) = 0;
