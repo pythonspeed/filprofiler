@@ -40,6 +40,7 @@ jobs:
       - name: "Build wheel"
         run: |
             set -euo pipefail
+            . venv/bin/activate
             make wheel
       - uses: actions/upload-artifact@v2
         with:
