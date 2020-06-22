@@ -49,6 +49,7 @@ jobs:
         if: startsWith(matrix.os, 'ubuntu')
         run: |
             set -euo pipefail
+            . venv/bin/activate
             mkdir dist/orig
             mv dist/*.whl dist/orig/
             auditwheel repair --plat manylinux1_x86_64 -w dist/ dist/orig/*.whl
@@ -57,13 +58,21 @@ jobs:
           name: "${{ matrix.os }}-${{ matrix.python-version }}-wheel"
           path: dist/*.whl
       - name: Publish distribution 📦 to Test PyPI
-        uses: pypa/gh-action-pypi-publish@master
-        with:
-          password: ${{ secrets.TEST_PYPI_TOKEN }}
-          repository_url: https://test.pypi.org/legacy/
+        env:
+          TWINE_USER: __token__
+          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_TOKEN }}
+        run: |
+            set -euo pipefail
+            . venv/bin/activate
+            twine check dist/*.whl
+            twine upload --repository testpypi dist/*.whl
       - name: Publish distribution 📦 to PyPI
         if: startsWith(github.event.ref, 'refs/tags')
-        uses: pypa/gh-action-pypi-publish@master
-        with:
-          password: ${{ secrets.PYPI_TOKEN }}
-
+        env:
+          TWINE_USER: __token__
+          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_TOKEN }}
+        run: |
+            set -euo pipefail
+            . venv/bin/activate
+            twine check dist/*.whl
+            twine upload --repository pypi dist/*.whl
