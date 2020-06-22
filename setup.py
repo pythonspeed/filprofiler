@@ -40,6 +40,7 @@ setup(
             "cython",
             "black",
             "towncrier==19.9.0rc1",
+            "wheel",
         ],
     },
     description="A memory profiler for data batch processing applications.",

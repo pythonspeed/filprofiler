@@ -27,11 +27,21 @@ jobs:
           toolchain: stable
       - name: "Install dependencies and code"
         run: |
+          set -euo pipefail
           make venv
           . venv/bin/activate
           make
           pip install -e .[dev]
       - name: "Run tests"
         run: |
+          set -euo pipefail
           . venv/bin/activate
           make test
+      - name: "Build wheel"
+        run: |
+            set -euo pipefail
+            make wheel
+      - uses: actions/upload-artifact@v2
+        with:
+          name: "${{ matrix.os }}-${{ matrix.python-version }}-wheel"
+          path: dist/*.whl
