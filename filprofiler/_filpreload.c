@@ -33,6 +33,7 @@ static Py_ssize_t extra_code_index = -1;
 
 #ifdef __APPLE__
 #include <pthread.h>
+#include "interpose.h"
 static pthread_key_t will_i_be_reentrant;
 static pthread_once_t will_i_be_reentrant_once = PTHREAD_ONCE_INIT;
 
@@ -161,7 +162,7 @@ fil_dump_peak_to_flamegraph(const char *path) {
   int current_reentrant_status = am_i_reentrant();
   set_will_i_be_reentrant(1);
   pymemprofile_dump_peak_to_flamegraph(path);
-  will_i_be_reentrant = current_reentrant_status;
+  set_will_i_be_reentrant(current_reentrant_status);
 }
 
 __attribute__((visibility("hidden"))) void add_allocation(size_t address,
@@ -260,13 +261,6 @@ __attribute__((visibility("default"))) void SYMBOL_PREFIX(free)(void *addr) {
 }
 
 #ifdef __APPLE__
-#define DYLD_INTERPOSE(_replacement, _replacee)                                \
-  __attribute__((used)) static struct {                                        \
-    const void *replacement;                                                   \
-    const void *replacee;                                                      \
-  } _interpose_##_replacee __attribute__((section("__DATA,__interpose"))) = {  \
-      (const void *)(unsigned long)&_replacement,                              \
-      (const void *)(unsigned long)&_replacee};
 DYLD_INTERPOSE(SYMBOL_PREFIX(malloc), malloc)
 DYLD_INTERPOSE(SYMBOL_PREFIX(calloc), calloc)
 DYLD_INTERPOSE(SYMBOL_PREFIX(realloc), realloc)

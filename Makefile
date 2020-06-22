@@ -53,4 +53,5 @@ clean:
 .PHONY: licenses
 licenses:
 	cd memapi && cargo lichking check
-	cd memapi && cargo lichking bundle --file ../filprofiler/licenses.txt
+	cd memapi && cargo lichking bundle --file ../filprofiler/licenses.txt || true
+	cat extra-licenses/APSL.txt >> filprofiler/licenses.txt
