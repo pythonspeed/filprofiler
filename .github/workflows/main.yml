@@ -43,6 +43,13 @@ jobs:
             set -euo pipefail
             . venv/bin/activate
             make wheel
+      - name: "Convert to manylinux wheel"
+        if: startsWith(matrix.os, "ubuntu")
+        run: |
+            set -euo pipefail
+            mkdir dist/orig
+            mv dist/*.whl dist/orig/
+            auditwheel repair --plat manylinux1_x86_64 -w dist/ dist/orig/*.whl
       - uses: actions/upload-artifact@v2
         with:
           name: "${{ matrix.os }}-${{ matrix.python-version }}-wheel"
