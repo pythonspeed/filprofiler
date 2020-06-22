@@ -243,3 +243,14 @@ def test_external_behavior():
     assert url.startswith("file://")
     assert url.endswith(".html")
     assert os.path.exists(url[len("file://") :])
+
+
+def test_no_args():
+    """
+    Running fil-profile with no arguments gives same result as --help.
+    """
+    no_args = run(["fil-profile"], stdout=PIPE, stderr=PIPE)
+    with_help = run(["fil-profile", "--help"], stdout=PIPE, stderr=PIPE)
+    assert no_args.returncode == with_help.returncode
+    assert no_args.stdout == with_help.stdout
+    assert no_args.stderr == with_help.stderr

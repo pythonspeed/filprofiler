@@ -100,19 +100,16 @@ subparsers = PARSER.add_subparsers(help="sub-command help")
 parser_run = subparsers.add_parser(
     "run", help="Run a Python script or package", prefix_chars=[""], add_help=False,
 )
-# parser_run.add_argument(
-#     "-m",
-#     dest="module",
-#     action="store",
-#     help="Profile a module, equivalent to running with 'python -m <module>'",
-#     default="",
-# )
 parser_run.add_argument("rest", nargs=REMAINDER)
 del subparsers, parser_run
 
 
 def stage_2():
-    """Main CLI interface. Presumes LD_PRELOAD etc. has been set by stage_1()."""
+    """Main CLI interface.22 Presumes LD_PRELOAD etc. has been set by stage_1()."""
+    if len(sys.argv) == 1:
+        PARSER.print_help()
+        sys.exit(0)
+
     arguments = PARSER.parse_args()
     if arguments.license:
         print(LICENSE)
