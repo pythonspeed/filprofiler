@@ -1,7 +1,7 @@
 # The Fil memory profiler for Python
 
 Fil a memory profiler designed for data processing applications.
-At the moment it only runs on Linux.
+At the moment it only runs on Linux and macOS.
 
 Your code reads some data, processes it, and—uses too much memory.
 What you need to reduce is _peak_ memory usage.
