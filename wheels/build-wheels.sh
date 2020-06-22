@@ -5,7 +5,6 @@ mkdir /tmp/wheel
 export HOME=/tmp/home
 cd /src
 mkdir -p dist
-make target/release/libpymemprofile_api.a
 
 
 rm -f filprofiler/_filpreload.o
