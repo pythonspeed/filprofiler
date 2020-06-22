@@ -59,7 +59,7 @@ jobs:
       - name: Publish distribution 📦 to Test PyPI
         if: (startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.8')) || startsWith(matrix.os, 'mac')
         env:
-          TWINE_USER: __token__
+          TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.TEST_PYPI_TOKEN }}
         run: |
             set -euo pipefail
@@ -69,7 +69,7 @@ jobs:
       - name: Publish distribution 📦 to PyPI
         if: startsWith(github.event.ref, 'refs/tags') && ((startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.8')) || startsWith(matrix.os, 'mac'))
         env:
-          TWINE_USER: __token__
+          TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
         run: |
             set -euo pipefail
