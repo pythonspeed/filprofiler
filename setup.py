@@ -41,7 +41,7 @@ setup(
             "black",
             "towncrier==19.9.0rc1",
             "wheel",
-            "audithwheel",
+            "auditwheel",
         ],
     },
     description="A memory profiler for data batch processing applications.",
