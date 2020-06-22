@@ -13,14 +13,14 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.6", "3.7", "3.8"]
-        # We use old Ubuntu to try to get more compatible wheels:
-        os: ["ubuntu-16.04", "macos-latest"]
+        os: ["ubuntu-latest", "macos-latest"]
 
     runs-on: "${{ matrix.os }}"
 
     steps:
       - uses: "actions/checkout@v2"
         with:
+          # We need tags to get the correct code version:
           fetch-depth: 0
       - uses: "actions/setup-python@v1"
         with:
