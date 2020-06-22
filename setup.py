@@ -5,9 +5,9 @@ import sys
 
 
 if sys.platform == "darwin":
-    # Want a .dylib, not a .so:
-    vars = sysconfig.get_config_vars()
-    vars["LDSHARED"] = vars["LDSHARED"].replace("-bundle", "-dynamiclib")
+    # Want a dynamiclib so that it can inserted with DYLD_INSERT_LIBRARIES:
+    config_vars = sysconfig.get_config_vars()
+    config_vars["LDSHARED"] = config_vars["LDSHARED"].replace("-bundle", "-dynamiclib")
 
 
 def read(path):
