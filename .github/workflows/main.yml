@@ -13,7 +13,8 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.6", "3.7", "3.8"]
-        os: ["ubuntu-latest", "macos-latest"]
+        # We use old Ubuntu to try to get more compatible wheels:
+        os: ["ubuntu-16.04", "macos-latest"]
 
     runs-on: "${{ matrix.os }}"
 
@@ -46,3 +47,14 @@ jobs:
         with:
           name: "${{ matrix.os }}-${{ matrix.python-version }}-wheel"
           path: dist/*.whl
+      - name: Publish distribution 📦 to Test PyPI
+        uses: pypa/gh-action-pypi-publish@master
+        with:
+          password: ${{ secrets.TEST_PYPI_TOKEN }}
+          repository_url: https://test.pypi.org/legacy/
+      - name: Publish distribution 📦 to PyPI
+        if: startsWith(github.event.ref, 'refs/tags')
+        uses: pypa/gh-action-pypi-publish@master
+        with:
+          password: ${{ secrets.PYPI_TOKEN }}
+
