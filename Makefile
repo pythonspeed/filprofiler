@@ -34,8 +34,8 @@ test-python: build
 docker-image:
 	docker build -t manylinux-rust -f wheels/Dockerfile.build .
 
-.PHONY: wheel
-wheel:
+.PHONY: manylinux-wheel
+manylinux-wheel:
 	docker run -u $(shell id -u):$(shell id -g) -v $(PWD):/src manylinux-rust /src/wheels/build-wheels.sh
 
 .PHONY: clean
