@@ -44,7 +44,7 @@ jobs:
             . venv/bin/activate
             make wheel
       - name: "Convert to manylinux wheel"
-        if: startsWith(matrix.os, "ubuntu")
+        if: startsWith(matrix.os, 'ubuntu')
         run: |
             set -euo pipefail
             mkdir dist/orig
