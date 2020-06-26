@@ -155,8 +155,14 @@ struct Allocation {
 
 /// The main data structure tracsking everything.
 struct AllocationTracker {
+    // malloc()/calloc():
     current_allocations: imhashmap::HashMap<usize, Allocation>,
     peak_allocations: imhashmap::HashMap<usize, Allocation>,
+    // anonymous mmap(), i.e. not file backed:
+    current_anon_mmaps: imhashmap::HashMap<usize, Allocation>,
+    peak_anon_mmaps: imhashmap::HashMap<usize, Allocation>,
+
+    // Both malloc() and mmap():
     current_allocated_bytes: usize,
     peak_allocated_bytes: usize,
     // Some spare memory in case we run out:
@@ -170,6 +176,8 @@ impl<'a> AllocationTracker {
         AllocationTracker {
             current_allocations: imhashmap::HashMap::default(),
             peak_allocations: imhashmap::HashMap::default(),
+            current_anon_mmaps: imhashmap::HashMap::default(),
+            peak_anon_mmaps: imhashmap::HashMap::default(),
             current_allocated_bytes: 0,
             peak_allocated_bytes: 0,
             spare_memory: Vec::with_capacity(16 * 1024 * 1024),

@@ -266,11 +266,18 @@ __attribute__((visibility("default"))) void SYMBOL_PREFIX(free)(void *addr) {
   }
 }
 
+void *mmap(void *addr, size_t length, int prot, int flags,
+           int fd, off_t offset);
+int munmap(void *addr, size_t length);
+
+
 #ifdef __APPLE__
 DYLD_INTERPOSE(SYMBOL_PREFIX(malloc), malloc)
 DYLD_INTERPOSE(SYMBOL_PREFIX(calloc), calloc)
 DYLD_INTERPOSE(SYMBOL_PREFIX(realloc), realloc)
 DYLD_INTERPOSE(SYMBOL_PREFIX(free), free)
+DYLD_INTERPOSE(SYMBOL_PREFIX(mmap), mmap)
+DYLD_INTERPOSE(SYMBOL_PREFIX(munmap), munmap)
 #endif
 
 // Call after Python gets going.
