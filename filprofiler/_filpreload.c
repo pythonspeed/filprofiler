@@ -19,7 +19,8 @@
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
-// Underlying APIs we're wrapping; not used on macOS:
+// Underlying APIs we're wrapping; not used on macOS except by accident (but
+// still available):
 static void *(*underlying_real_malloc)(size_t length) = 0;
 static void *(*underlying_real_calloc)(size_t nmemb, size_t length) = 0;
 static void *(*underlying_real_realloc)(void *addr, size_t length) = 0;
@@ -32,8 +33,8 @@ static int initialized = 0;
 static Py_ssize_t extra_code_index = -1;
 
 #ifdef __APPLE__
-#include <pthread.h>
 #include "interpose.h"
+#include <pthread.h>
 static pthread_key_t will_i_be_reentrant;
 static pthread_once_t will_i_be_reentrant_once = PTHREAD_ONCE_INIT;
 
@@ -50,6 +51,7 @@ static inline void set_will_i_be_reentrant(uint64_t i) {
   pthread_setspecific(will_i_be_reentrant, (void *)i);
 }
 #else
+#include <sys/syscall.h>
 static _Thread_local int will_i_be_reentrant = 0;
 
 static inline int am_i_reentrant() { return will_i_be_reentrant; }
@@ -165,8 +167,7 @@ fil_dump_peak_to_flamegraph(const char *path) {
   set_will_i_be_reentrant(current_reentrant_status);
 }
 
-__attribute__((visibility("hidden"))) void add_allocation(size_t address,
-                                                          size_t size) {
+static void add_allocation(size_t address, size_t size) {
   uint16_t line_number = 0;
   PyFrameObject *f = current_frame;
   if (f != NULL) {
@@ -175,16 +176,27 @@ __attribute__((visibility("hidden"))) void add_allocation(size_t address,
   pymemprofile_add_allocation(address, size, line_number);
 }
 
+// On Linux, before the shared library is initialized it's not possible to call
+// malloc() and friends, because the function pointers haven't been loaded with
+// dlsym(). So we need a fallback. On macOS we can just use the function
+// directly, because we're not publishing our own malloc() symbol so we don't
+// get infinite recursion, we can just call the original function.
+static void *malloc_fallback(size_t size) {
+#ifdef __APPLE__
+  return malloc(size);
+#else
+  // We can't use mmap() libc call, because we override it, so use the syscall
+  // directly:
+  return (void *)syscall(SYS_mmap, NULL, size, PROT_READ | PROT_WRITE,
+                         MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+#endif
+}
+
 // Override memory-allocation functions:
 __attribute__((visibility("default"))) void *
 SYMBOL_PREFIX(malloc)(size_t size) {
   if (unlikely(!initialized)) {
-#ifdef __APPLE__
-    return malloc(size);
-#else
-    return mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
-                -1, 0);
-#endif
+    return malloc_fallback(size);
   }
   void *result = underlying_real_malloc(size);
   if (!am_i_reentrant() && initialized) {
@@ -198,12 +210,7 @@ SYMBOL_PREFIX(malloc)(size_t size) {
 __attribute__((visibility("default"))) void *
 SYMBOL_PREFIX(calloc)(size_t nmemb, size_t size) {
   if (unlikely(!initialized)) {
-#ifdef __APPLE__
-    return calloc(nmemb, size);
-#else
-    return mmap(NULL, nmemb * size, PROT_READ | PROT_WRITE,
-                MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-#endif
+    return malloc_fallback(nmemb * size);
   }
   void *result = underlying_real_calloc(nmemb, size);
   size_t allocated = nmemb * size;
@@ -221,8 +228,7 @@ SYMBOL_PREFIX(realloc)(void *addr, size_t size) {
 #ifdef __APPLE__
     return realloc(addr, size);
 #else
-    void *result = mmap(NULL, size, PROT_READ | PROT_WRITE,
-                        MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    void *result = malloc_fallback(size);
     if (addr != NULL) {
       // Why someone should realloc() with null pointer I don't know.
       // But they sometimes do.
