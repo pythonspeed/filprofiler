@@ -411,7 +411,7 @@ pub fn new_line_number(line_number: u16) {
 }
 
 /// Add a new allocation based off the current callstack.
-pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16) {
+pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_mmap: bool) {
     if address == 0 {
         // Uh-oh, we're out of memory.
         let allocations = &mut ALLOCATIONS.lock().unwrap();
@@ -423,8 +423,11 @@ pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16) {
         callstack.new_line_number(line_number);
     }
     let mut allocations = ALLOCATIONS.lock().unwrap();
-    allocations.add_allocation(address, size, callstack);
-
+    if is_mmap {
+        allocations.add_anon_mmap(address, size, callstack);
+    } else {
+        allocations.add_allocation(address, size, callstack);
+    }
     if address == 0 {
         // Uh-oh, we're out of memory.
         allocations.oom_dump();
@@ -432,9 +435,13 @@ pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16) {
 }
 
 /// Free an existing allocation.
-pub fn free_allocation(address: usize) {
+pub fn free_allocation(address: usize, is_mmap: bool) {
     let mut allocations = ALLOCATIONS.lock().unwrap();
-    allocations.free_allocation(address);
+    if is_mmap {
+        allocations.free_anon_mmap(address);
+    } else {
+        allocations.free_allocation(address);
+    }
 }
 
 /// Reset internal state.

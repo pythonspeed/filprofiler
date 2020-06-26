@@ -26,7 +26,7 @@ static void *(*underlying_real_realloc)(void *addr, size_t length) = 0;
 static void (*underlying_real_free)(void *addr) = 0;
 static void *(*underlying_real_mmap)(void *addr, size_t length, int prot,
                                      int flags, int fd, off_t offset) = 0;
-static void (*underlying_real_munmap)(void *addr, size_t length) = 0;
+static int (*underlying_real_munmap)(void *addr, size_t length) = 0;
 
 // Note whether we've been initialized yet or not:
 static int initialized = 0;
@@ -106,7 +106,7 @@ static void __attribute__((constructor)) constructor() {
     fprintf(stderr, "Couldn't load mmap(): %s\n", dlerror());
     exit(1);
   }
-  underlying_real_mmap = dlsym(RTLD_NEXT, "munmap");
+  underlying_real_munmap = dlsym(RTLD_NEXT, "munmap");
   if (!underlying_real_munmap) {
     fprintf(stderr, "Couldn't load munmap(): %s\n", dlerror());
     exit(1);
@@ -118,6 +118,7 @@ static void __attribute__((constructor)) constructor() {
   // unsetenv("DYLD_INSERT_LIBRARIES");
 }
 
+// Implemented in the Rust library:
 extern void pymemprofile_start_call(uint16_t parent_line_number,
                                     struct FunctionLocation *loc,
                                     uint16_t line_number);
@@ -128,6 +129,9 @@ extern void pymemprofile_dump_peak_to_flamegraph(const char *path);
 extern void pymemprofile_add_allocation(size_t address, size_t length,
                                         uint16_t line_number);
 extern void pymemprofile_free_allocation(size_t address);
+extern void pymemprofile_add_anon_mmap(size_t address, size_t length,
+                                       uint16_t line_number);
+extern void pymemprofile_free_anon_mmap(size_t address);
 
 void start_call(struct FunctionLocation *loc, uint16_t line_number) {
   if (!am_i_reentrant()) {
@@ -294,9 +298,8 @@ SYMBOL_PREFIX(mmap)(void *addr, size_t length, int prot, int flags, int fd,
 #ifdef __APPLE__
     return mmap(addr, length, prot, flags, fd, offset);
 #else
-    return syscall(SYS_mmap, addr, length, prot, flags, fd, offset);
+    return (void*) syscall(SYS_mmap, addr, length, prot, flags, fd, offset);
 #endif
-    return;
   }
 
   void *result = underlying_real_mmap(addr, length, prot, flags, fd, offset);
@@ -304,7 +307,7 @@ SYMBOL_PREFIX(mmap)(void *addr, size_t length, int prot, int flags, int fd,
   // For now we only track anonymous mmap()s:
   if ((flags & MAP_ANONYMOUS) && !am_i_reentrant()) {
     set_will_i_be_reentrant(1);
-    add_anon_mmap(result, length);
+    add_anon_mmap((size_t)result, length);
     set_will_i_be_reentrant(0);
   }
   return result;
@@ -318,13 +321,13 @@ SYMBOL_PREFIX(munmap)(void *addr, size_t length) {
 #else
     return syscall(SYS_munmap, addr, length);
 #endif
-    return;
   }
 
   int result = underlying_real_munmap(addr, length);
   if (!am_i_reentrant()) {
     set_will_i_be_reentrant(1);
-    pymemprofile_remove_anon_mmap(result, length);
+    // TODO handle length
+    pymemprofile_free_anon_mmap(result);//, length);
     set_will_i_be_reentrant(0);
   }
   return result;
