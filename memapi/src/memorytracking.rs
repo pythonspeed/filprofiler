@@ -185,15 +185,21 @@ impl<'a> AllocationTracker {
         }
     }
 
-    /// Add a new allocation based off the current callstack.
-    fn add_allocation(&mut self, address: usize, size: libc::size_t, callstack: Callstack) {
-        let alloc = Allocation { callstack, size };
-        self.current_allocations.insert(address, alloc);
+    // Handle newly added allocation or anonymous mmap():
+    fn allocation_added(&mut self, size: libc::size_t) {
         self.current_allocated_bytes += size;
         if self.current_allocated_bytes > self.peak_allocated_bytes {
             self.peak_allocated_bytes = self.current_allocated_bytes;
             self.peak_allocations = self.current_allocations.clone();
+            self.peak_anon_mmaps = self.current_anon_mmaps.clone();
         }
+    }
+
+    /// Add a new allocation based off the current callstack.
+    fn add_allocation(&mut self, address: usize, size: libc::size_t, callstack: Callstack) {
+        let alloc = Allocation { callstack, size };
+        self.current_allocations.insert(address, alloc);
+        self.allocation_added(size);
     }
 
     /// Free an existing allocation.
@@ -204,17 +210,39 @@ impl<'a> AllocationTracker {
         }
     }
 
+    /// Add a new anonymous mmap() based of the current callstack.
+    fn add_anon_mmap(&mut self, address: usize, size: libc::size_t, callstack: Callstack) {
+        let alloc = Allocation { callstack, size };
+        self.current_anon_mmaps.insert(address, alloc);
+        self.allocation_added(size);
+    }
+
+    fn free_anon_mmap(&mut self, address: usize) {
+        // Possibly this allocation doesn't exist; that's OK!
+        if let Some(removed) = self.current_anon_mmaps.remove(&address) {
+            self.current_allocated_bytes -= removed.size;
+        }
+    }
+
     /// Combine Callstacks and make them human-readable. Duplicate callstacks
     /// have their allocated memory summed.
     fn combine_callstacks(
         &self,
-        allocations: &imhashmap::HashMap<usize, Allocation>,
+        // If false, will do the current allocations:
+        peak: bool,
         to_be_post_processed: bool,
     ) -> collections::HashMap<String, usize> {
         let mut by_call: collections::HashMap<&Callstack, usize> = collections::HashMap::new();
-        for Allocation { callstack, size } in allocations.values() {
-            let entry = by_call.entry(callstack).or_insert(0);
-            *entry += size;
+        let chosen_maps = if peak {
+            vec![&self.peak_allocations, &self.peak_anon_mmaps]
+        } else {
+            vec![&self.current_allocations, &self.current_anon_mmaps]
+        };
+        for allocations in chosen_maps {
+            for Allocation { callstack, size } in allocations.values() {
+                let entry = by_call.entry(callstack).or_insert(0);
+                *entry += size;
+            }
         }
         by_call
             .iter()
@@ -225,19 +253,13 @@ impl<'a> AllocationTracker {
     /// Dump all callstacks in peak memory usage to various files describing the
     /// memory usage.
     fn dump_peak_to_flamegraph(&self, path: &str) {
-        self.dump_to_flamegraph(
-            path,
-            &self.peak_allocations,
-            "peak-memory",
-            "Peak Tracked Memory Usage",
-            true,
-        );
+        self.dump_to_flamegraph(path, true, "peak-memory", "Peak Tracked Memory Usage", true);
     }
 
     fn dump_to_flamegraph(
         &self,
         path: &str,
-        allocations: &imhashmap::HashMap<usize, Allocation>,
+        peak: bool,
         base_filename: &str,
         title: &str,
         to_be_post_processed: bool,
@@ -251,7 +273,7 @@ impl<'a> AllocationTracker {
         } else if !directory_path.is_dir() {
             panic!("=fil-profile= Output path must be a directory.");
         }
-        let by_call = self.combine_callstacks(allocations, to_be_post_processed);
+        let by_call = self.combine_callstacks(peak, to_be_post_processed);
         let lines: Vec<String> = by_call
             .iter()
             .map(|(callstack, size)| format!("{} {}", callstack, *size))
@@ -349,7 +371,7 @@ impl<'a> AllocationTracker {
         );
         self.dump_to_flamegraph(
             &self.default_path,
-            &self.current_allocations,
+            false,
             "out-of-memory",
             "Current allocations at out-of-memory time",
             false,
@@ -585,6 +607,35 @@ mod tests {
         tracker.add_allocation(2, 2000, cs2.clone());
         assert_eq!(tracker.current_allocations, tracker.peak_allocations);
         assert_eq!(tracker.peak_allocated_bytes, 2123);
+        let previous_peak = tracker.peak_allocations.clone();
+
+        // Add anonymous mmap() that doesn't go past previous peak:
+        tracker.free_allocation(2);
+        tracker.add_anon_mmap(5, 1000, cs2.clone());
+        assert_eq!(tracker.current_allocated_bytes, 1123);
+        assert_eq!(tracker.peak_allocated_bytes, 2123);
+        assert_eq!(tracker.peak_allocations, previous_peak);
+        assert_eq!(tracker.current_allocations.len(), 1);
+        assert!(tracker.current_allocations.contains_key(&3));
+        assert!(!tracker.current_anon_mmaps.is_empty());
+        assert!(tracker.peak_anon_mmaps.is_empty());
+
+        // Add anonymous mmap() that does go past previous peak:
+        tracker.add_anon_mmap(6, 2000, cs2.clone());
+        assert_eq!(tracker.current_allocations, tracker.peak_allocations);
+        assert_eq!(tracker.current_anon_mmaps, tracker.peak_anon_mmaps);
+        assert!(!tracker.peak_anon_mmaps.is_empty());
+        assert_eq!(tracker.current_allocated_bytes, 3123);
+        assert_eq!(tracker.peak_allocated_bytes, 3123);
+        let previous_peak_anon = tracker.peak_anon_mmaps.clone();
+
+        // Remove mmap():
+        tracker.free_anon_mmap(5);
+        assert_eq!(tracker.current_allocated_bytes, 2123);
+        assert_eq!(tracker.peak_allocated_bytes, 3123);
+        assert_eq!(previous_peak_anon, tracker.peak_anon_mmaps);
+        assert_eq!(tracker.current_anon_mmaps.len(), 1);
+        assert!(tracker.current_anon_mmaps.contains_key(&6));
     }
 
     #[test]
@@ -615,7 +666,7 @@ mod tests {
 
         tracker.add_allocation(1, 1000, cs1.clone());
         tracker.add_allocation(2, 234, cs2.clone());
-        tracker.add_allocation(3, 50000, cs1.clone());
+        tracker.add_anon_mmap(3, 50000, cs1.clone());
         tracker.add_allocation(4, 6000, cs3.clone());
 
         let mut expected: collections::HashMap<String, usize> = collections::HashMap::new();
@@ -628,18 +679,12 @@ mod tests {
             "a:7 (af);TB@@a:7@@TB;b:2 (bf);TB@@b:2@@TB".to_string(),
             6000,
         );
-        assert_eq!(
-            expected,
-            tracker.combine_callstacks(&tracker.peak_allocations, true)
-        );
+        assert_eq!(expected, tracker.combine_callstacks(true, true));
 
         let mut expected2: collections::HashMap<String, usize> = collections::HashMap::new();
         expected2.insert("a:1 (af);b:2 (bf)".to_string(), 51000);
         expected2.insert("c:3 (cf)".to_string(), 234);
         expected2.insert("a:7 (af);b:2 (bf)".to_string(), 6000);
-        assert_eq!(
-            expected2,
-            tracker.combine_callstacks(&tracker.peak_allocations, false)
-        );
+        assert_eq!(expected2, tracker.combine_callstacks(true, false));
     }
 }
