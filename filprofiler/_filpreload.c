@@ -19,12 +19,14 @@
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
-// Underlying APIs we're wrapping; not used on macOS except by accident (but
-// still available):
+// Underlying APIs we're wrapping:
 static void *(*underlying_real_malloc)(size_t length) = 0;
 static void *(*underlying_real_calloc)(size_t nmemb, size_t length) = 0;
 static void *(*underlying_real_realloc)(void *addr, size_t length) = 0;
 static void (*underlying_real_free)(void *addr) = 0;
+static void *(*underlying_real_mmap)(void *addr, size_t length, int prot,
+                                     int flags, int fd, off_t offset) = 0;
+static void (*underlying_real_munmap)(void *addr, size_t length) = 0;
 
 // Note whether we've been initialized yet or not:
 static int initialized = 0;
@@ -97,6 +99,16 @@ static void __attribute__((constructor)) constructor() {
   underlying_real_free = dlsym(RTLD_NEXT, "free");
   if (!underlying_real_free) {
     fprintf(stderr, "Couldn't load free(): %s\n", dlerror());
+    exit(1);
+  }
+  underlying_real_mmap = dlsym(RTLD_NEXT, "mmap");
+  if (!underlying_real_mmap) {
+    fprintf(stderr, "Couldn't load mmap(): %s\n", dlerror());
+    exit(1);
+  }
+  underlying_real_mmap = dlsym(RTLD_NEXT, "munmap");
+  if (!underlying_real_munmap) {
+    fprintf(stderr, "Couldn't load munmap(): %s\n", dlerror());
     exit(1);
   }
 
@@ -174,6 +186,15 @@ static void add_allocation(size_t address, size_t size) {
     line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
   }
   pymemprofile_add_allocation(address, size, line_number);
+}
+
+static void add_anon_mmap(size_t address, size_t size) {
+  uint16_t line_number = 0;
+  PyFrameObject *f = current_frame;
+  if (f != NULL) {
+    line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
+  }
+  pymemprofile_add_anon_mmap(address, size, line_number);
 }
 
 // On Linux, before the shared library is initialized it's not possible to call
@@ -266,10 +287,48 @@ __attribute__((visibility("default"))) void SYMBOL_PREFIX(free)(void *addr) {
   }
 }
 
-void *mmap(void *addr, size_t length, int prot, int flags,
-           int fd, off_t offset);
-int munmap(void *addr, size_t length);
+__attribute__((visibility("default"))) void *
+SYMBOL_PREFIX(mmap)(void *addr, size_t length, int prot, int flags, int fd,
+                    off_t offset) {
+  if (unlikely(!initialized)) {
+#ifdef __APPLE__
+    return mmap(addr, length, prot, flags, fd, offset);
+#else
+    return syscall(SYS_mmap, addr, length, prot, flags, fd, offset);
+#endif
+    return;
+  }
 
+  void *result = underlying_real_mmap(addr, length, prot, flags, fd, offset);
+
+  // For now we only track anonymous mmap()s:
+  if ((flags & MAP_ANONYMOUS) && !am_i_reentrant()) {
+    set_will_i_be_reentrant(1);
+    add_anon_mmap(result, length);
+    set_will_i_be_reentrant(0);
+  }
+  return result;
+}
+
+__attribute__((visibility("default"))) int
+SYMBOL_PREFIX(munmap)(void *addr, size_t length) {
+  if (unlikely(!initialized)) {
+#ifdef __APPLE__
+    return munmap(addr, length);
+#else
+    return syscall(SYS_munmap, addr, length);
+#endif
+    return;
+  }
+
+  int result = underlying_real_munmap(addr, length);
+  if (!am_i_reentrant()) {
+    set_will_i_be_reentrant(1);
+    pymemprofile_remove_anon_mmap(result, length);
+    set_will_i_be_reentrant(0);
+  }
+  return result;
+}
 
 #ifdef __APPLE__
 DYLD_INTERPOSE(SYMBOL_PREFIX(malloc), malloc)
