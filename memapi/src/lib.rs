@@ -5,6 +5,7 @@ use std::os::raw::c_char;
 extern crate lazy_static;
 
 mod memorytracking;
+mod rangemap;
 
 #[no_mangle]
 pub extern "C" fn pymemprofile_add_allocation(
