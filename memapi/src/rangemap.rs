@@ -34,6 +34,7 @@ impl<V> RangeMap<V> {
         if length <= 0 {
             return;
         }
+        self.ranges.push((Range::new(start, length), value));
     }
 
     pub fn remove(&mut self, start: usize, length: libc::size_t) {}
@@ -67,14 +68,14 @@ mod tests {
 
         fn add(&mut self, start: usize, length: libc::size_t, value: V) {
             assert!(length > 0);
-            for i in start..length {
+            for i in start..(start + length) {
                 self.items.insert(i, value.clone());
             }
         }
 
         fn remove(&mut self, start: usize, length: libc::size_t) {
             assert!(length > 0);
-            for i in start..length {
+            for i in start..(start + length) {
                 self.items.remove(&i);
             }
         }
@@ -85,6 +86,7 @@ mod tests {
             let mut previous_value = None;
             for (k, v) in self.items.iter() {
                 if (*k == previous_address + 1) && (previous_value == Some(v)) {
+                    previous_address = *k;
                     continue;
                 } else {
                     previous_address = *k;
