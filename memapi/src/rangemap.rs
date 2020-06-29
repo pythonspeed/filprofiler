@@ -1,7 +1,9 @@
 use libc;
+use std::cmp::{max, min};
 use std::collections::HashMap;
 
 /// Open-ended range in memory, [A...B).
+#[derive(Clone, Debug)]
 struct Range {
     start: usize,
     end: usize,
@@ -15,19 +17,32 @@ impl Range {
             end: start + length,
         }
     }
+
+    fn intersection(&self, other: &Range) -> Option<Range> {
+        let max_start = max(self.start, other.start);
+        let min_end = min(self.end, other.end);
+        if min_end <= max_start {
+            None
+        } else {
+            Some(Range {
+                start: max_start,
+                end: min_end,
+            })
+        }
+    }
 }
 
 /// Map from memory address range to some other object, typically a CallStack.
 ///
 /// The intended use case is tracking anonymous mmap(), where munmap() can
 /// deallocate chunks of an allocation, or even multiple allocations.
-pub struct RangeMap<V> {
+pub struct RangeMap<V: Clone> {
     ranges: Vec<(Range, V)>,
 }
 
-impl<V> RangeMap<V> {
+impl<V: Clone> RangeMap<V> {
     pub fn new() -> Self {
-        RangeMap { ranges: Vec::new() }
+        RangeMap { ranges: vec![] }
     }
 
     pub fn add(&mut self, start: usize, length: libc::size_t, value: V) {
@@ -37,7 +52,61 @@ impl<V> RangeMap<V> {
         self.ranges.push((Range::new(start, length), value));
     }
 
-    pub fn remove(&mut self, start: usize, length: libc::size_t) {}
+    pub fn remove(&mut self, start: usize, length: libc::size_t) {
+        if length <= 0 {
+            return;
+        }
+        let mut new_ranges = vec![];
+        let remove = Range::new(start, length);
+        for (range, value) in self.ranges.iter() {
+            match range.intersection(&remove) {
+                // Total overlap, remove it all:
+                Some(i) if (i.start == range.start) && (i.end == range.end) => (),
+                // Remove chunk from start:
+                Some(i) if (i.start == range.start) && (i.end < range.end) => {
+                    new_ranges.push((
+                        Range {
+                            start: i.end,
+                            end: range.end,
+                        },
+                        value.clone(),
+                    ));
+                }
+                // Remove chunk from end:
+                Some(i) if (i.start > range.start) && (i.end == range.end) => {
+                    new_ranges.push((
+                        Range {
+                            start: range.start,
+                            end: i.start,
+                        },
+                        value.clone(),
+                    ));
+                }
+                // Remove chunk from the middle:
+                Some(i) => {
+                    new_ranges.push((
+                        Range {
+                            start: range.start,
+                            end: i.start,
+                        },
+                        value.clone(),
+                    ));
+                    new_ranges.push((
+                        Range {
+                            start: i.end,
+                            end: range.end,
+                        },
+                        value.clone(),
+                    ));
+                }
+                // No overlap, remove nothing:
+                None => {
+                    new_ranges.push((range.clone(), value.clone()));
+                }
+            }
+        }
+        self.ranges = new_ranges;
+    }
 
     pub fn as_hashmap(&self) -> HashMap<usize, &V> {
         self.ranges
@@ -124,6 +193,24 @@ mod tests {
             for (start, length) in ranges {
                 real_rangemap.add(start, length, start * (length as usize));
                 stupid_rangemap.add(start, length, start * (length as usize));
+                prop_assert_eq!(real_rangemap.as_hashmap(), stupid_rangemap.as_hashmap());
+            }
+        }
+
+        /// We can remove ranges and get the same result in the real and stupid
+        /// range maps.
+        #[test]
+        fn removing_ranges(add_ranges in ranges(), remove_ranges in ranges()) {
+            let mut real_rangemap : RangeMap<usize> = RangeMap::new();
+            let mut stupid_rangemap: StupidRangeMap<usize> = StupidRangeMap::new();
+            for (start, length) in add_ranges {
+                real_rangemap.add(start, length, start * (length as usize));
+                stupid_rangemap.add(start, length, start * (length as usize));
+                prop_assert_eq!(real_rangemap.as_hashmap(), stupid_rangemap.as_hashmap());
+            }
+            for (start, length) in remove_ranges {
+                real_rangemap.remove(start, length);
+                stupid_rangemap.remove(start, length);
                 prop_assert_eq!(real_rangemap.as_hashmap(), stupid_rangemap.as_hashmap());
             }
         }
