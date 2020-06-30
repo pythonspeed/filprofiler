@@ -305,7 +305,7 @@ SYMBOL_PREFIX(mmap)(void *addr, size_t length, int prot, int flags, int fd,
   void *result = underlying_real_mmap(addr, length, prot, flags, fd, offset);
 
   // For now we only track anonymous mmap()s:
-  if ((flags & MAP_ANONYMOUS) && !am_i_reentrant()) {
+  if (result != MAP_FAILED && (flags & MAP_ANONYMOUS) && !am_i_reentrant()) {
     set_will_i_be_reentrant(1);
     add_anon_mmap((size_t)result, length);
     set_will_i_be_reentrant(0);
@@ -324,9 +324,8 @@ SYMBOL_PREFIX(munmap)(void *addr, size_t length) {
   }
 
   int result = underlying_real_munmap(addr, length);
-  if (!am_i_reentrant()) {
+  if (result != -1 && !am_i_reentrant()) {
     set_will_i_be_reentrant(1);
-    // TODO handle length
     pymemprofile_free_anon_mmap(result, length);
     set_will_i_be_reentrant(0);
   }
