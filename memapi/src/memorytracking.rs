@@ -1,3 +1,4 @@
+use super::rangemap::RangeMap;
 use core::ffi;
 use im::hashmap as imhashmap;
 use inferno::flamegraph;
@@ -159,8 +160,8 @@ struct AllocationTracker {
     current_allocations: imhashmap::HashMap<usize, Allocation>,
     peak_allocations: imhashmap::HashMap<usize, Allocation>,
     // anonymous mmap(), i.e. not file backed:
-    current_anon_mmaps: imhashmap::HashMap<usize, Allocation>,
-    peak_anon_mmaps: imhashmap::HashMap<usize, Allocation>,
+    current_anon_mmaps: RangeMap<Callstack>,
+    peak_anon_mmaps: RangeMap<Callstack>,
 
     // Both malloc() and mmap():
     current_allocated_bytes: usize,
@@ -176,8 +177,8 @@ impl<'a> AllocationTracker {
         AllocationTracker {
             current_allocations: imhashmap::HashMap::default(),
             peak_allocations: imhashmap::HashMap::default(),
-            current_anon_mmaps: imhashmap::HashMap::default(),
-            peak_anon_mmaps: imhashmap::HashMap::default(),
+            current_anon_mmaps: RangeMap::new(),
+            peak_anon_mmaps: RangeMap::new(),
             current_allocated_bytes: 0,
             peak_allocated_bytes: 0,
             spare_memory: Vec::with_capacity(16 * 1024 * 1024),
@@ -212,16 +213,14 @@ impl<'a> AllocationTracker {
 
     /// Add a new anonymous mmap() based of the current callstack.
     fn add_anon_mmap(&mut self, address: usize, size: libc::size_t, callstack: Callstack) {
-        let alloc = Allocation { callstack, size };
-        self.current_anon_mmaps.insert(address, alloc);
+        self.current_anon_mmaps.add(address, size, callstack);
         self.allocation_added(size);
     }
 
-    fn free_anon_mmap(&mut self, address: usize) {
+    fn free_anon_mmap(&mut self, address: usize, size: libc::size_t) {
         // Possibly this allocation doesn't exist; that's OK!
-        if let Some(removed) = self.current_anon_mmaps.remove(&address) {
-            self.current_allocated_bytes -= removed.size;
-        }
+        let removed = self.current_anon_mmaps.remove(address, size);
+        self.current_allocated_bytes -= removed;
     }
 
     /// Combine Callstacks and make them human-readable. Duplicate callstacks
@@ -233,17 +232,30 @@ impl<'a> AllocationTracker {
         to_be_post_processed: bool,
     ) -> collections::HashMap<String, usize> {
         let mut by_call: collections::HashMap<&Callstack, usize> = collections::HashMap::new();
-        let chosen_maps = if peak {
-            vec![&self.peak_allocations, &self.peak_anon_mmaps]
+
+        // Aggregate normal malloc() allocations:
+        let normal_allocations = if peak {
+            &self.peak_allocations
         } else {
-            vec![&self.current_allocations, &self.current_anon_mmaps]
+            &self.current_allocations
         };
-        for allocations in chosen_maps {
-            for Allocation { callstack, size } in allocations.values() {
-                let entry = by_call.entry(callstack).or_insert(0);
-                *entry += size;
-            }
+        for Allocation { callstack, size } in normal_allocations.values() {
+            let entry = by_call.entry(callstack).or_insert(0);
+            *entry += size;
         }
+
+        // Aggregate anonymous mmap()s:
+        let anon_mmap_allocations = if peak {
+            &self.peak_anon_mmaps
+        } else {
+            &self.current_anon_mmaps
+        };
+        for (size, callstack) in anon_mmap_allocations.as_hashmap().values() {
+            let entry = by_call.entry(callstack).or_insert(0);
+            *entry += size;
+        }
+
+        // Convert callstacks to be human-readable:
         by_call
             .iter()
             .map(|(callstack, size)| (callstack.as_string(to_be_post_processed), *size))
@@ -435,13 +447,15 @@ pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_m
 }
 
 /// Free an existing allocation.
-pub fn free_allocation(address: usize, is_mmap: bool) {
+pub fn free_allocation(address: usize) {
     let mut allocations = ALLOCATIONS.lock().unwrap();
-    if is_mmap {
-        allocations.free_anon_mmap(address);
-    } else {
-        allocations.free_allocation(address);
-    }
+    allocations.free_allocation(address);
+}
+
+/// Free an anonymous mmap().
+pub fn free_anon_mmap(address: usize, length: libc::size_t) {
+    let mut allocations = ALLOCATIONS.lock().unwrap();
+    allocations.free_anon_mmap(address, length);
 }
 
 /// Reset internal state.
@@ -618,31 +632,41 @@ mod tests {
 
         // Add anonymous mmap() that doesn't go past previous peak:
         tracker.free_allocation(2);
-        tracker.add_anon_mmap(5, 1000, cs2.clone());
+        tracker.add_anon_mmap(50000, 1000, cs2.clone());
         assert_eq!(tracker.current_allocated_bytes, 1123);
         assert_eq!(tracker.peak_allocated_bytes, 2123);
         assert_eq!(tracker.peak_allocations, previous_peak);
         assert_eq!(tracker.current_allocations.len(), 1);
         assert!(tracker.current_allocations.contains_key(&3));
-        assert!(!tracker.current_anon_mmaps.is_empty());
-        assert!(tracker.peak_anon_mmaps.is_empty());
+        assert!(tracker.current_anon_mmaps.size() > 0);
+        assert!(tracker.peak_anon_mmaps.size() == 0);
 
         // Add anonymous mmap() that does go past previous peak:
-        tracker.add_anon_mmap(6, 2000, cs2.clone());
+        tracker.add_anon_mmap(600000, 2000, cs2.clone());
         assert_eq!(tracker.current_allocations, tracker.peak_allocations);
         assert_eq!(tracker.current_anon_mmaps, tracker.peak_anon_mmaps);
-        assert!(!tracker.peak_anon_mmaps.is_empty());
+        assert!(tracker.peak_anon_mmaps.size() > 0);
         assert_eq!(tracker.current_allocated_bytes, 3123);
         assert_eq!(tracker.peak_allocated_bytes, 3123);
         let previous_peak_anon = tracker.peak_anon_mmaps.clone();
 
         // Remove mmap():
-        tracker.free_anon_mmap(5);
+        tracker.free_anon_mmap(50000, 1000);
         assert_eq!(tracker.current_allocated_bytes, 2123);
         assert_eq!(tracker.peak_allocated_bytes, 3123);
         assert_eq!(previous_peak_anon, tracker.peak_anon_mmaps);
-        assert_eq!(tracker.current_anon_mmaps.len(), 1);
-        assert!(tracker.current_anon_mmaps.contains_key(&6));
+        assert_eq!(tracker.current_anon_mmaps.size(), 2000);
+        assert!(tracker
+            .current_anon_mmaps
+            .as_hashmap()
+            .contains_key(&600000));
+
+        // Partial removal of anonmyous mmap():
+        tracker.free_anon_mmap(600100, 1000);
+        assert_eq!(tracker.current_allocated_bytes, 1123);
+        assert_eq!(tracker.peak_allocated_bytes, 3123);
+        assert_eq!(previous_peak_anon, tracker.peak_anon_mmaps);
+        assert_eq!(tracker.current_anon_mmaps.size(), 1000);
     }
 
     #[test]

@@ -131,7 +131,7 @@ extern void pymemprofile_add_allocation(size_t address, size_t length,
 extern void pymemprofile_free_allocation(size_t address);
 extern void pymemprofile_add_anon_mmap(size_t address, size_t length,
                                        uint16_t line_number);
-extern void pymemprofile_free_anon_mmap(size_t address);
+extern void pymemprofile_free_anon_mmap(size_t address, size_t length);
 
 void start_call(struct FunctionLocation *loc, uint16_t line_number) {
   if (!am_i_reentrant()) {
@@ -327,7 +327,7 @@ SYMBOL_PREFIX(munmap)(void *addr, size_t length) {
   if (!am_i_reentrant()) {
     set_will_i_be_reentrant(1);
     // TODO handle length
-    pymemprofile_free_anon_mmap(result);//, length);
+    pymemprofile_free_anon_mmap(result, length);
     set_will_i_be_reentrant(0);
   }
   return result;

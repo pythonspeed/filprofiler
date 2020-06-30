@@ -3,7 +3,7 @@ use std::cmp::{max, min};
 use std::collections::HashMap;
 
 /// Open-ended range in memory, [A...B).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 struct Range {
     start: usize,
     end: usize,
@@ -30,12 +30,17 @@ impl Range {
             })
         }
     }
+
+    fn size(&self) -> usize {
+        self.end - self.start
+    }
 }
 
 /// Map from memory address range to some other object, typically a CallStack.
 ///
 /// The intended use case is tracking anonymous mmap(), where munmap() can
 /// deallocate chunks of an allocation, or even multiple allocations.
+#[derive(Clone, Debug, PartialEq)]
 pub struct RangeMap<V: Clone> {
     ranges: Vec<(Range, V)>,
 }
@@ -52,9 +57,10 @@ impl<V: Clone> RangeMap<V> {
         self.ranges.push((Range::new(start, length), value));
     }
 
-    pub fn remove(&mut self, start: usize, length: libc::size_t) {
+    /// Return how many bytes were removed.
+    pub fn remove(&mut self, start: usize, length: libc::size_t) -> usize {
         if length <= 0 {
-            return;
+            return 0;
         }
         let mut new_ranges = vec![];
         let remove = Range::new(start, length);
@@ -105,13 +111,19 @@ impl<V: Clone> RangeMap<V> {
                 }
             }
         }
+        let old_size = self.size();
         self.ranges = new_ranges;
+        old_size - self.size()
     }
 
-    pub fn as_hashmap(&self) -> HashMap<usize, &V> {
+    pub fn size(&self) -> usize {
+        self.ranges.iter().map(|(r, _)| r.size()).sum()
+    }
+
+    pub fn as_hashmap(&self) -> HashMap<usize, (usize, &V)> {
         self.ranges
             .iter()
-            .map(|(range, v)| (range.start, v))
+            .map(|(range, v)| (range.start, (range.size(), v)))
             .collect()
     }
 }
@@ -128,7 +140,7 @@ mod tests {
         items: BTreeMap<usize, V>,
     }
 
-    impl<V: PartialEq + Clone> StupidRangeMap<V> {
+    impl<V: PartialEq + Clone + std::fmt::Debug> StupidRangeMap<V> {
         fn new() -> Self {
             StupidRangeMap {
                 items: BTreeMap::new(),
@@ -142,33 +154,50 @@ mod tests {
             }
         }
 
-        fn remove(&mut self, start: usize, length: libc::size_t) {
+        fn remove(&mut self, start: usize, length: libc::size_t) -> usize {
             assert!(length > 0);
+            let mut removed = 0;
             for i in start..(start + length) {
-                self.items.remove(&i);
+                if let Some(_) = self.items.remove(&i) {
+                    removed += 1;
+                }
             }
+            removed
         }
 
-        fn as_hashmap(&self) -> HashMap<usize, &V> {
+        pub fn size(&self) -> usize {
+            self.items.len()
+        }
+
+        fn as_hashmap(&self) -> HashMap<usize, (usize, &V)> {
             let mut result = HashMap::new();
-            let mut previous_address = 0;
-            let mut previous_value = None;
+            let mut last_entry: Option<&mut (usize, &V)> = None;
+            let mut last_k: usize = 0;
             for (k, v) in self.items.iter() {
-                if (*k == previous_address + 1) && (previous_value == Some(v)) {
-                    previous_address = *k;
-                    continue;
-                } else {
-                    previous_address = *k;
-                    previous_value = Some(v);
-                    result.insert(*k, v);
+                match last_entry {
+                    None => {
+                        // Nothing at previous address at all:
+                        result.insert(*k, (1, v));
+                        last_entry = result.get_mut(k);
+                    }
+                    Some((size, value)) if (*value == v) && (*k == last_k + 1) => {
+                        // Previous address exists, with same value:
+                        *size += 1;
+                    }
+                    Some(_) => {
+                        // Previous value either not adjacent or different value:
+                        result.insert(*k, (1, v));
+                        last_entry = result.get_mut(k);
+                    }
                 }
+                last_k = *k;
             }
             result
         }
     }
 
     fn ranges() -> impl Strategy<Value = Vec<(usize, usize)>> {
-        proptest::collection::vec((1..20usize, 1..20usize), 100)
+        proptest::collection::vec((1..20usize, 1..20usize), 1..20)
             .prop_map(|vec| {
                 let mut result: Vec<(usize, usize)> = Vec::new();
                 let mut previous_start = 0 as usize;
@@ -184,33 +213,23 @@ mod tests {
     }
 
     proptest! {
-        /// We can add ranges and get the same result in the real and stupid range
-        /// maps.
+        /// We can add and remove ranges and get the same result in the real and
+        /// stupid range maps.
         #[test]
-        fn adding_ranges(ranges in ranges()) {
-            let mut real_rangemap : RangeMap<usize> = RangeMap::new();
-            let mut stupid_rangemap: StupidRangeMap<usize> = StupidRangeMap::new();
-            for (start, length) in ranges {
-                real_rangemap.add(start, length, start * (length as usize));
-                stupid_rangemap.add(start, length, start * (length as usize));
-                prop_assert_eq!(real_rangemap.as_hashmap(), stupid_rangemap.as_hashmap());
-            }
-        }
-
-        /// We can remove ranges and get the same result in the real and stupid
-        /// range maps.
-        #[test]
-        fn removing_ranges(add_ranges in ranges(), remove_ranges in ranges()) {
+        fn adding_removing_ranges(add_ranges in ranges(), remove_ranges in ranges()) {
             let mut real_rangemap : RangeMap<usize> = RangeMap::new();
             let mut stupid_rangemap: StupidRangeMap<usize> = StupidRangeMap::new();
             for (start, length) in add_ranges {
                 real_rangemap.add(start, length, start * (length as usize));
                 stupid_rangemap.add(start, length, start * (length as usize));
+                prop_assert_eq!(real_rangemap.size(), stupid_rangemap.size());
                 prop_assert_eq!(real_rangemap.as_hashmap(), stupid_rangemap.as_hashmap());
             }
             for (start, length) in remove_ranges {
-                real_rangemap.remove(start, length);
-                stupid_rangemap.remove(start, length);
+                let removed1 = real_rangemap.remove(start, length * 2);
+                let removed2 = stupid_rangemap.remove(start, length * 2);
+                prop_assert_eq!(removed1, removed2);
+                prop_assert_eq!(real_rangemap.size(), stupid_rangemap.size());
                 prop_assert_eq!(real_rangemap.as_hashmap(), stupid_rangemap.as_hashmap());
             }
         }
