@@ -235,7 +235,9 @@ SYMBOL_PREFIX(malloc)(size_t size) {
 __attribute__((visibility("default"))) void *
 SYMBOL_PREFIX(calloc)(size_t nmemb, size_t size) {
   if (unlikely(!initialized)) {
-    return malloc_fallback(nmemb * size);
+    void* result = malloc_fallback(nmemb * size);
+    memset(result, 0, nmemb * size);
+    return result;
   }
   void *result = underlying_real_calloc(nmemb, size);
   size_t allocated = nmemb * size;
