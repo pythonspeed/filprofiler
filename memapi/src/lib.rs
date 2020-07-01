@@ -5,6 +5,7 @@ use std::os::raw::c_char;
 extern crate lazy_static;
 
 mod memorytracking;
+mod rangemap;
 
 #[no_mangle]
 pub extern "C" fn pymemprofile_add_allocation(
@@ -12,12 +13,22 @@ pub extern "C" fn pymemprofile_add_allocation(
     size: libc::size_t,
     line_number: u16,
 ) {
-    memorytracking::add_allocation(address, size, line_number);
+    memorytracking::add_allocation(address, size, line_number, false);
 }
 
 #[no_mangle]
 pub extern "C" fn pymemprofile_free_allocation(address: usize) {
     memorytracking::free_allocation(address);
+}
+
+#[no_mangle]
+pub extern "C" fn pymemprofile_add_anon_mmap(address: usize, size: libc::size_t, line_number: u16) {
+    memorytracking::add_allocation(address, size, line_number, true);
+}
+
+#[no_mangle]
+pub extern "C" fn pymemprofile_free_anon_mmap(address: usize, length: libc::size_t) {
+    memorytracking::free_anon_mmap(address, length);
 }
 
 /// # Safety

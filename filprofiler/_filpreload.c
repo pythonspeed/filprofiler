@@ -19,11 +19,14 @@
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
-// Underlying APIs we're wrapping; not used on macOS:
+// Underlying APIs we're wrapping:
 static void *(*underlying_real_malloc)(size_t length) = 0;
 static void *(*underlying_real_calloc)(size_t nmemb, size_t length) = 0;
 static void *(*underlying_real_realloc)(void *addr, size_t length) = 0;
 static void (*underlying_real_free)(void *addr) = 0;
+static void *(*underlying_real_mmap)(void *addr, size_t length, int prot,
+                                     int flags, int fd, off_t offset) = 0;
+static int (*underlying_real_munmap)(void *addr, size_t length) = 0;
 
 // Note whether we've been initialized yet or not:
 static int initialized = 0;
@@ -32,8 +35,8 @@ static int initialized = 0;
 static Py_ssize_t extra_code_index = -1;
 
 #ifdef __APPLE__
-#include <pthread.h>
 #include "interpose.h"
+#include <pthread.h>
 static pthread_key_t will_i_be_reentrant;
 static pthread_once_t will_i_be_reentrant_once = PTHREAD_ONCE_INIT;
 
@@ -50,6 +53,7 @@ static inline void set_will_i_be_reentrant(uint64_t i) {
   pthread_setspecific(will_i_be_reentrant, (void *)i);
 }
 #else
+#include <sys/syscall.h>
 static _Thread_local int will_i_be_reentrant = 0;
 
 static inline int am_i_reentrant() { return will_i_be_reentrant; }
@@ -97,6 +101,16 @@ static void __attribute__((constructor)) constructor() {
     fprintf(stderr, "Couldn't load free(): %s\n", dlerror());
     exit(1);
   }
+  underlying_real_mmap = dlsym(RTLD_NEXT, "mmap");
+  if (!underlying_real_mmap) {
+    fprintf(stderr, "Couldn't load mmap(): %s\n", dlerror());
+    exit(1);
+  }
+  underlying_real_munmap = dlsym(RTLD_NEXT, "munmap");
+  if (!underlying_real_munmap) {
+    fprintf(stderr, "Couldn't load munmap(): %s\n", dlerror());
+    exit(1);
+  }
 
   initialized = 1;
   unsetenv("LD_PRELOAD");
@@ -104,6 +118,7 @@ static void __attribute__((constructor)) constructor() {
   // unsetenv("DYLD_INSERT_LIBRARIES");
 }
 
+// Implemented in the Rust library:
 extern void pymemprofile_start_call(uint16_t parent_line_number,
                                     struct FunctionLocation *loc,
                                     uint16_t line_number);
@@ -114,6 +129,9 @@ extern void pymemprofile_dump_peak_to_flamegraph(const char *path);
 extern void pymemprofile_add_allocation(size_t address, size_t length,
                                         uint16_t line_number);
 extern void pymemprofile_free_allocation(size_t address);
+extern void pymemprofile_add_anon_mmap(size_t address, size_t length,
+                                       uint16_t line_number);
+extern void pymemprofile_free_anon_mmap(size_t address, size_t length);
 
 void start_call(struct FunctionLocation *loc, uint16_t line_number) {
   if (!am_i_reentrant()) {
@@ -165,8 +183,7 @@ fil_dump_peak_to_flamegraph(const char *path) {
   set_will_i_be_reentrant(current_reentrant_status);
 }
 
-__attribute__((visibility("hidden"))) void add_allocation(size_t address,
-                                                          size_t size) {
+static void add_allocation(size_t address, size_t size) {
   uint16_t line_number = 0;
   PyFrameObject *f = current_frame;
   if (f != NULL) {
@@ -175,16 +192,36 @@ __attribute__((visibility("hidden"))) void add_allocation(size_t address,
   pymemprofile_add_allocation(address, size, line_number);
 }
 
+static void add_anon_mmap(size_t address, size_t size) {
+  uint16_t line_number = 0;
+  PyFrameObject *f = current_frame;
+  if (f != NULL) {
+    line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
+  }
+  pymemprofile_add_anon_mmap(address, size, line_number);
+}
+
+// On Linux, before the shared library is initialized it's not possible to call
+// malloc() and friends, because the function pointers haven't been loaded with
+// dlsym(). So we need a fallback. On macOS we can just use the function
+// directly, because we're not publishing our own malloc() symbol so we don't
+// get infinite recursion, we can just call the original function.
+static void *malloc_fallback(size_t size) {
+#ifdef __APPLE__
+  return malloc(size);
+#else
+  // We can't use mmap() libc call, because we override it, so use the syscall
+  // directly:
+  return (void *)syscall(SYS_mmap, NULL, size, PROT_READ | PROT_WRITE,
+                         MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+#endif
+}
+
 // Override memory-allocation functions:
 __attribute__((visibility("default"))) void *
 SYMBOL_PREFIX(malloc)(size_t size) {
   if (unlikely(!initialized)) {
-#ifdef __APPLE__
-    return malloc(size);
-#else
-    return mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
-                -1, 0);
-#endif
+    return malloc_fallback(size);
   }
   void *result = underlying_real_malloc(size);
   if (!am_i_reentrant() && initialized) {
@@ -198,12 +235,9 @@ SYMBOL_PREFIX(malloc)(size_t size) {
 __attribute__((visibility("default"))) void *
 SYMBOL_PREFIX(calloc)(size_t nmemb, size_t size) {
   if (unlikely(!initialized)) {
-#ifdef __APPLE__
-    return calloc(nmemb, size);
-#else
-    return mmap(NULL, nmemb * size, PROT_READ | PROT_WRITE,
-                MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-#endif
+    void* result = malloc_fallback(nmemb * size);
+    memset(result, 0, nmemb * size);
+    return result;
   }
   void *result = underlying_real_calloc(nmemb, size);
   size_t allocated = nmemb * size;
@@ -221,8 +255,7 @@ SYMBOL_PREFIX(realloc)(void *addr, size_t size) {
 #ifdef __APPLE__
     return realloc(addr, size);
 #else
-    void *result = mmap(NULL, size, PROT_READ | PROT_WRITE,
-                        MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    void *result = malloc_fallback(size);
     if (addr != NULL) {
       // Why someone should realloc() with null pointer I don't know.
       // But they sometimes do.
@@ -260,11 +293,54 @@ __attribute__((visibility("default"))) void SYMBOL_PREFIX(free)(void *addr) {
   }
 }
 
+__attribute__((visibility("default"))) void *
+SYMBOL_PREFIX(mmap)(void *addr, size_t length, int prot, int flags, int fd,
+                    off_t offset) {
+  if (unlikely(!initialized)) {
+#ifdef __APPLE__
+    return mmap(addr, length, prot, flags, fd, offset);
+#else
+    return (void*) syscall(SYS_mmap, addr, length, prot, flags, fd, offset);
+#endif
+  }
+
+  void *result = underlying_real_mmap(addr, length, prot, flags, fd, offset);
+
+  // For now we only track anonymous mmap()s:
+  if (result != MAP_FAILED && (flags & MAP_ANONYMOUS) && !am_i_reentrant()) {
+    set_will_i_be_reentrant(1);
+    add_anon_mmap((size_t)result, length);
+    set_will_i_be_reentrant(0);
+  }
+  return result;
+}
+
+__attribute__((visibility("default"))) int
+SYMBOL_PREFIX(munmap)(void *addr, size_t length) {
+  if (unlikely(!initialized)) {
+#ifdef __APPLE__
+    return munmap(addr, length);
+#else
+    return syscall(SYS_munmap, addr, length);
+#endif
+  }
+
+  int result = underlying_real_munmap(addr, length);
+  if (result != -1 && !am_i_reentrant()) {
+    set_will_i_be_reentrant(1);
+    pymemprofile_free_anon_mmap(result, length);
+    set_will_i_be_reentrant(0);
+  }
+  return result;
+}
+
 #ifdef __APPLE__
 DYLD_INTERPOSE(SYMBOL_PREFIX(malloc), malloc)
 DYLD_INTERPOSE(SYMBOL_PREFIX(calloc), calloc)
 DYLD_INTERPOSE(SYMBOL_PREFIX(realloc), realloc)
 DYLD_INTERPOSE(SYMBOL_PREFIX(free), free)
+DYLD_INTERPOSE(SYMBOL_PREFIX(mmap), mmap)
+DYLD_INTERPOSE(SYMBOL_PREFIX(munmap), munmap)
 #endif
 
 // Call after Python gets going.

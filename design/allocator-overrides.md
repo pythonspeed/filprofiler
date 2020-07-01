@@ -19,6 +19,9 @@ Allocations are then handed to tracking code (written in Rust) that keeps track 
 
 The alternative would be #3 plus setting a flat namespace, but having the ability to easily refer to underlying `malloc` is nice.
 
+The code code either call `malloc()` as normal, or use the same `dlsym()` function pointers as Linux does.
+At the moment it does the latter, but that could be changed.
+
 ## Preventing reentrancy
 
 In order to prevent allocations from the Rust code being recursively tracked, a thread-local is used to prevent reentrant calls to `malloc` and friends.
