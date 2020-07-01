@@ -1,3 +1,11 @@
+# Fil 0.6.0 (2020-07-01)
+
+
+### Features
+
+- Anonymous mmap()s are now tracked by Fil. ([#29](https://github.com/pythonspeed/filprofiler/issues/29))
+
+
 # Fil 0.5.0 (2020-06-22)
 
 
