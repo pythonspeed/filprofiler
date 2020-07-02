@@ -15,7 +15,8 @@ For more information see https://pythonspeed.com/products/filmemoryprofiler/
 Fil will track memory allocated by:
 
 * Normal Python code.
-* Arbitrary C code using `malloc()`/`calloc()`/`realloc()`.
+* C code using `malloc()`/`calloc()`/`realloc()`.
+* C++ code using `new`.
 * Anonymous `mmap()`s.
 * Fortran 90 explicitly allocated memory (tested with gcc's `gfortran`).
 

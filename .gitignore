@@ -7,6 +7,6 @@ build/
 dist/
 fil-result/
 .eggs/
-python-benchmarks/pymalloc.c
+python-benchmarks/pymalloc.cpp
 filprofiler/fil-python
 filprofiler/_version.py

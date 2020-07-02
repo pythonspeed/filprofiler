@@ -141,10 +141,14 @@ def test_malloc_in_c_extension():
     allocations = get_allocations(output_dir)
 
     script = str(script)
-    path = ((script, "<module>", 21), (script, "main", 17))
 
     # The realloc() in the scripts adds 10 to the 70:
+    path = ((script, "<module>", 22), (script, "main", 18))
     assert match(allocations, {path: big}, as_mb) == pytest.approx(70 + 10, 0.1)
+
+    # The C++ new allocation:
+    path = ((script, "<module>", 22), (script, "main", 16))
+    assert match(allocations, {path: big}, as_mb) == pytest.approx(40, 0.1)
 
 
 def test_anonymous_mmap():
@@ -173,7 +177,7 @@ def test_minus_m():
     allocations = get_allocations(output_dir)
     stripped_allocations = {k[3:]: v for (k, v) in allocations.items()}
     script = str(script)
-    path = ((script, "<module>", 21), (script, "main", 17))
+    path = ((script, "<module>", 22), (script, "main", 18))
 
     assert match(stripped_allocations, {path: big}, as_mb) == pytest.approx(
         50 + 10, 0.1
