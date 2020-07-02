@@ -270,3 +270,17 @@ def test_no_args():
     assert no_args.returncode == with_help.returncode
     assert no_args.stdout == with_help.stdout
     assert no_args.stderr == with_help.stderr
+
+
+def test_fortran():
+    """
+    Fil can capture Fortran allocations.
+    """
+    script = Path("python-benchmarks") / "fortranallocate.py"
+    output_dir = profile(script)
+    allocations = get_allocations(output_dir)
+
+    script = str(script)
+    path = ((script, "<module>", 3),)
+
+    assert match(allocations, {path: big}, as_mb) == pytest.approx(40, 0.1)

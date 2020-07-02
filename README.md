@@ -10,6 +10,24 @@ And that's exactly what Fil will help you find: exactly which code was responsib
 
 For more information see https://pythonspeed.com/products/filmemoryprofiler/
 
+## What Fil tracks
+
+Fil will track memory allocated by:
+
+* Normal Python code.
+* Arbitrary C code using `malloc()`/`calloc()`/`realloc()`.
+* Anonymous `mmap()`s.
+* Fortran 90 explicitly allocated memory (tested with gcc's `gfortran`).
+
+Still not supported, but planned:
+
+* File-backed `mmap()`.
+  The usage here is inconsistent since the OS can swap it in or out, so probably supporting this will involve a different kind of resource usage.
+* Other forms of shared memory.
+* Anonymous `mmap()`s created via `/dev/zero` (not common, since it's not cross-platform, e.g. macOS doesn't support this).
+* `posix_memalign()`.
+* `memfd_create()`.
+
 ## Installation
 
 To install:

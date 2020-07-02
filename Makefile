@@ -28,6 +28,7 @@ test-rust:
 .PHONY: test-python
 test-python: build
 	cythonize -3 -i python-benchmarks/pymalloc.pyx
+	cd python-benchmarks && python -m numpy.f2py -c fortran.f90 -m fortran
 	env RUST_BACKTRACE=1 py.test
 
 .PHONY: docker-image
