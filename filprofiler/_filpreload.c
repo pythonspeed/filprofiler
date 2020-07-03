@@ -27,6 +27,8 @@ static void (*underlying_real_free)(void *addr) = 0;
 static void *(*underlying_real_mmap)(void *addr, size_t length, int prot,
                                      int flags, int fd, off_t offset) = 0;
 static int (*underlying_real_munmap)(void *addr, size_t length) = 0;
+static void *(*underlying_real_aligned_alloc)(size_t alignment,
+                                              size_t size) = 0;
 
 // Note whether we've been initialized yet or not:
 static int initialized = 0;
@@ -109,6 +111,11 @@ static void __attribute__((constructor)) constructor() {
   underlying_real_munmap = dlsym(RTLD_NEXT, "munmap");
   if (!underlying_real_munmap) {
     fprintf(stderr, "Couldn't load munmap(): %s\n", dlerror());
+    exit(1);
+  }
+  underlying_real_aligned_alloc = dlsym(RTLD_NEXT, "aligned_alloc");
+  if (!underlying_real_aligned_alloc) {
+    fprintf(stderr, "Couldn't load aligned_alloc(): %s\n", dlerror());
     exit(1);
   }
 
@@ -334,6 +341,31 @@ SYMBOL_PREFIX(munmap)(void *addr, size_t length) {
   return result;
 }
 
+__attribute__((visibility("default"))) void *
+SYMBOL_PREFIX(aligned_alloc)(size_t alignment, size_t size) {
+  if (unlikely(!initialized)) {
+#ifdef __APPLE__
+    return aligned_alloc(alignment, size);
+#else
+    // NOTE: At the moment this falls back to mmap(), so that's fine, but if we
+    // stop using mmap() as fallback we need to switch this to something that
+    // ensures alignment. See
+    // https://github.com/pythonspeed/filprofiler/issues/33
+    return malloc_fallback(size);
+#endif
+  }
+
+  void *result = underlying_real_aligned_alloc(alignment, size);
+
+  // For now we only track anonymous mmap()s:
+  if (!am_i_reentrant()) {
+    set_will_i_be_reentrant(1);
+    add_allocation((size_t)result, size);
+    set_will_i_be_reentrant(0);
+  }
+  return result;
+}
+
 #ifdef __APPLE__
 DYLD_INTERPOSE(SYMBOL_PREFIX(malloc), malloc)
 DYLD_INTERPOSE(SYMBOL_PREFIX(calloc), calloc)
@@ -341,6 +373,7 @@ DYLD_INTERPOSE(SYMBOL_PREFIX(realloc), realloc)
 DYLD_INTERPOSE(SYMBOL_PREFIX(free), free)
 DYLD_INTERPOSE(SYMBOL_PREFIX(mmap), mmap)
 DYLD_INTERPOSE(SYMBOL_PREFIX(munmap), munmap)
+DYLD_INTERPOSE(SYMBOL_PREFIX(aligned_alloc), aligned_alloc)
 #endif
 
 // Call after Python gets going.

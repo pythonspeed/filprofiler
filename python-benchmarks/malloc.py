@@ -2,7 +2,7 @@ import os
 import sys
 from argparse import ArgumentParser
 from pymalloc import pymalloc as malloc, pyfree as free, pyrealloc as realloc
-from pymalloc import pycppnew
+from pymalloc import pycppnew, pyaligned_alloc
 
 sys.path.append(os.path.dirname(__file__))
 
@@ -14,6 +14,7 @@ def main():
     parser.add_argument("--size", action="store")
     size = int(parser.parse_args().size)
     pycppnew()
+    pyaligned_alloc()
     result = malloc(size * MB)
     result = realloc(result, (size + 10) * MB)  # <-- peak
     result = realloc(result, (size - 5) * MB)

@@ -16,17 +16,18 @@ Fil will track memory allocated by:
 
 * Normal Python code.
 * C code using `malloc()`/`calloc()`/`realloc()`.
-* C++ code using `new`.
+* C++ code using `new` (including via `aligned_alloc`).
 * Anonymous `mmap()`s.
 * Fortran 90 explicitly allocated memory (tested with gcc's `gfortran`).
 
 Still not supported, but planned:
 
+* `mremap()` (resizing of `mmap()`).
 * File-backed `mmap()`.
   The usage here is inconsistent since the OS can swap it in or out, so probably supporting this will involve a different kind of resource usage.
 * Other forms of shared memory.
 * Anonymous `mmap()`s created via `/dev/zero` (not common, since it's not cross-platform, e.g. macOS doesn't support this).
-* `posix_memalign()`.
+* `posix_memalign()`, `memalign`, `valloc()`, `pvalloc()`.
 * `memfd_create()`.
 
 ## Installation
