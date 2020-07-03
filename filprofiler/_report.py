@@ -12,9 +12,18 @@ import shlex
 import re
 import sys
 from xml.sax.saxutils import escape
-
+from urllib.parse import quote_plus as url_quote
+from . import __version__
 
 LINE_REFERENCE = re.compile(r"\<title\>TB@@([^:]+):(\d+)@@TB")
+
+DEBUGGING_INFO = url_quote(
+    f"""\
+## Version information
+Fil: {__version__}
+Python: {sys.version}
+"""
+)
 
 
 def replace_code_references(string: str) -> str:
@@ -115,6 +124,8 @@ def render_report(output_path: str, now: datetime) -> str:
 <div><iframe id="peak-reversed" src="peak-memory-reversed.svg" width="100%" height="200" scrolling="auto" frameborder="0"></iframe><br>
 <p><input type="button" onclick="fullScreen('#peak-reversed');" value="Full screen"></p></div>
 
+<h2>Need help, or does something look wrong? <a href="https://github.com/pythonspeed/filprofiler/issues/new?body={bugreport}">Please file an issue</a> and I'll try to help</h2>
+
 <h2>Understanding the graphs</h2>
 <p>The flame graphs shows the callstacks responsible for allocations at peak.</p>
 
@@ -131,7 +142,9 @@ In the second reversed graph all calls to <tt>f()</tt> will be merged together.<
 </body>
 </html>
 """.format(
-                now=now.ctime(), argv=" ".join(map(shlex.quote, sys.argv))
+                now=now.ctime(),
+                argv=" ".join(map(shlex.quote, sys.argv)),
+                bugreport=DEBUGGING_INFO,
             )
         )
     return index_path
