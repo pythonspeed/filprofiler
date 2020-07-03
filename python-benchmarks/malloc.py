@@ -1,7 +1,7 @@
 import os
 import sys
 from argparse import ArgumentParser
-from pymalloc import pymalloc as malloc, pyfree as free, pyrealloc as realloc
+from pymalloc import pymalloc, pyrealloc, pyaligned_alloc
 import ctypes
 
 CPP = ctypes.PyDLL(os.path.join(os.path.dirname(__file__), "cpp.so"))
@@ -9,16 +9,16 @@ sys.path.append(os.path.dirname(__file__))
 
 MB = 1024 * 1024
 
-# If malloc() is captured, so is free() etc, so less important to test those.
+
 def main():
     parser = ArgumentParser()
     parser.add_argument("--size", action="store")
     size = int(parser.parse_args().size)
     CPP.cppnew()
-    CPP.aligned_alloc_wrapper()
-    result = malloc(size * MB)
-    result = realloc(result, (size + 10) * MB)  # <-- peak
-    result = realloc(result, (size - 5) * MB)
+    pyaligned_alloc()
+    result = pymalloc(size * MB)
+    result = pyrealloc(result, (size + 10) * MB)  # <-- peak
+    result = pyrealloc(result, (size - 5) * MB)
 
 
 main()
