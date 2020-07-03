@@ -35,6 +35,9 @@ jobs:
         run: |
             sudo apt-get update
             sudo apt-get install -y gfortran
+      - name: Install gfortran 2
+        if: contains(matrix.os, 'macos')
+        run: "brew install gfortran || true"
       - name: "Install dependencies and code"
         run: |
           set -euo pipefail
