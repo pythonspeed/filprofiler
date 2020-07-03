@@ -34,7 +34,7 @@ jobs:
         if: contains(matrix.os, 'ubuntu')
         run: |
             sudo apt-get update
-            sudo apt-get install -y gcc-gfortran
+            sudo apt-get install -y gfortran
       - name: "Install dependencies and code"
         run: |
           set -euo pipefail
