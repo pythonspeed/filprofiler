@@ -1,1 +1,0 @@
-Validated that C++ allocations get tracked.

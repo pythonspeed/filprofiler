@@ -1,3 +1,17 @@
+# Fil 0.7.0 (2020-07-03)
+
+
+### Features
+
+- C++ allocations get tracked more reliably, especially on macOS. ([#10](https://github.com/pythonspeed/filprofiler/issues/10))
+- Validated that Fortran 90 allocations are tracked by Fil. ([#11](https://github.com/pythonspeed/filprofiler/issues/11))
+
+
+### Misc
+
+- [#26](https://github.com/pythonspeed/filprofiler/issues/26)
+
+
 # Fil 0.6.0 (2020-07-01)
 
 
