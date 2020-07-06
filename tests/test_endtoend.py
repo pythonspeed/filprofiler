@@ -183,8 +183,10 @@ def test_python_objects():
 
     script = str(script)
     path = ((script, "<module>", 1),)
+    path2 = ((script, "<module>", 8), (script, "<genexpr>", 8))
 
     assert match(allocations, {path: big}, as_mb) == pytest.approx(34, 1)
+    assert match(allocations, {path2: big}, as_mb) == pytest.approx(46, 1)
 
 
 def test_minus_m():
