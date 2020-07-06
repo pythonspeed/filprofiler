@@ -171,6 +171,22 @@ def test_anonymous_mmap():
     assert match(allocations, {path: big}, as_mb) == pytest.approx(60, 0.1)
 
 
+def test_python_objects():
+    """
+    Python objects gets detected and tracked.
+
+    (NumPy uses Python memory APIs, so is not sufficient to test this.)
+    """
+    script = Path("python-benchmarks") / "pyobject.py"
+    output_dir = profile(script)
+    allocations = get_allocations(output_dir)
+
+    script = str(script)
+    path = ((script, "<module>", 1),)
+
+    assert match(allocations, {path: big}, as_mb) == pytest.approx(34, 1)
+
+
 def test_minus_m():
     """
     `fil-profile -m package` runs the package.
