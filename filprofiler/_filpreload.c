@@ -113,11 +113,16 @@ static void __attribute__((constructor)) constructor() {
     fprintf(stderr, "Couldn't load munmap(): %s\n", dlerror());
     exit(1);
   }
+
+  // Older macOS don't have aligned_alloc... but therefore presumably also won't
+  // call it.
+#ifndef __APPLE__
   underlying_real_aligned_alloc = dlsym(RTLD_NEXT, "aligned_alloc");
   if (!underlying_real_aligned_alloc) {
     fprintf(stderr, "Couldn't load aligned_alloc(): %s\n", dlerror());
     exit(1);
   }
+#endif
 
   initialized = 1;
   unsetenv("LD_PRELOAD");
@@ -355,7 +360,11 @@ SYMBOL_PREFIX(aligned_alloc)(size_t alignment, size_t size) {
 #endif
   }
 
+#ifdef __APPLE__
+  void *result = aligned_alloc(alignment, size);
+#else
   void *result = underlying_real_aligned_alloc(alignment, size);
+#endif
 
   // For now we only track anonymous mmap()s:
   if (!am_i_reentrant()) {
