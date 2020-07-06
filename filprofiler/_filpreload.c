@@ -83,37 +83,48 @@ static void __attribute__((constructor)) constructor() {
     fprintf(stderr, "BUG: expected size of size_t and void* to be the same.\n");
     exit(1);
   }
-  underlying_real_malloc = dlsym(RTLD_NEXT, "malloc");
+#ifdef __APPLE__
+  const char* libc_name = "libc.dylib";
+#else
+  const char* libc_name = "libc.so.6";
+#endif
+  void* libc = dlopen(libc_name, RTLD_LOCAL | RTLD_LAZY);
+  if (!libc) {
+    fprintf(stderr, "Couldn't load %s: %s\n", libc_name, dlerror());
+    exit(1);
+  }
+
+  underlying_real_malloc = dlsym(libc, "malloc");
   if (!underlying_real_malloc) {
     fprintf(stderr, "Couldn't load malloc(): %s\n", dlerror());
     exit(1);
   }
-  underlying_real_calloc = dlsym(RTLD_NEXT, "calloc");
+  underlying_real_calloc = dlsym(libc, "calloc");
   if (!underlying_real_calloc) {
     fprintf(stderr, "Couldn't load calloc(): %s\n", dlerror());
     exit(1);
   }
-  underlying_real_realloc = dlsym(RTLD_NEXT, "realloc");
+  underlying_real_realloc = dlsym(libc, "realloc");
   if (!underlying_real_realloc) {
     fprintf(stderr, "Couldn't load realloc(): %s\n", dlerror());
     exit(1);
   }
-  underlying_real_free = dlsym(RTLD_NEXT, "free");
+  underlying_real_free = dlsym(libc, "free");
   if (!underlying_real_free) {
     fprintf(stderr, "Couldn't load free(): %s\n", dlerror());
     exit(1);
   }
-  underlying_real_mmap = dlsym(RTLD_NEXT, "mmap");
+  underlying_real_mmap = dlsym(libc, "mmap");
   if (!underlying_real_mmap) {
     fprintf(stderr, "Couldn't load mmap(): %s\n", dlerror());
     exit(1);
   }
-  underlying_real_munmap = dlsym(RTLD_NEXT, "munmap");
+  underlying_real_munmap = dlsym(libc, "munmap");
   if (!underlying_real_munmap) {
     fprintf(stderr, "Couldn't load munmap(): %s\n", dlerror());
     exit(1);
   }
-  underlying_real_aligned_alloc = dlsym(RTLD_NEXT, "aligned_alloc");
+  underlying_real_aligned_alloc = dlsym(libc, "aligned_alloc");
   if (!underlying_real_aligned_alloc) {
     fprintf(stderr, "Couldn't load aligned_alloc(): %s\n", dlerror());
     exit(1);
