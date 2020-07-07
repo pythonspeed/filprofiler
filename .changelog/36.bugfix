@@ -1,0 +1,1 @@
+Fix bug that prevented Fil from running on macOS Mojave and older.
