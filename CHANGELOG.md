@@ -1,3 +1,11 @@
+# Fil 0.7.1 (2020-07-07)
+
+
+### Bugfixes
+
+- Fix bug that prevented Fil from running on macOS Mojave and older. ([#36](https://github.com/pythonspeed/filprofiler/issues/36))
+
+
 # Fil 0.7.0 (2020-07-03)
 
 
