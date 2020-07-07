@@ -1,7 +1,7 @@
 import os
 import sys
 from argparse import ArgumentParser
-from pymalloc import pymalloc, pyrealloc, pyaligned_alloc
+from pymalloc import pymalloc, pyrealloc, pyaligned_alloc, pyallocation_api
 import ctypes
 
 CPP = ctypes.PyDLL(os.path.join(os.path.dirname(__file__), "cpp.so"))
@@ -16,6 +16,7 @@ def main():
     size = int(parser.parse_args().size)
     CPP.cppnew()
     pyaligned_alloc()
+    pyallocation_api()
     result = pymalloc(size * MB)
     result = pyrealloc(result, (size + 10) * MB)  # <-- peak
     result = pyrealloc(result, (size - 5) * MB)

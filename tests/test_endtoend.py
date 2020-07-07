@@ -132,9 +132,7 @@ def test_thread_allocates_after_main_thread_is_done():
 
 def test_malloc_in_c_extension():
     """
-    Direct malloc() in C extension gets captured.
-
-    (NumPy uses Python memory APIs, so is not sufficient to test this.)
+    Various malloc() and friends variants in C extension gets captured.
     """
     script = Path("python-benchmarks") / "malloc.py"
     output_dir = profile(script, "--size", "70")
@@ -143,16 +141,20 @@ def test_malloc_in_c_extension():
     script = str(script)
 
     # The realloc() in the scripts adds 10 to the 70:
-    path = ((script, "<module>", 24), (script, "main", 20))
+    path = ((script, "<module>", 25), (script, "main", 21))
     assert match(allocations, {path: big}, as_mb) == pytest.approx(70 + 10, 0.1)
 
     # The C++ new allocation:
-    path = ((script, "<module>", 24), (script, "main", 17))
+    path = ((script, "<module>", 25), (script, "main", 17))
     assert match(allocations, {path: big}, as_mb) == pytest.approx(40, 0.1)
 
     # C++ aligned_alloc():
-    path = ((script, "<module>", 24), (script, "main", 18))
+    path = ((script, "<module>", 25), (script, "main", 18))
     assert match(allocations, {path: big}, as_mb) == pytest.approx(90, 0.1)
+
+    # Py*_*Malloc APIs:
+    path = ((script, "<module>", 25), (script, "main", 19))
+    assert match(allocations, {path: big}, as_mb) == pytest.approx(30, 0.1)
 
 
 def test_anonymous_mmap():
@@ -199,7 +201,7 @@ def test_minus_m():
     allocations = get_allocations(output_dir)
     stripped_allocations = {k[3:]: v for (k, v) in allocations.items()}
     script = str(script)
-    path = ((script, "<module>", 24), (script, "main", 20))
+    path = ((script, "<module>", 25), (script, "main", 21))
 
     assert match(stripped_allocations, {path: big}, as_mb) == pytest.approx(
         50 + 10, 0.1
