@@ -284,11 +284,10 @@ impl<'a> AllocationTracker {
         // If false, will do the current allocations:
         peak: bool,
         to_be_post_processed: bool,
-    ) -> collections::HashMap<String, usize> {
+    ) -> std::collections::hash_map::IntoIter<CallstackId, usize> {
         // First, make sure peaks are correct:
         self.check_if_new_peak();
 
-        let id_to_callstack = self.interner.get_reverse_map();
         let mut by_call: collections::HashMap<CallstackId, usize> = collections::HashMap::new();
 
         // Aggregate normal malloc() allocations:
@@ -314,18 +313,7 @@ impl<'a> AllocationTracker {
         }
 
         // Convert callstacks to be human-readable:
-        by_call
-            .into_iter()
-            .map(|(callstack_id, size)| {
-                (
-                    id_to_callstack
-                        .get(&callstack_id)
-                        .unwrap()
-                        .as_string(to_be_post_processed),
-                    size,
-                )
-            })
-            .collect()
+        by_call.into_iter()
     }
 
     /// Dump all callstacks in peak memory usage to various files describing the
@@ -357,10 +345,18 @@ impl<'a> AllocationTracker {
             .to_str()
             .unwrap()
             .to_string();
+        let id_to_callstack = self.interner.get_reverse_map();
         if let Err(e) = write_lines(
-            by_call
-                .iter()
-                .map(|(callstack, size)| format!("{} {}", callstack, *size)),
+            by_call.map(|(callstack_id, size)| {
+                format!(
+                    "{} {}",
+                    id_to_callstack
+                        .get(&callstack_id)
+                        .unwrap()
+                        .as_string(to_be_post_processed),
+                    size,
+                )
+            }),
             &raw_path,
         ) {
             eprintln!("=fil-profile= Error writing raw profiling data: {}", e);
