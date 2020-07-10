@@ -190,7 +190,7 @@ impl<'a> CallstackInterner {
 /// A specific call to malloc()/calloc().
 #[derive(Clone, Debug, PartialEq)]
 struct Allocation {
-    callstack: Callstack,
+    callstack_id: CallstackId,
     size: libc::size_t,
 }
 
@@ -200,8 +200,12 @@ struct AllocationTracker {
     current_allocations: imhashmap::HashMap<usize, Allocation>,
     peak_allocations: imhashmap::HashMap<usize, Allocation>,
     // anonymous mmap(), i.e. not file backed:
-    current_anon_mmaps: RangeMap<Callstack>,
-    peak_anon_mmaps: RangeMap<Callstack>,
+    current_anon_mmaps: RangeMap<CallstackId>,
+    peak_anon_mmaps: RangeMap<CallstackId>,
+
+    // Map CallstackIds to Callstacks, so we can store the former and save
+    // memory:
+    interner: CallstackInterner,
 
     // Both malloc() and mmap():
     current_allocated_bytes: usize,
@@ -219,6 +223,7 @@ impl<'a> AllocationTracker {
             peak_allocations: imhashmap::HashMap::default(),
             current_anon_mmaps: RangeMap::new(),
             peak_anon_mmaps: RangeMap::new(),
+            interner: CallstackInterner::new(),
             current_allocated_bytes: 0,
             peak_allocated_bytes: 0,
             spare_memory: Vec::with_capacity(16 * 1024 * 1024),
@@ -237,8 +242,9 @@ impl<'a> AllocationTracker {
     }
 
     /// Add a new allocation based off the current callstack.
-    fn add_allocation(&mut self, address: usize, size: libc::size_t, callstack: Callstack) {
-        let alloc = Allocation { callstack, size };
+    fn add_allocation(&mut self, address: usize, size: libc::size_t, callstack: &Callstack) {
+        let callstack_id = self.interner.get_or_insert_id(callstack);
+        let alloc = Allocation { callstack_id, size };
         self.current_allocations.insert(address, alloc);
         self.allocation_added(size);
     }
@@ -252,8 +258,9 @@ impl<'a> AllocationTracker {
     }
 
     /// Add a new anonymous mmap() based of the current callstack.
-    fn add_anon_mmap(&mut self, address: usize, size: libc::size_t, callstack: Callstack) {
-        self.current_anon_mmaps.add(address, size, callstack);
+    fn add_anon_mmap(&mut self, address: usize, size: libc::size_t, callstack: &Callstack) {
+        let callstack_id = self.interner.get_or_insert_id(callstack);
+        self.current_anon_mmaps.add(address, size, callstack_id);
         self.allocation_added(size);
     }
 
@@ -271,7 +278,8 @@ impl<'a> AllocationTracker {
         peak: bool,
         to_be_post_processed: bool,
     ) -> collections::HashMap<String, usize> {
-        let mut by_call: collections::HashMap<&Callstack, usize> = collections::HashMap::new();
+        let id_to_callstack = self.interner.get_reverse_map();
+        let mut by_call: collections::HashMap<CallstackId, usize> = collections::HashMap::new();
 
         // Aggregate normal malloc() allocations:
         let normal_allocations = if peak {
@@ -279,8 +287,8 @@ impl<'a> AllocationTracker {
         } else {
             &self.current_allocations
         };
-        for Allocation { callstack, size } in normal_allocations.values() {
-            let entry = by_call.entry(callstack).or_insert(0);
+        for Allocation { callstack_id, size } in normal_allocations.values() {
+            let entry = by_call.entry(*callstack_id).or_insert(0);
             *entry += size;
         }
 
@@ -290,15 +298,23 @@ impl<'a> AllocationTracker {
         } else {
             &self.current_anon_mmaps
         };
-        for (size, callstack) in anon_mmap_allocations.as_hashmap().values() {
-            let entry = by_call.entry(callstack).or_insert(0);
+        for (size, callstack_id) in anon_mmap_allocations.as_hashmap().values() {
+            let entry = by_call.entry(**callstack_id).or_insert(0);
             *entry += size;
         }
 
         // Convert callstacks to be human-readable:
         by_call
             .iter()
-            .map(|(callstack, size)| (callstack.as_string(to_be_post_processed), *size))
+            .map(|(callstack_id, size)| {
+                (
+                    id_to_callstack
+                        .get(callstack_id)
+                        .unwrap()
+                        .as_string(to_be_post_processed),
+                    *size,
+                )
+            })
             .collect()
     }
 
@@ -410,10 +426,16 @@ impl<'a> AllocationTracker {
             // only be _Python_ objects, Rust code shouldn't be tracked here since
             // we prevent reentrancy. We're not going to return to Python so
             // free()ing should be OK.
+            let id_to_callstack = self.interner.get_reverse_map();
             for (address, allocation) in self.current_allocations.iter() {
                 // Only clear large allocations that came out of a Python stack,
                 // to reduce chances of deallocating random important things.
-                if allocation.callstack.in_python() && allocation.size > 300000 {
+                if id_to_callstack
+                    .get(&allocation.callstack_id)
+                    .unwrap()
+                    .in_python()
+                    && allocation.size > 300000
+                {
                     libc::free(*address as *mut ffi::c_void);
                 }
             }
@@ -476,9 +498,9 @@ pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_m
     }
     let mut allocations = ALLOCATIONS.lock().unwrap();
     if is_mmap {
-        allocations.add_anon_mmap(address, size, callstack);
+        allocations.add_anon_mmap(address, size, &callstack);
     } else {
-        allocations.add_allocation(address, size, callstack);
+        allocations.add_allocation(address, size, &callstack);
     }
     if address == 0 {
         // Uh-oh, we're out of memory.
@@ -583,7 +605,7 @@ mod tests {
         ) {
             let mut tracker = AllocationTracker::new(".".to_string());
             for i in 0..allocated_sizes.len() {
-                tracker.add_allocation(i as usize,*allocated_sizes.get(i).unwrap(), Callstack::new());
+                tracker.add_allocation(i as usize,*allocated_sizes.get(i).unwrap(), &Callstack::new());
             }
             let mut expected_sum = allocated_sizes.iter().sum();
             prop_assert_eq!(tracker.current_allocated_bytes, expected_sum);
@@ -682,7 +704,7 @@ mod tests {
         let mut cs2 = Callstack::new();
         cs2.start_call(0, CallSiteId::new(fid3, 4));
 
-        tracker.add_allocation(1, 1000, cs1.clone());
+        tracker.add_allocation(1, 1000, &cs1);
         // Peak should now match current allocations:
         assert_eq!(tracker.current_allocations, tracker.peak_allocations);
         assert_eq!(tracker.peak_allocated_bytes, 1000);
@@ -695,19 +717,19 @@ mod tests {
         assert_eq!(tracker.peak_allocated_bytes, 1000);
 
         // Add allocation, still less than 1000:
-        tracker.add_allocation(3, 123, cs1.clone());
+        tracker.add_allocation(3, 123, &cs1);
         assert_eq!(previous_peak, tracker.peak_allocations);
         assert_eq!(tracker.peak_allocated_bytes, 1000);
 
         // Add allocation that goes past previous peak
-        tracker.add_allocation(2, 2000, cs2.clone());
+        tracker.add_allocation(2, 2000, &cs2);
         assert_eq!(tracker.current_allocations, tracker.peak_allocations);
         assert_eq!(tracker.peak_allocated_bytes, 2123);
         let previous_peak = tracker.peak_allocations.clone();
 
         // Add anonymous mmap() that doesn't go past previous peak:
         tracker.free_allocation(2);
-        tracker.add_anon_mmap(50000, 1000, cs2.clone());
+        tracker.add_anon_mmap(50000, 1000, &cs2);
         assert_eq!(tracker.current_allocated_bytes, 1123);
         assert_eq!(tracker.peak_allocated_bytes, 2123);
         assert_eq!(tracker.peak_allocations, previous_peak);
@@ -717,7 +739,7 @@ mod tests {
         assert!(tracker.peak_anon_mmaps.size() == 0);
 
         // Add anonymous mmap() that does go past previous peak:
-        tracker.add_anon_mmap(600000, 2000, cs2.clone());
+        tracker.add_anon_mmap(600000, 2000, &cs2);
         assert_eq!(tracker.current_allocations, tracker.peak_allocations);
         assert_eq!(tracker.current_anon_mmaps, tracker.peak_anon_mmaps);
         assert!(tracker.peak_anon_mmaps.size() > 0);
@@ -770,10 +792,10 @@ mod tests {
         cs3.start_call(0, id1_different);
         cs3.start_call(0, id2);
 
-        tracker.add_allocation(1, 1000, cs1.clone());
-        tracker.add_allocation(2, 234, cs2.clone());
-        tracker.add_anon_mmap(3, 50000, cs1.clone());
-        tracker.add_allocation(4, 6000, cs3.clone());
+        tracker.add_allocation(1, 1000, &cs1);
+        tracker.add_allocation(2, 234, &cs2);
+        tracker.add_anon_mmap(3, 50000, &cs1);
+        tracker.add_allocation(4, 6000, &cs3);
 
         let mut expected: collections::HashMap<String, usize> = collections::HashMap::new();
         expected.insert(
