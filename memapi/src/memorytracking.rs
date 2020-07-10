@@ -6,6 +6,7 @@ use itertools::Itertools;
 use libc;
 use std::cell::RefCell;
 use std::collections;
+use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
@@ -146,6 +147,45 @@ impl Callstack {
 }
 
 thread_local!(static THREAD_CALLSTACK: RefCell<Callstack> = RefCell::new(Callstack::new()));
+
+type CallstackId = u32;
+
+/// Maps Functions to integer identifiers used in CallStacks.
+struct CallstackInterner {
+    max_id: CallstackId,
+    callstack_to_id: HashMap<Callstack, u32>,
+}
+
+impl<'a> CallstackInterner {
+    fn new() -> Self {
+        CallstackInterner {
+            max_id: 0,
+            callstack_to_id: HashMap::default(),
+        }
+    }
+
+    /// Add a (possibly) new Function, returning its ID.
+    fn get_or_insert_id(&mut self, callstack: &Callstack) -> CallstackId {
+        let max_id = &mut self.max_id;
+        if let Some(result) = self.callstack_to_id.get(callstack) {
+            *result
+        } else {
+            let new_id = *max_id;
+            *max_id += 1;
+            self.callstack_to_id.insert(callstack.clone(), new_id);
+            new_id
+        }
+    }
+
+    /// Get map from IDs to Functions.
+    fn get_reverse_map(&self) -> HashMap<CallstackId, &Callstack> {
+        let mut result = HashMap::default();
+        for (call_site, csid) in self.callstack_to_id.iter() {
+            result.insert(*csid, call_site);
+        }
+        result
+    }
+}
 
 /// A specific call to malloc()/calloc().
 #[derive(Clone, Debug, PartialEq)]
@@ -526,7 +566,9 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
 
 #[cfg(test)]
 mod tests {
-    use super::{AllocationTracker, CallSiteId, Callstack, FunctionId, FunctionLocation};
+    use super::{
+        AllocationTracker, CallSiteId, Callstack, CallstackInterner, FunctionId, FunctionLocation,
+    };
     use itertools::Itertools;
     use proptest::prelude::*;
     use std::collections;
@@ -592,6 +634,39 @@ mod tests {
             cs2.calls,
             vec![CallSiteId::new(fid1, 10), CallSiteId::new(fid3, 12), id3]
         );
+    }
+
+    #[test]
+    fn callstackinterner_notices_duplicates() {
+        let func1 = FunctionLocation::from_strings("a", "af");
+        let func3 = FunctionLocation::from_strings("b", "bf");
+        let fid1 = FunctionId::new(&func1 as *const FunctionLocation);
+        let fid3 = FunctionId::new(&func3 as *const FunctionLocation);
+
+        let mut cs1 = Callstack::new();
+        cs1.start_call(0, CallSiteId::new(fid1, 2));
+        let cs1b = cs1.clone();
+        let mut cs2 = Callstack::new();
+        cs2.start_call(0, CallSiteId::new(fid3, 4));
+        let cs3 = Callstack::new();
+        let cs3b = Callstack::new();
+
+        let mut interner = CallstackInterner::new();
+        let id1 = interner.get_or_insert_id(&cs1);
+        let id1b = interner.get_or_insert_id(&cs1b);
+        let id2 = interner.get_or_insert_id(&cs2);
+        let id3 = interner.get_or_insert_id(&cs3);
+        let id3b = interner.get_or_insert_id(&cs3b);
+        assert_eq!(id1, id1b);
+        assert_ne!(id1, id2);
+        assert_ne!(id1, id3);
+        assert_ne!(id2, id3);
+        assert_eq!(id3, id3b);
+        let mut expected = collections::HashMap::default();
+        expected.insert(id1, &cs1);
+        expected.insert(id2, &cs2);
+        expected.insert(id3, &cs3);
+        assert_eq!(interner.get_reverse_map(), expected);
     }
 
     #[test]
