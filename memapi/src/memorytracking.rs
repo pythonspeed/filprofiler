@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
+use std::path::PathBuf;
 use std::slice;
 use std::sync::Mutex;
 
@@ -314,14 +315,14 @@ impl<'a> AllocationTracker {
 
         // Convert callstacks to be human-readable:
         by_call
-            .iter()
+            .into_iter()
             .map(|(callstack_id, size)| {
                 (
                     id_to_callstack
-                        .get(callstack_id)
+                        .get(&callstack_id)
                         .unwrap()
                         .as_string(to_be_post_processed),
-                    *size,
+                    size,
                 )
             })
             .collect()
@@ -351,16 +352,17 @@ impl<'a> AllocationTracker {
             panic!("=fil-profile= Output path must be a directory.");
         }
         let by_call = self.combine_callstacks(peak, to_be_post_processed);
-        let lines: Vec<String> = by_call
-            .iter()
-            .map(|(callstack, size)| format!("{} {}", callstack, *size))
-            .collect();
         let raw_path = directory_path
             .join(format!("{}.prof", base_filename))
             .to_str()
             .unwrap()
             .to_string();
-        if let Err(e) = write_lines(&lines, &raw_path) {
+        if let Err(e) = write_lines(
+            by_call
+                .iter()
+                .map(|(callstack, size)| format!("{} {}", callstack, *size)),
+            &raw_path,
+        ) {
             eprintln!("=fil-profile= Error writing raw profiling data: {}", e);
         }
         let svg_path = directory_path
@@ -369,7 +371,7 @@ impl<'a> AllocationTracker {
             .unwrap()
             .to_string();
         match write_flamegraph(
-            lines.iter().map(|s| s.as_ref()),
+            &raw_path,
             &svg_path,
             self.peak_allocated_bytes,
             false,
@@ -392,7 +394,7 @@ impl<'a> AllocationTracker {
             .unwrap()
             .to_string();
         match write_flamegraph(
-            lines.iter().map(|s| s.as_ref()),
+            &raw_path,
             &svg_path,
             self.peak_allocated_bytes,
             true,
@@ -542,9 +544,9 @@ pub fn dump_peak_to_flamegraph(path: &str) {
 }
 
 /// Write strings to disk, one line per string.
-fn write_lines(lines: &Vec<String>, path: &str) -> std::io::Result<()> {
+fn write_lines<I: Iterator<Item = String>>(lines: I, path: &str) -> std::io::Result<()> {
     let mut file = fs::File::create(path)?;
-    for line in lines.iter() {
+    for line in lines {
         file.write_all(line.as_bytes())?;
         file.write_all(b"\n")?;
     }
@@ -553,8 +555,8 @@ fn write_lines(lines: &Vec<String>, path: &str) -> std::io::Result<()> {
 }
 
 /// Write a flamegraph SVG to disk, given lines in summarized format.
-fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
-    lines: I,
+fn write_flamegraph(
+    lines_file_path: &str,
     path: &str,
     peak_bytes: usize,
     reversed: bool,
@@ -585,7 +587,7 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
     if to_be_post_processed {
         options.subtitle = Some("SUBTITLE-HERE".to_string());
     }
-    if let Err(e) = flamegraph::from_lines(&mut options, lines, &file) {
+    if let Err(e) = flamegraph::from_files(&mut options, &[PathBuf::from(lines_file_path)], &file) {
         Err(std::io::Error::new(
             std::io::ErrorKind::Other,
             format!("{}", e),
