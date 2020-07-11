@@ -283,7 +283,6 @@ impl<'a> AllocationTracker {
         &mut self,
         // If false, will do the current allocations:
         peak: bool,
-        to_be_post_processed: bool,
     ) -> std::collections::hash_map::IntoIter<CallstackId, usize> {
         // First, make sure peaks are correct:
         self.check_if_new_peak();
@@ -322,6 +321,25 @@ impl<'a> AllocationTracker {
         self.dump_to_flamegraph(path, true, "peak-memory", "Peak Tracked Memory Usage", true);
     }
 
+    fn to_lines(
+        &mut self,
+        peak: bool,
+        to_be_post_processed: bool,
+    ) -> impl Iterator<Item = String> + '_ {
+        let by_call = self.combine_callstacks(peak);
+        let id_to_callstack = self.interner.get_reverse_map();
+        by_call.map(move |(callstack_id, size)| {
+            format!(
+                "{} {}",
+                id_to_callstack
+                    .get(&callstack_id)
+                    .unwrap()
+                    .as_string(to_be_post_processed),
+                size,
+            )
+        })
+    }
+
     fn dump_to_flamegraph(
         &mut self,
         path: &str,
@@ -339,26 +357,14 @@ impl<'a> AllocationTracker {
         } else if !directory_path.is_dir() {
             panic!("=fil-profile= Output path must be a directory.");
         }
-        let by_call = self.combine_callstacks(peak, to_be_post_processed);
+
         let raw_path = directory_path
             .join(format!("{}.prof", base_filename))
             .to_str()
             .unwrap()
             .to_string();
-        let id_to_callstack = self.interner.get_reverse_map();
-        if let Err(e) = write_lines(
-            by_call.map(|(callstack_id, size)| {
-                format!(
-                    "{} {}",
-                    id_to_callstack
-                        .get(&callstack_id)
-                        .unwrap()
-                        .as_string(to_be_post_processed),
-                    size,
-                )
-            }),
-            &raw_path,
-        ) {
+
+        if let Err(e) = write_lines(self.to_lines(peak, to_be_post_processed), &raw_path) {
             eprintln!("=fil-profile= Error writing raw profiling data: {}", e);
         }
         let svg_path = directory_path
@@ -836,22 +842,26 @@ mod tests {
         tracker.add_anon_mmap(3, 50000, &cs1);
         tracker.add_allocation(4, 6000, &cs3);
 
-        let mut expected: collections::HashMap<String, usize> = collections::HashMap::new();
-        expected.insert(
-            "a:1 (af);TB@@a:1@@TB;b:2 (bf);TB@@b:2@@TB".to_string(),
-            51000,
-        );
-        expected.insert("c:3 (cf);TB@@c:3@@TB".to_string(), 234);
-        expected.insert(
-            "a:7 (af);TB@@a:7@@TB;b:2 (bf);TB@@b:2@@TB".to_string(),
-            6000,
-        );
-        assert_eq!(expected, tracker.combine_callstacks(true, true));
+        let mut expected = vec![
+            "a:1 (af);TB@@a:1@@TB;b:2 (bf);TB@@b:2@@TB 51000".to_string(),
+            "c:3 (cf);TB@@c:3@@TB 234".to_string(),
+            "a:7 (af);TB@@a:7@@TB;b:2 (bf);TB@@b:2@@TB 6000".to_string(),
+        ];
+        let mut result: Vec<String> = tracker.to_lines(true, true).collect();
+        result.sort();
+        expected.sort();
+        assert_eq!(expected, result);
 
-        let mut expected2: collections::HashMap<String, usize> = collections::HashMap::new();
-        expected2.insert("a:1 (af);b:2 (bf)".to_string(), 51000);
-        expected2.insert("c:3 (cf)".to_string(), 234);
-        expected2.insert("a:7 (af);b:2 (bf)".to_string(), 6000);
-        assert_eq!(expected2, tracker.combine_callstacks(true, false));
+        let mut expected2 = vec![
+            "a:1 (af);b:2 (bf) 51000",
+            "c:3 (cf) 234",
+            "a:7 (af);b:2 (bf) 6000",
+        ];
+        let mut result2: Vec<String> = tracker.to_lines(true, false).collect();
+        result2.sort();
+        expected2.sort();
+        assert_eq!(expected2, result2);
     }
+
+    // TODO test to_lines(false)
 }
