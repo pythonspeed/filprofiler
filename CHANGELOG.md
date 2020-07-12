@@ -1,3 +1,12 @@
+# Fil 0.7.2 (2020-07-12)
+
+
+### Bugfixes
+
+- Significantly reduced the memory used to generate the SVG report. ([#38](https://github.com/pythonspeed/filprofiler/issues/38))
+- Reduced memory overhead of Fil somewhat, specifically when tracking large numbers of small allocations. ([#43](https://github.com/pythonspeed/filprofiler/issues/43))
+
+
 # Fil 0.7.1 (2020-07-07)
 
 
