@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
+use std::path::PathBuf;
 use std::slice;
 use std::sync::Mutex;
 
@@ -282,12 +283,10 @@ impl<'a> AllocationTracker {
         &mut self,
         // If false, will do the current allocations:
         peak: bool,
-        to_be_post_processed: bool,
-    ) -> collections::HashMap<String, usize> {
+    ) -> std::collections::hash_map::IntoIter<CallstackId, usize> {
         // First, make sure peaks are correct:
         self.check_if_new_peak();
 
-        let id_to_callstack = self.interner.get_reverse_map();
         let mut by_call: collections::HashMap<CallstackId, usize> = collections::HashMap::new();
 
         // Aggregate normal malloc() allocations:
@@ -313,24 +312,32 @@ impl<'a> AllocationTracker {
         }
 
         // Convert callstacks to be human-readable:
-        by_call
-            .iter()
-            .map(|(callstack_id, size)| {
-                (
-                    id_to_callstack
-                        .get(callstack_id)
-                        .unwrap()
-                        .as_string(to_be_post_processed),
-                    *size,
-                )
-            })
-            .collect()
+        by_call.into_iter()
     }
 
     /// Dump all callstacks in peak memory usage to various files describing the
     /// memory usage.
     fn dump_peak_to_flamegraph(&mut self, path: &str) {
         self.dump_to_flamegraph(path, true, "peak-memory", "Peak Tracked Memory Usage", true);
+    }
+
+    fn to_lines(
+        &mut self,
+        peak: bool,
+        to_be_post_processed: bool,
+    ) -> impl Iterator<Item = String> + '_ {
+        let by_call = self.combine_callstacks(peak);
+        let id_to_callstack = self.interner.get_reverse_map();
+        by_call.map(move |(callstack_id, size)| {
+            format!(
+                "{} {}",
+                id_to_callstack
+                    .get(&callstack_id)
+                    .unwrap()
+                    .as_string(to_be_post_processed),
+                size,
+            )
+        })
     }
 
     fn dump_to_flamegraph(
@@ -350,17 +357,14 @@ impl<'a> AllocationTracker {
         } else if !directory_path.is_dir() {
             panic!("=fil-profile= Output path must be a directory.");
         }
-        let by_call = self.combine_callstacks(peak, to_be_post_processed);
-        let lines: Vec<String> = by_call
-            .iter()
-            .map(|(callstack, size)| format!("{} {}", callstack, *size))
-            .collect();
+
         let raw_path = directory_path
             .join(format!("{}.prof", base_filename))
             .to_str()
             .unwrap()
             .to_string();
-        if let Err(e) = write_lines(&lines, &raw_path) {
+
+        if let Err(e) = write_lines(self.to_lines(peak, to_be_post_processed), &raw_path) {
             eprintln!("=fil-profile= Error writing raw profiling data: {}", e);
         }
         let svg_path = directory_path
@@ -369,7 +373,7 @@ impl<'a> AllocationTracker {
             .unwrap()
             .to_string();
         match write_flamegraph(
-            lines.iter().map(|s| s.as_ref()),
+            &raw_path,
             &svg_path,
             self.peak_allocated_bytes,
             false,
@@ -392,7 +396,7 @@ impl<'a> AllocationTracker {
             .unwrap()
             .to_string();
         match write_flamegraph(
-            lines.iter().map(|s| s.as_ref()),
+            &raw_path,
             &svg_path,
             self.peak_allocated_bytes,
             true,
@@ -542,9 +546,9 @@ pub fn dump_peak_to_flamegraph(path: &str) {
 }
 
 /// Write strings to disk, one line per string.
-fn write_lines(lines: &Vec<String>, path: &str) -> std::io::Result<()> {
+fn write_lines<I: Iterator<Item = String>>(lines: I, path: &str) -> std::io::Result<()> {
     let mut file = fs::File::create(path)?;
-    for line in lines.iter() {
+    for line in lines {
         file.write_all(line.as_bytes())?;
         file.write_all(b"\n")?;
     }
@@ -553,8 +557,8 @@ fn write_lines(lines: &Vec<String>, path: &str) -> std::io::Result<()> {
 }
 
 /// Write a flamegraph SVG to disk, given lines in summarized format.
-fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
-    lines: I,
+fn write_flamegraph(
+    lines_file_path: &str,
     path: &str,
     peak_bytes: usize,
     reversed: bool,
@@ -585,7 +589,7 @@ fn write_flamegraph<'a, I: IntoIterator<Item = &'a str>>(
     if to_be_post_processed {
         options.subtitle = Some("SUBTITLE-HERE".to_string());
     }
-    if let Err(e) = flamegraph::from_lines(&mut options, lines, &file) {
+    if let Err(e) = flamegraph::from_files(&mut options, &[PathBuf::from(lines_file_path)], &file) {
         Err(std::io::Error::new(
             std::io::ErrorKind::Other,
             format!("{}", e),
@@ -838,22 +842,26 @@ mod tests {
         tracker.add_anon_mmap(3, 50000, &cs1);
         tracker.add_allocation(4, 6000, &cs3);
 
-        let mut expected: collections::HashMap<String, usize> = collections::HashMap::new();
-        expected.insert(
-            "a:1 (af);TB@@a:1@@TB;b:2 (bf);TB@@b:2@@TB".to_string(),
-            51000,
-        );
-        expected.insert("c:3 (cf);TB@@c:3@@TB".to_string(), 234);
-        expected.insert(
-            "a:7 (af);TB@@a:7@@TB;b:2 (bf);TB@@b:2@@TB".to_string(),
-            6000,
-        );
-        assert_eq!(expected, tracker.combine_callstacks(true, true));
+        let mut expected = vec![
+            "a:1 (af);TB@@a:1@@TB;b:2 (bf);TB@@b:2@@TB 51000".to_string(),
+            "c:3 (cf);TB@@c:3@@TB 234".to_string(),
+            "a:7 (af);TB@@a:7@@TB;b:2 (bf);TB@@b:2@@TB 6000".to_string(),
+        ];
+        let mut result: Vec<String> = tracker.to_lines(true, true).collect();
+        result.sort();
+        expected.sort();
+        assert_eq!(expected, result);
 
-        let mut expected2: collections::HashMap<String, usize> = collections::HashMap::new();
-        expected2.insert("a:1 (af);b:2 (bf)".to_string(), 51000);
-        expected2.insert("c:3 (cf)".to_string(), 234);
-        expected2.insert("a:7 (af);b:2 (bf)".to_string(), 6000);
-        assert_eq!(expected2, tracker.combine_callstacks(true, false));
+        let mut expected2 = vec![
+            "a:1 (af);b:2 (bf) 51000",
+            "c:3 (cf) 234",
+            "a:7 (af);b:2 (bf) 6000",
+        ];
+        let mut result2: Vec<String> = tracker.to_lines(true, false).collect();
+        result2.sort();
+        expected2.sort();
+        assert_eq!(expected2, result2);
     }
+
+    // TODO test to_lines(false)
 }
