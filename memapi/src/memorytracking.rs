@@ -188,14 +188,45 @@ impl<'a> CallstackInterner {
     }
 }
 
+const MIB: usize = 1024 * 1024;
+const HIGH_32BIT: u32 = 1 << 31;
+
 /// A specific call to malloc()/calloc().
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 struct Allocation {
     callstack_id: CallstackId,
-    size: libc::size_t,
+    // If high bit is set, this is MiBs (without the high bit being meaningful).
+    // Otherwise, it's bytes. We only store MiBs for allocations larger than 2
+    // ** 31 bytes (2GB), which means the loss of resolution isn't meaningful.
+    // This compression allows us to reduce memory overhead from tracking
+    // allocations.
+    compressed_size: u32,
 }
 
-/// The main data structure tracsking everything.
+impl Allocation {
+    fn new(callstack_id: CallstackId, size: libc::size_t) -> Self {
+        let compressed_size = if size >= HIGH_32BIT as usize {
+            // Rounding division by MiB, plus the high bit:
+            (((size + MIB / 2) / MIB) as u32) | HIGH_32BIT
+        } else {
+            size as u32
+        };
+        Allocation {
+            callstack_id,
+            compressed_size,
+        }
+    }
+
+    fn size(&self) -> libc::size_t {
+        if self.compressed_size >= HIGH_32BIT {
+            (self.compressed_size - HIGH_32BIT) as libc::size_t * MIB
+        } else {
+            self.compressed_size as libc::size_t
+        }
+    }
+}
+
+/// The main data structure tracking everything.
 struct AllocationTracker {
     // malloc()/calloc():
     current_allocations: imhashmap::HashMap<usize, Allocation>,
@@ -244,7 +275,7 @@ impl<'a> AllocationTracker {
     /// Add a new allocation based off the current callstack.
     fn add_allocation(&mut self, address: usize, size: libc::size_t, callstack: &Callstack) {
         let callstack_id = self.interner.get_or_insert_id(callstack);
-        let alloc = Allocation { callstack_id, size };
+        let alloc = Allocation::new(callstack_id, size);
         self.current_allocations.insert(address, alloc);
         self.current_allocated_bytes += size;
         //self.allocation_added(size);
@@ -257,7 +288,7 @@ impl<'a> AllocationTracker {
         // Possibly this allocation doesn't exist; that's OK! It can if e.g. we
         // didn't capture an allocation for some reason.
         if let Some(removed) = self.current_allocations.remove(&address) {
-            self.current_allocated_bytes -= removed.size;
+            self.current_allocated_bytes -= removed.size();
         }
     }
 
@@ -295,9 +326,9 @@ impl<'a> AllocationTracker {
         } else {
             &self.current_allocations
         };
-        for Allocation { callstack_id, size } in normal_allocations.values() {
-            let entry = by_call.entry(*callstack_id).or_insert(0);
-            *entry += size;
+        for allocation in normal_allocations.values() {
+            let entry = by_call.entry(allocation.callstack_id).or_insert(0);
+            *entry += allocation.size();
         }
 
         // Aggregate anonymous mmap()s:
@@ -447,7 +478,7 @@ impl<'a> AllocationTracker {
                     .get(&allocation.callstack_id)
                     .unwrap()
                     .in_python()
-                    && allocation.size > 300000
+                    && allocation.size() > 300000
                 {
                     libc::free(*address as *mut ffi::c_void);
                 }
@@ -603,12 +634,34 @@ fn write_flamegraph(
 #[cfg(test)]
 mod tests {
     use super::{
-        AllocationTracker, CallSiteId, Callstack, CallstackInterner, FunctionId, FunctionLocation,
+        Allocation, AllocationTracker, CallSiteId, Callstack, CallstackInterner, FunctionId,
+        FunctionLocation, HIGH_32BIT, MIB,
     };
     use proptest::prelude::*;
     use std::collections;
 
     proptest! {
+        // Allocation sizes smaller than 2 ** 31 are round-tripped.
+        #[test]
+        fn small_allocation(size in 0..(HIGH_32BIT - 1)) {
+            let allocation = Allocation::new(0, size as usize);
+            prop_assert_eq!(size as usize, allocation.size());
+        }
+
+        // Allocation sizes larger than 2 ** 31 are stored as MiBs, with some
+        // loss of resolution.
+        #[test]
+        fn large_allocation(size in (HIGH_32BIT as usize)..(1 << 50)) {
+            let allocation = Allocation::new(0, size as usize);
+            let result_size = allocation.size();
+            let diff = if size < result_size {
+                result_size - size
+            } else {
+                size - result_size
+            };
+            prop_assert!(diff <= MIB / 2)
+        }
+
         #[test]
         fn current_allocated_matches_sum_of_allocations(
             // Allocated bytes. Will use index as the memory address.
