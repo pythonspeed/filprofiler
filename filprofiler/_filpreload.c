@@ -32,7 +32,7 @@ static void *(*underlying_real_mmap)(void *addr, size_t length, int prot,
                                      int flags, int fd, off_t offset) = 0;
 static int (*underlying_real_munmap)(void *addr, size_t length) = 0;
 
-// Used on Linux to initialize Rust code's jemalloc:
+// Used on Linux to implement these APIs:
 extern void *_rjem_malloc(size_t length);
 extern void *_rjem_calloc(size_t nmemb, size_t length);
 extern void *_rjem_realloc(void *addr, size_t length);
