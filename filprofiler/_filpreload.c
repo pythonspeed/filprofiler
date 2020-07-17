@@ -30,6 +30,9 @@ static int (*underlying_real_munmap)(void *addr, size_t length) = 0;
 static void *(*underlying_real_aligned_alloc)(size_t alignment,
                                               size_t size) = 0;
 
+// Used on Linux to initialize Rust code's jemalloc:
+extern void *_rjem_malloc(size_t length);
+
 // Note whether we've been initialized yet or not:
 static int initialized = 0;
 
@@ -78,6 +81,13 @@ static void __attribute__((constructor)) constructor() {
   if (initialized) {
     return;
   }
+
+#ifdef __linux__
+  // Ensure jemalloc is initialized as early as possible. If jemalloc is
+  // initialized via mmap() -> Rust triggering allocation, it deadlocks because
+  // jemalloc uses mmap to get more memory!
+  _rjem_malloc(1);
+#endif
 
   if (sizeof((void *)0) != sizeof((size_t)0)) {
     fprintf(stderr, "BUG: expected size of size_t and void* to be the same.\n");
@@ -128,13 +138,6 @@ static void __attribute__((constructor)) constructor() {
   unsetenv("LD_PRELOAD");
   // This seems to break things... revisit at some point.
   // unsetenv("DYLD_INSERT_LIBRARIES");
-
-  // malloc() triggers Rust code triggers memory allocation, ensuring jemalloc
-  // is initialized as early as possible. If jemalloc is initialized via
-  // mmap() -> Rust -> allocation, it deadlocks because jemalloc uses mmap to
-  // get more memory!
-  //malloc(1);
-  printf("WHAT\n");
 }
 
 // Implemented in the Rust library:
