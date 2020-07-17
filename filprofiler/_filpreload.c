@@ -10,28 +10,34 @@
 #include <stdio.h>
 #include <sys/mman.h>
 
+// Macro to create the publicly exposed symbol:
 #ifdef __APPLE__
 #define SYMBOL_PREFIX(func) reimplemented_##func
 #else
 #define SYMBOL_PREFIX(func) func
 #endif
 
+// Macro to get the underlying function being wrapped:
+#ifdef __APPLE__
+#define REAL_IMPL(func) func
+#elif __linux__
+#define REAL_IMPL(func) _rjem_##func
+#endif
+
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
 // Underlying APIs we're wrapping:
-static void *(*underlying_real_malloc)(size_t length) = 0;
-static void *(*underlying_real_calloc)(size_t nmemb, size_t length) = 0;
-static void *(*underlying_real_realloc)(void *addr, size_t length) = 0;
-static void (*underlying_real_free)(void *addr) = 0;
 static void *(*underlying_real_mmap)(void *addr, size_t length, int prot,
                                      int flags, int fd, off_t offset) = 0;
 static int (*underlying_real_munmap)(void *addr, size_t length) = 0;
-static void *(*underlying_real_aligned_alloc)(size_t alignment,
-                                              size_t size) = 0;
 
 // Used on Linux to initialize Rust code's jemalloc:
 extern void *_rjem_malloc(size_t length);
+extern void *_rjem_calloc(size_t nmemb, size_t length);
+extern void *_rjem_realloc(void *addr, size_t length);
+extern void _rjem_free(void *addr);
+extern void *_rjem_aligned_alloc(size_t alignment, size_t size);
 
 // Note whether we've been initialized yet or not:
 static int initialized = 0;
@@ -57,7 +63,7 @@ static inline uint64_t am_i_reentrant() {
 static inline void set_will_i_be_reentrant(uint64_t i) {
   pthread_setspecific(will_i_be_reentrant, (void *)i);
 }
-#else
+#elif __linux__
 #include <sys/syscall.h>
 static _Thread_local int will_i_be_reentrant = 0;
 
@@ -93,26 +99,7 @@ static void __attribute__((constructor)) constructor() {
     fprintf(stderr, "BUG: expected size of size_t and void* to be the same.\n");
     exit(1);
   }
-  underlying_real_malloc = dlsym(RTLD_NEXT, "malloc");
-  if (!underlying_real_malloc) {
-    fprintf(stderr, "Couldn't load malloc(): %s\n", dlerror());
-    exit(1);
-  }
-  underlying_real_calloc = dlsym(RTLD_NEXT, "calloc");
-  if (!underlying_real_calloc) {
-    fprintf(stderr, "Couldn't load calloc(): %s\n", dlerror());
-    exit(1);
-  }
-  underlying_real_realloc = dlsym(RTLD_NEXT, "realloc");
-  if (!underlying_real_realloc) {
-    fprintf(stderr, "Couldn't load realloc(): %s\n", dlerror());
-    exit(1);
-  }
-  underlying_real_free = dlsym(RTLD_NEXT, "free");
-  if (!underlying_real_free) {
-    fprintf(stderr, "Couldn't load free(): %s\n", dlerror());
-    exit(1);
-  }
+
   underlying_real_mmap = dlsym(RTLD_NEXT, "mmap");
   if (!underlying_real_mmap) {
     fprintf(stderr, "Couldn't load mmap(): %s\n", dlerror());
@@ -123,16 +110,6 @@ static void __attribute__((constructor)) constructor() {
     fprintf(stderr, "Couldn't load munmap(): %s\n", dlerror());
     exit(1);
   }
-
-  // Older macOS don't have aligned_alloc... but therefore presumably also won't
-  // call it.
-#ifndef __APPLE__
-  underlying_real_aligned_alloc = dlsym(RTLD_NEXT, "aligned_alloc");
-  if (!underlying_real_aligned_alloc) {
-    fprintf(stderr, "Couldn't load aligned_alloc(): %s\n", dlerror());
-    exit(1);
-  }
-#endif
 
   initialized = 1;
   unsetenv("LD_PRELOAD");
@@ -155,8 +132,7 @@ extern void pymemprofile_add_anon_mmap(size_t address, size_t length,
                                        uint16_t line_number);
 extern void pymemprofile_free_anon_mmap(size_t address, size_t length);
 
-static void
-start_call(struct FunctionLocation *loc, uint16_t line_number) {
+static void start_call(struct FunctionLocation *loc, uint16_t line_number) {
   if (!am_i_reentrant()) {
     set_will_i_be_reentrant(1);
     uint16_t parent_line_number = 0;
@@ -224,30 +200,11 @@ static void add_anon_mmap(size_t address, size_t size) {
   pymemprofile_add_anon_mmap(address, size, line_number);
 }
 
-// On Linux, before the shared library is initialized it's not possible to call
-// malloc() and friends, because the function pointers haven't been loaded with
-// dlsym(). So we need a fallback. On macOS we can just use the function
-// directly, because we're not publishing our own malloc() symbol so we don't
-// get infinite recursion, we can just call the original function.
-static void *malloc_fallback(size_t size) {
-#ifdef __APPLE__
-  return malloc(size);
-#else
-  // We can't use mmap() libc call, because we override it, so use the syscall
-  // directly:
-  return (void *)syscall(SYS_mmap, NULL, size, PROT_READ | PROT_WRITE,
-                         MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-#endif
-}
-
 // Override memory-allocation functions:
 __attribute__((visibility("default"))) void *
 SYMBOL_PREFIX(malloc)(size_t size) {
-  if (unlikely(!initialized)) {
-    return malloc_fallback(size);
-  }
-  void *result = underlying_real_malloc(size);
-  if (!am_i_reentrant() && initialized) {
+  void *result = REAL_IMPL(malloc)(size);
+  if (!am_i_reentrant()) {
     set_will_i_be_reentrant(1);
     add_allocation((size_t)result, size);
     set_will_i_be_reentrant(0);
@@ -257,14 +214,9 @@ SYMBOL_PREFIX(malloc)(size_t size) {
 
 __attribute__((visibility("default"))) void *
 SYMBOL_PREFIX(calloc)(size_t nmemb, size_t size) {
-  if (unlikely(!initialized)) {
-    void* result = malloc_fallback(nmemb * size);
-    memset(result, 0, nmemb * size);
-    return result;
-  }
-  void *result = underlying_real_calloc(nmemb, size);
+  void *result = REAL_IMPL(calloc)(nmemb, size);
   size_t allocated = nmemb * size;
-  if (!am_i_reentrant() && initialized) {
+  if (!am_i_reentrant()) {
     set_will_i_be_reentrant(1);
     add_allocation((size_t)result, allocated);
     set_will_i_be_reentrant(0);
@@ -274,21 +226,8 @@ SYMBOL_PREFIX(calloc)(size_t nmemb, size_t size) {
 
 __attribute__((visibility("default"))) void *
 SYMBOL_PREFIX(realloc)(void *addr, size_t size) {
-  if (unlikely(!initialized)) {
-#ifdef __APPLE__
-    return realloc(addr, size);
-#else
-    void *result = malloc_fallback(size);
-    if (addr != NULL) {
-      // Why someone should realloc() with null pointer I don't know.
-      // But they sometimes do.
-      memcpy(result, addr, size);
-    }
-    return result;
-#endif
-  }
-  void *result = underlying_real_realloc(addr, size);
-  if (!am_i_reentrant() && initialized) {
+  void *result = REAL_IMPL(realloc)(addr, size);
+  if (!am_i_reentrant()) {
     set_will_i_be_reentrant(1);
     // Sometimes you'll get same address, so if we did remove first and then
     // added, it would remove the entry erroneously.
@@ -300,15 +239,7 @@ SYMBOL_PREFIX(realloc)(void *addr, size_t size) {
 }
 
 __attribute__((visibility("default"))) void SYMBOL_PREFIX(free)(void *addr) {
-  if (unlikely(!initialized)) {
-#ifdef __APPLE__
-    free(addr);
-#else
-// We're going to leak a little memory, but, such is life...
-#endif
-    return;
-  }
-  underlying_real_free(addr);
+  REAL_IMPL(free)(addr);
   if (!am_i_reentrant()) {
     set_will_i_be_reentrant(1);
     pymemprofile_free_allocation((size_t)addr);
@@ -323,7 +254,7 @@ SYMBOL_PREFIX(mmap)(void *addr, size_t length, int prot, int flags, int fd,
 #ifdef __APPLE__
     return mmap(addr, length, prot, flags, fd, offset);
 #else
-    return (void*) syscall(SYS_mmap, addr, length, prot, flags, fd, offset);
+    return (void *)syscall(SYS_mmap, addr, length, prot, flags, fd, offset);
 #endif
   }
 
@@ -359,23 +290,7 @@ SYMBOL_PREFIX(munmap)(void *addr, size_t length) {
 
 __attribute__((visibility("default"))) void *
 SYMBOL_PREFIX(aligned_alloc)(size_t alignment, size_t size) {
-  if (unlikely(!initialized)) {
-#ifdef __APPLE__
-    return aligned_alloc(alignment, size);
-#else
-    // NOTE: At the moment this falls back to mmap(), so that's fine, but if we
-    // stop using mmap() as fallback we need to switch this to something that
-    // ensures alignment. See
-    // https://github.com/pythonspeed/filprofiler/issues/33
-    return malloc_fallback(size);
-#endif
-  }
-
-#ifdef __APPLE__
-  void *result = aligned_alloc(alignment, size);
-#else
-  void *result = underlying_real_aligned_alloc(alignment, size);
-#endif
+  void *result = REAL_IMPL(aligned_alloc)(alignment, size);
 
   // For now we only track anonymous mmap()s:
   if (!am_i_reentrant()) {
@@ -426,7 +341,7 @@ fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
       // Ensure the two string never get garbage collected;
       Py_INCREF(frame->f_code->co_filename);
       Py_INCREF(frame->f_code->co_name);
-      loc = underlying_real_malloc(sizeof(struct FunctionLocation));
+      loc = _rjem_malloc(sizeof(struct FunctionLocation));
       loc->filename = PyUnicode_AsUTF8AndSize(frame->f_code->co_filename,
                                               &loc->filename_length);
       loc->function_name = PyUnicode_AsUTF8AndSize(frame->f_code->co_name,
