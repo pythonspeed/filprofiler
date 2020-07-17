@@ -4,6 +4,13 @@ use std::os::raw::c_char;
 #[macro_use]
 extern crate lazy_static;
 
+#[cfg(target_os = "linux")]
+use jemallocator::Jemalloc;
+
+#[cfg(target_os = "linux")]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+
 mod memorytracking;
 mod rangemap;
 

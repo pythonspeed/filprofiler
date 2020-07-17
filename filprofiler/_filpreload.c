@@ -128,6 +128,13 @@ static void __attribute__((constructor)) constructor() {
   unsetenv("LD_PRELOAD");
   // This seems to break things... revisit at some point.
   // unsetenv("DYLD_INSERT_LIBRARIES");
+
+  // malloc() triggers Rust code triggers memory allocation, ensuring jemalloc
+  // is initialized as early as possible. If jemalloc is initialized via
+  // mmap() -> Rust -> allocation, it deadlocks because jemalloc uses mmap to
+  // get more memory!
+  //malloc(1);
+  printf("WHAT\n");
 }
 
 // Implemented in the Rust library:
