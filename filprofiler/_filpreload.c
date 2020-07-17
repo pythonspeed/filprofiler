@@ -155,7 +155,8 @@ extern void pymemprofile_add_anon_mmap(size_t address, size_t length,
                                        uint16_t line_number);
 extern void pymemprofile_free_anon_mmap(size_t address, size_t length);
 
-void start_call(struct FunctionLocation *loc, uint16_t line_number) {
+static void
+start_call(struct FunctionLocation *loc, uint16_t line_number) {
   if (!am_i_reentrant()) {
     set_will_i_be_reentrant(1);
     uint16_t parent_line_number = 0;
@@ -168,7 +169,7 @@ void start_call(struct FunctionLocation *loc, uint16_t line_number) {
   }
 }
 
-void finish_call() {
+static void finish_call() {
   if (!am_i_reentrant()) {
     set_will_i_be_reentrant(1);
     pymemprofile_finish_call();
