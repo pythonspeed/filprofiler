@@ -25,9 +25,9 @@ Still not supported, but planned:
 * `mremap()` (resizing of `mmap()`).
 * File-backed `mmap()`.
   The usage here is inconsistent since the OS can swap it in or out, so probably supporting this will involve a different kind of resource usage.
-* Other forms of shared memory.
+* Other forms of shared memory, need to investigate if any of them allow sufficient allocation.
 * Anonymous `mmap()`s created via `/dev/zero` (not common, since it's not cross-platform, e.g. macOS doesn't support this).
-* `posix_memalign()`, `memalign`, `valloc()`, `pvalloc()`.
+* `posix_memalign()`, `memalign`, `valloc()`, `pvalloc()`, `reallocarray()`.
 * `memfd_create()`.
 
 ## Installation
