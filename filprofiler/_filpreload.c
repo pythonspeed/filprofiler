@@ -38,6 +38,7 @@ extern void *_rjem_calloc(size_t nmemb, size_t length);
 extern void *_rjem_realloc(void *addr, size_t length);
 extern void _rjem_free(void *addr);
 extern void *_rjem_aligned_alloc(size_t alignment, size_t size);
+extern size_t _rjem_malloc_usable_size(void *ptr);
 
 // Note whether we've been initialized yet or not:
 static int initialized = 0;
@@ -300,6 +301,14 @@ SYMBOL_PREFIX(aligned_alloc)(size_t alignment, size_t size) {
   }
   return result;
 }
+
+#ifdef __linux__
+// Make sure we expose jemalloc variant of malloc_usable_size(), in case someone
+// actually uses it.
+size_t SYMBOL_PREFIX(malloc_usable_size)(void *ptr) {
+  return REAL_IMPL(malloc_usable_size)(ptr);
+}
+#endif
 
 #ifdef __APPLE__
 DYLD_INTERPOSE(SYMBOL_PREFIX(malloc), malloc)
