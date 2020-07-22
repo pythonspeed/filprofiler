@@ -204,7 +204,7 @@ static void add_anon_mmap(size_t address, size_t size) {
 __attribute__((visibility("default"))) void *
 SYMBOL_PREFIX(malloc)(size_t size) {
   void *result = REAL_IMPL(malloc)(size);
-  if (!am_i_reentrant()) {
+  if (initialized && !am_i_reentrant()) {
     set_will_i_be_reentrant(1);
     add_allocation((size_t)result, size);
     set_will_i_be_reentrant(0);
@@ -216,7 +216,7 @@ __attribute__((visibility("default"))) void *
 SYMBOL_PREFIX(calloc)(size_t nmemb, size_t size) {
   void *result = REAL_IMPL(calloc)(nmemb, size);
   size_t allocated = nmemb * size;
-  if (!am_i_reentrant()) {
+  if (initialized && !am_i_reentrant()) {
     set_will_i_be_reentrant(1);
     add_allocation((size_t)result, allocated);
     set_will_i_be_reentrant(0);
@@ -227,7 +227,7 @@ SYMBOL_PREFIX(calloc)(size_t nmemb, size_t size) {
 __attribute__((visibility("default"))) void *
 SYMBOL_PREFIX(realloc)(void *addr, size_t size) {
   void *result = REAL_IMPL(realloc)(addr, size);
-  if (!am_i_reentrant()) {
+  if (initialized && !am_i_reentrant()) {
     set_will_i_be_reentrant(1);
     // Sometimes you'll get same address, so if we did remove first and then
     // added, it would remove the entry erroneously.
@@ -240,7 +240,7 @@ SYMBOL_PREFIX(realloc)(void *addr, size_t size) {
 
 __attribute__((visibility("default"))) void SYMBOL_PREFIX(free)(void *addr) {
   REAL_IMPL(free)(addr);
-  if (!am_i_reentrant()) {
+  if (initialized && !am_i_reentrant()) {
     set_will_i_be_reentrant(1);
     pymemprofile_free_allocation((size_t)addr);
     set_will_i_be_reentrant(0);
@@ -293,7 +293,7 @@ SYMBOL_PREFIX(aligned_alloc)(size_t alignment, size_t size) {
   void *result = REAL_IMPL(aligned_alloc)(alignment, size);
 
   // For now we only track anonymous mmap()s:
-  if (!am_i_reentrant()) {
+  if (initialized && !am_i_reentrant()) {
     set_will_i_be_reentrant(1);
     add_allocation((size_t)result, size);
     set_will_i_be_reentrant(0);
