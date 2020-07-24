@@ -66,14 +66,17 @@ def stage_1():
     # Route all allocations from Python through malloc() directly:
     environ["PYTHONMALLOC"] = "malloc"
     # Disable multi-threaded backends in various scientific computing libraries
-    # (Zarr uses Blosc, NumPy uses BLAS):
+    # (Zarr uses Blosc, NumPy uses BLAS, OpenMP is generically used):
     environ["BLOSC_NTHREADS"] = "1"
     environ["OMP_NUM_THREADS"] = "1"
     environ["OPENBLAS_NUM_THREADS"] = "1"
     environ["MKL_NUM_THREADS"] = "1"
     environ["VECLIB_MAXIMUM_THREADS"] = "1"
     environ["NUMEXPR_NUM_THREADS"] = "1"
-
+    # Tell jemalloc code (if used) to clean up faster:
+    environ[
+        "_RJEM_MALLOC_CONF"
+    ] = "dirty_decay_ms:100,muzzy_decay_ms:1000,abort_conf:true"
     execv(
         sys.executable, [sys.executable, "-m", "filprofiler._script"] + sys.argv[1:],
     )
