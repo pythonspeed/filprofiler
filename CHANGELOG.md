@@ -1,3 +1,14 @@
+# Fil 0.8.0 (2020-07-24)
+
+
+### Features
+
+- Switched to using jemalloc on Linux, which should deal better both in terms of memory usage and speed with many small allocations.
+  It also simplifies the code. ([#42](https://github.com/pythonspeed/filprofiler/issues/42))
+- Further reduced memory overhead for tracking objects, at the cost of slightly lower resolution when tracking allocations >2GB.
+  Large allocations >2GB will only be accurate to a resoluion of ~1MB, i.e. they might be off by approximately 0.05%. ([#47](https://github.com/pythonspeed/filprofiler/issues/47))
+
+
 # Fil 0.7.2 (2020-07-12)
 
 
