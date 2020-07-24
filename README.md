@@ -32,7 +32,27 @@ Still not supported, but planned:
 
 ## Installation
 
-To install:
+### Prerequisites
+
+To install the latest version of Fil you'll need Pip 19 or newer.
+You can check like this:
+
+```
+$ pip --version
+pip 20.0.2
+```
+
+If you're using something older than that, do:
+
+```
+$ pip install --upgrade pip
+```
+
+If _that_ doesn't work, try running that a virtualenv or Conda env.
+
+### Installing Fil
+
+Assuming you're on macOS or Linux, and are using Python 3.6 or later:
 
 ```
 $ pip install filprofiler
