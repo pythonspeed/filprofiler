@@ -25,14 +25,34 @@ Still not supported, but planned:
 * `mremap()` (resizing of `mmap()`).
 * File-backed `mmap()`.
   The usage here is inconsistent since the OS can swap it in or out, so probably supporting this will involve a different kind of resource usage.
-* Other forms of shared memory.
+* Other forms of shared memory, need to investigate if any of them allow sufficient allocation.
 * Anonymous `mmap()`s created via `/dev/zero` (not common, since it's not cross-platform, e.g. macOS doesn't support this).
-* `posix_memalign()`, `memalign`, `valloc()`, `pvalloc()`.
+* `posix_memalign()`, `memalign`, `valloc()`, `pvalloc()`, `reallocarray()`.
 * `memfd_create()`.
 
 ## Installation
 
-To install:
+### Prerequisites
+
+To install the latest version of Fil you'll need Pip 19 or newer.
+You can check like this:
+
+```
+$ pip --version
+pip 20.0.2
+```
+
+If you're using something older than that, do:
+
+```
+$ pip install --upgrade pip
+```
+
+If _that_ doesn't work, try running that a virtualenv or Conda env.
+
+### Installing Fil
+
+Assuming you're on macOS or Linux, and are using Python 3.6 or later:
 
 ```
 $ pip install filprofiler
