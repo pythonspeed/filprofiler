@@ -231,8 +231,8 @@ SYMBOL_PREFIX(realloc)(void *addr, size_t size) {
   void *result = REAL_IMPL(realloc)(addr, size);
   if (initialized && !am_i_reentrant()) {
     set_will_i_be_reentrant(1);
-    // Sometimes you'll get same address, so if we did remove first and then
-    // added, it would remove the entry erroneously.
+    // Sometimes you'll get same address, so if we did add first and then
+    // removed, it would remove the entry erroneously.
     pymemprofile_free_allocation((size_t)addr);
     add_allocation((size_t)result, size);
     set_will_i_be_reentrant(0);
