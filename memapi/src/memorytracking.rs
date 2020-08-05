@@ -880,6 +880,12 @@ mod tests {
         s.as_ptr() as *const c_char
     }
 
+    #[no_mangle]
+    // Convert line number-y thing to actual line number.
+    fn fil_real_line_number(_function_id: usize, line_number: libc::c_int) -> libc::c_int {
+        return line_number;
+    }
+
     #[test]
     fn combine_callstacks_and_sum_allocations() {
         let fid1 = FunctionId::new(1);
