@@ -370,7 +370,7 @@ fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
     assert(extra_code_index != -1);
     _PyCode_GetExtra((PyObject *)frame->f_code, extra_code_index,
                      (void **)&seen);
-    if (!seen) {
+    if (unlikely(!seen)) {
       // Ensure the code object never gets garbage collected:
       Py_INCREF(frame->f_code);
       // Set marker indicating we've done that.
