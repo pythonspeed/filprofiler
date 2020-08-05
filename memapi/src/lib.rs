@@ -18,7 +18,7 @@ mod rangemap;
 pub extern "C" fn pymemprofile_add_allocation(
     address: usize,
     size: libc::size_t,
-    line_number: u16,
+    line_number: libc::c_int,
 ) {
     memorytracking::add_allocation(address, size, line_number, false);
 }
@@ -35,7 +35,11 @@ pub extern "C" fn pymemprofile_get_allocation_size(address: usize) -> libc::size
 }
 
 #[no_mangle]
-pub extern "C" fn pymemprofile_add_anon_mmap(address: usize, size: libc::size_t, line_number: u16) {
+pub extern "C" fn pymemprofile_add_anon_mmap(
+    address: usize,
+    size: libc::size_t,
+    line_number: libc::c_int,
+) {
     memorytracking::add_allocation(address, size, line_number, true);
 }
 
@@ -48,9 +52,9 @@ pub extern "C" fn pymemprofile_free_anon_mmap(address: usize, length: libc::size
 /// Intended for use from C APIs, what can I say.
 #[no_mangle]
 pub unsafe extern "C" fn pymemprofile_start_call(
-    parent_line_number: u16,
+    parent_line_number: libc::c_int,
     function_id: usize,
-    line_number: u16,
+    line_number: libc::c_int,
 ) {
     let fid = memorytracking::FunctionId::new(function_id);
     memorytracking::start_call(fid, parent_line_number, line_number);
@@ -62,7 +66,7 @@ pub extern "C" fn pymemprofile_finish_call() {
 }
 
 #[no_mangle]
-pub extern "C" fn pymemprofile_new_line_number(line_number: u16) {
+pub extern "C" fn pymemprofile_new_line_number(line_number: libc::c_int) {
     memorytracking::new_line_number(line_number);
 }
 

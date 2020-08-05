@@ -132,25 +132,25 @@ const char *fil_file_name_from_id(PyCodeObject *code_object) {
 }
 
 // Implemented in the Rust library:
-extern void pymemprofile_start_call(uint16_t parent_line_number,
+extern void pymemprofile_start_call(int parent_line_number,
                                     size_t codeobject_id,
-                                    uint16_t line_number);
+                                    int line_number);
 extern void pymemprofile_finish_call();
-extern void pymemprofile_new_line_number(uint16_t line_number);
+extern void pymemprofile_new_line_number(int line_number);
 extern void pymemprofile_reset();
 extern void pymemprofile_dump_peak_to_flamegraph(const char *path);
 extern void pymemprofile_add_allocation(size_t address, size_t length,
-                                        uint16_t line_number);
+                                        int line_number);
 extern void pymemprofile_free_allocation(size_t address);
 extern void pymemprofile_add_anon_mmap(size_t address, size_t length,
-                                       uint16_t line_number);
+                                       int line_number);
 extern void pymemprofile_free_anon_mmap(size_t address, size_t length);
 
 
-static void start_call(PyCodeObject *loc, uint16_t line_number) {
+static void start_call(PyCodeObject *loc, int line_number) {
   if (!am_i_reentrant()) {
     set_will_i_be_reentrant(1);
-    uint16_t parent_line_number = 0;
+    int parent_line_number = 0;
     if (current_frame != NULL && current_frame->f_back != NULL) {
       PyFrameObject *f = current_frame->f_back;
       parent_line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
@@ -169,7 +169,7 @@ static void finish_call() {
 }
 
 __attribute__((visibility("default"))) void
-fil_new_line_number(uint16_t line_number) {
+fil_new_line_number(int line_number) {
   if (!am_i_reentrant()) {
     set_will_i_be_reentrant(1);
     pymemprofile_new_line_number(line_number);
@@ -198,7 +198,7 @@ fil_dump_peak_to_flamegraph(const char *path) {
 }
 
 static void add_allocation(size_t address, size_t size) {
-  uint16_t line_number = 0;
+  int line_number = 0;
   PyFrameObject *f = current_frame;
   if (f != NULL) {
     line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
@@ -207,7 +207,7 @@ static void add_allocation(size_t address, size_t size) {
 }
 
 static void add_anon_mmap(size_t address, size_t size) {
-  uint16_t line_number = 0;
+  int line_number = 0;
   PyFrameObject *f = current_frame;
   if (f != NULL) {
     line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);

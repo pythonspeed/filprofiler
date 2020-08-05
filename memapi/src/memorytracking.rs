@@ -57,11 +57,11 @@ impl FunctionId {
 struct CallSiteId {
     function: FunctionId,
     /// Line number within the _file_, 1-indexed.
-    line_number: u16,
+    line_number: libc::c_int,
 }
 
 impl CallSiteId {
-    fn new(function: FunctionId, line_number: u16) -> CallSiteId {
+    fn new(function: FunctionId, line_number: libc::c_int) -> CallSiteId {
         CallSiteId {
             function,
             line_number,
@@ -86,7 +86,7 @@ impl Callstack {
         !self.calls.is_empty()
     }
 
-    fn start_call(&mut self, parent_line_number: u16, callsite_id: CallSiteId) {
+    fn start_call(&mut self, parent_line_number: libc::c_int, callsite_id: CallSiteId) {
         if parent_line_number != 0 {
             if let Some(mut call) = self.calls.last_mut() {
                 call.line_number = parent_line_number;
@@ -99,7 +99,7 @@ impl Callstack {
         self.calls.pop();
     }
 
-    fn new_line_number(&mut self, line_number: u16) {
+    fn new_line_number(&mut self, line_number: libc::c_int) {
         if let Some(callsite_id) = self.calls.last_mut() {
             callsite_id.line_number = line_number;
         }
@@ -493,7 +493,11 @@ lazy_static! {
 }
 
 /// Add to per-thread function stack:
-pub fn start_call(call_site: FunctionId, parent_line_number: u16, line_number: u16) {
+pub fn start_call(
+    call_site: FunctionId,
+    parent_line_number: libc::c_int,
+    line_number: libc::c_int,
+) {
     THREAD_CALLSTACK.with(|cs| {
         cs.borrow_mut()
             .start_call(parent_line_number, CallSiteId::new(call_site, line_number));
@@ -509,14 +513,14 @@ pub fn finish_call() {
 }
 
 /// Change line number on current function in per-thread function stack:
-pub fn new_line_number(line_number: u16) {
+pub fn new_line_number(line_number: libc::c_int) {
     THREAD_CALLSTACK.with(|cs| {
         cs.borrow_mut().new_line_number(line_number);
     });
 }
 
 /// Add a new allocation based off the current callstack.
-pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_mmap: bool) {
+pub fn add_allocation(address: usize, size: libc::size_t, line_number: libc::c_int, is_mmap: bool) {
     if address == 0 {
         // Uh-oh, we're out of memory.
         let allocations = &mut ALLOCATIONS.lock().unwrap();
