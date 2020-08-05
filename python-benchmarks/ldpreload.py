@@ -10,4 +10,6 @@ from pymalloc import pymalloc, pyfree
 address = pymalloc(365)
 assert preload.pymemprofile_get_allocation_size(c_void_p(address)) == 365
 pyfree(address)
-assert preload.pymemprofile_get_allocation_size(c_void_p(address)) == 0
+result = preload.pymemprofile_get_allocation_size(c_void_p(address))
+print("SIZE AFTER FREE", result)
+assert result == 0
