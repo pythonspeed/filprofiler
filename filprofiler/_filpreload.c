@@ -39,6 +39,7 @@ extern void *_rjem_realloc(void *addr, size_t length);
 extern void _rjem_free(void *addr);
 extern void *_rjem_aligned_alloc(size_t alignment, size_t size);
 extern size_t _rjem_malloc_usable_size(void *ptr);
+extern int _rjem_posix_memalign(void **memptr, size_t alignment, size_t size);
 
 // Note whether we've been initialized yet or not:
 static int initialized = 0;
@@ -239,6 +240,17 @@ SYMBOL_PREFIX(realloc)(void *addr, size_t size) {
   return result;
 }
 
+__attribute__((visibility("default"))) int
+SYMBOL_PREFIX(posix_memalign)(void **memptr, size_t alignment, size_t size) {
+  int result = REAL_IMPL(posix_memalign)(memptr, alignment, size);
+  if (!result && initialized && !am_i_reentrant()) {
+    set_will_i_be_reentrant(1);
+    add_allocation((size_t)*memptr, size);
+    set_will_i_be_reentrant(0);
+  }
+  return result;
+}
+
 __attribute__((visibility("default"))) void SYMBOL_PREFIX(free)(void *addr) {
   REAL_IMPL(free)(addr);
   if (initialized && !am_i_reentrant()) {
@@ -318,6 +330,7 @@ DYLD_INTERPOSE(SYMBOL_PREFIX(free), free)
 DYLD_INTERPOSE(SYMBOL_PREFIX(mmap), mmap)
 DYLD_INTERPOSE(SYMBOL_PREFIX(munmap), munmap)
 DYLD_INTERPOSE(SYMBOL_PREFIX(aligned_alloc), aligned_alloc)
+DYLD_INTERPOSE(SYMBOL_PREFIX(posix_memalign), posix_memalign)
 #endif
 
 // Call after Python gets going.

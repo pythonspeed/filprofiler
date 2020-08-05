@@ -15,8 +15,8 @@ For more information see https://pythonspeed.com/products/filmemoryprofiler/
 Fil will track memory allocated by:
 
 * Normal Python code.
-* C code using `malloc()`/`calloc()`/`realloc()`.
-* C++ code using `new` (including via `aligned_alloc`).
+* C code using `malloc()`/`calloc()`/`realloc()`/`posix_memalign()`.
+* C++ code using `new` (including via `aligned_alloc()`).
 * Anonymous `mmap()`s.
 * Fortran 90 explicitly allocated memory (tested with gcc's `gfortran`).
 
@@ -27,8 +27,8 @@ Still not supported, but planned:
   The usage here is inconsistent since the OS can swap it in or out, so probably supporting this will involve a different kind of resource usage.
 * Other forms of shared memory, need to investigate if any of them allow sufficient allocation.
 * Anonymous `mmap()`s created via `/dev/zero` (not common, since it's not cross-platform, e.g. macOS doesn't support this).
-* `posix_memalign()`, `memalign`, `valloc()`, `pvalloc()`, `reallocarray()`.
 * `memfd_create()`.
+* Possibly `memalign`, `valloc()`, `pvalloc()`, `reallocarray()`.
 
 ## Installation
 

@@ -559,6 +559,16 @@ pub fn free_allocation(address: usize) {
     allocations.free_allocation(address);
 }
 
+/// Get the size of an allocation, or 0 if it's not tracked.
+pub fn get_allocation_size(address: usize) -> libc::size_t {
+    let allocations = ALLOCATIONS.lock().unwrap();
+    if let Some(allocation) = allocations.current_allocations.get(&address) {
+        allocation.size()
+    } else {
+        0
+    }
+}
+
 /// Free an anonymous mmap().
 pub fn free_anon_mmap(address: usize, length: libc::size_t) {
     let mut allocations = ALLOCATIONS.lock().unwrap();

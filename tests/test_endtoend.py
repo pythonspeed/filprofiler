@@ -141,20 +141,24 @@ def test_malloc_in_c_extension():
     script = str(script)
 
     # The realloc() in the scripts adds 10 to the 70:
-    path = ((script, "<module>", 25), (script, "main", 21))
+    path = ((script, "<module>", 32), (script, "main", 28))
     assert match(allocations, {path: big}, as_mb) == pytest.approx(70 + 10, 0.1)
 
     # The C++ new allocation:
-    path = ((script, "<module>", 25), (script, "main", 17))
+    path = ((script, "<module>", 32), (script, "main", 23))
     assert match(allocations, {path: big}, as_mb) == pytest.approx(40, 0.1)
 
     # C++ aligned_alloc():
-    path = ((script, "<module>", 25), (script, "main", 18))
+    path = ((script, "<module>", 32), (script, "main", 24))
     assert match(allocations, {path: big}, as_mb) == pytest.approx(90, 0.1)
 
     # Py*_*Malloc APIs:
-    path = ((script, "<module>", 25), (script, "main", 19))
+    path = ((script, "<module>", 32), (script, "main", 25))
     assert match(allocations, {path: big}, as_mb) == pytest.approx(30, 0.1)
+
+    # posix_memalign():
+    path = ((script, "<module>", 32), (script, "main", 26))
+    assert match(allocations, {path: big}, as_mb) == pytest.approx(15, 0.1)
 
 
 def test_anonymous_mmap():
@@ -201,7 +205,7 @@ def test_minus_m():
     allocations = get_allocations(output_dir)
     stripped_allocations = {k[3:]: v for (k, v) in allocations.items()}
     script = str(script)
-    path = ((script, "<module>", 25), (script, "main", 21))
+    path = ((script, "<module>", 32), (script, "main", 28))
 
     assert match(stripped_allocations, {path: big}, as_mb) == pytest.approx(
         50 + 10, 0.1
@@ -312,3 +316,9 @@ def test_fortran():
     path = ((script, "<module>", 3),)
 
     assert match(allocations, {path: big}, as_mb) == pytest.approx(40, 0.1)
+
+
+def test_free():
+    """free() frees allocations as far as Fil is concerned."""
+    script = Path("python-benchmarks") / "ldpreload.py"
+    profile(script)
