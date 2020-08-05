@@ -10,14 +10,10 @@ towncrier --draft --version=$NEWVERSION | less
 towncrier --version=$NEWVERSION
 ```
 
+## Commit the code, push to master
+
 ## Add a tag
 
 Annotated.
 
-## Upload wheels
-
-```
-rm -f dist/*
-make wheel
-twine upload dist/*.whl
-```
+GitHub Actions should then build wheels and upload them.

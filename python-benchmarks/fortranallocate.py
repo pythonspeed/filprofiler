@@ -1,0 +1,3 @@
+import fortran
+
+fortran.fortranallocate()

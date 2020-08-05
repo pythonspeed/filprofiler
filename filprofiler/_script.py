@@ -60,19 +60,23 @@ def stage_1():
     """Setup environment variables, re-execute this script."""
     # Load the library:
     environ["LD_PRELOAD"] = library_path("_filpreload")
+    environ["DYLD_INSERT_LIBRARIES"] = library_path("_filpreload")
     # Tracebacks when Rust crashes:
     environ["RUST_BACKTRACE"] = "1"
     # Route all allocations from Python through malloc() directly:
     environ["PYTHONMALLOC"] = "malloc"
     # Disable multi-threaded backends in various scientific computing libraries
-    # (Zarr uses Blosc, NumPy uses BLAS):
+    # (Zarr uses Blosc, NumPy uses BLAS, OpenMP is generically used):
     environ["BLOSC_NTHREADS"] = "1"
     environ["OMP_NUM_THREADS"] = "1"
     environ["OPENBLAS_NUM_THREADS"] = "1"
     environ["MKL_NUM_THREADS"] = "1"
     environ["VECLIB_MAXIMUM_THREADS"] = "1"
     environ["NUMEXPR_NUM_THREADS"] = "1"
-
+    # Tell jemalloc code (if used) to clean up faster:
+    environ[
+        "_RJEM_MALLOC_CONF"
+    ] = "dirty_decay_ms:100,muzzy_decay_ms:1000,abort_conf:true"
     execv(
         sys.executable, [sys.executable, "-m", "filprofiler._script"] + sys.argv[1:],
     )
@@ -99,19 +103,16 @@ subparsers = PARSER.add_subparsers(help="sub-command help")
 parser_run = subparsers.add_parser(
     "run", help="Run a Python script or package", prefix_chars=[""], add_help=False,
 )
-# parser_run.add_argument(
-#     "-m",
-#     dest="module",
-#     action="store",
-#     help="Profile a module, equivalent to running with 'python -m <module>'",
-#     default="",
-# )
 parser_run.add_argument("rest", nargs=REMAINDER)
 del subparsers, parser_run
 
 
 def stage_2():
-    """Main CLI interface. Presumes LD_PRELOAD etc. has been set by stage_1()."""
+    """Main CLI interface.22 Presumes LD_PRELOAD etc. has been set by stage_1()."""
+    if len(sys.argv) == 1:
+        PARSER.print_help()
+        sys.exit(0)
+
     arguments = PARSER.parse_args()
     if arguments.license:
         print(LICENSE)

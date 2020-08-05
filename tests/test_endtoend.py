@@ -1,11 +1,12 @@
 """End-to-end tests."""
 
-from subprocess import check_call, check_output, CalledProcessError
+from subprocess import check_call, check_output, CalledProcessError, run, PIPE
 from tempfile import mkdtemp, NamedTemporaryFile
 from pathlib import Path
 from glob import glob
 import os
 import time
+import sys
 
 from pampy import match, _ as ANY
 import pytest
@@ -131,19 +132,67 @@ def test_thread_allocates_after_main_thread_is_done():
 
 def test_malloc_in_c_extension():
     """
-    Direct malloc() in C extension gets captured.
-
-    (NumPy uses Python memory APIs, so is not sufficient to test this.)
+    Various malloc() and friends variants in C extension gets captured.
     """
     script = Path("python-benchmarks") / "malloc.py"
     output_dir = profile(script, "--size", "70")
     allocations = get_allocations(output_dir)
 
     script = str(script)
-    path = ((script, "<module>", 21), (script, "main", 17))
 
     # The realloc() in the scripts adds 10 to the 70:
+    path = ((script, "<module>", 32), (script, "main", 28))
     assert match(allocations, {path: big}, as_mb) == pytest.approx(70 + 10, 0.1)
+
+    # The C++ new allocation:
+    path = ((script, "<module>", 32), (script, "main", 23))
+    assert match(allocations, {path: big}, as_mb) == pytest.approx(40, 0.1)
+
+    # C++ aligned_alloc():
+    path = ((script, "<module>", 32), (script, "main", 24))
+    assert match(allocations, {path: big}, as_mb) == pytest.approx(90, 0.1)
+
+    # Py*_*Malloc APIs:
+    path = ((script, "<module>", 32), (script, "main", 25))
+    assert match(allocations, {path: big}, as_mb) == pytest.approx(30, 0.1)
+
+    # posix_memalign():
+    path = ((script, "<module>", 32), (script, "main", 26))
+    assert match(allocations, {path: big}, as_mb) == pytest.approx(15, 0.1)
+
+
+def test_anonymous_mmap():
+    """
+    Non-file-backed mmap() gets detected and tracked.
+
+    (NumPy uses Python memory APIs, so is not sufficient to test this.)
+    """
+    script = Path("python-benchmarks") / "mmaper.py"
+    output_dir = profile(script)
+    allocations = get_allocations(output_dir)
+
+    script = str(script)
+    path = ((script, "<module>", 6),)
+
+    assert match(allocations, {path: big}, as_mb) == pytest.approx(60, 0.1)
+
+
+def test_python_objects():
+    """
+    Python objects gets detected and tracked.
+
+    (NumPy uses Python memory APIs, so is not sufficient to test this.)
+    """
+    script = Path("python-benchmarks") / "pyobject.py"
+    output_dir = profile(script)
+    allocations = get_allocations(output_dir)
+
+    script = str(script)
+    path = ((script, "<module>", 1),)
+    path2 = ((script, "<module>", 8), (script, "<genexpr>", 8))
+
+    assert match(allocations, {path: big}, as_mb) == pytest.approx(34, 1)
+    assert match(allocations, {path2: big}, as_mb) == pytest.approx(46, 1)
 
 
 def test_minus_m():
@@ -156,7 +205,7 @@ def test_minus_m():
     allocations = get_allocations(output_dir)
     stripped_allocations = {k[3:]: v for (k, v) in allocations.items()}
     script = str(script)
-    path = ((script, "<module>", 21), (script, "main", 17))
+    path = ((script, "<module>", 32), (script, "main", 28))
 
     assert match(stripped_allocations, {path: big}, as_mb) == pytest.approx(
         50 + 10, 0.1
@@ -179,6 +228,8 @@ print(subprocess.check_output(["env"]))
             ["fil-profile", "-o", mkdtemp(), "run", str(script_file.name)]
         )
         assert b"LD_PRELOAD" not in result
+        # Not actually done at the moment, though perhaps it should be:
+        # assert b"DYLD_INSERT_LIBRARIES" not in result
 
 
 def test_out_of_memory():
@@ -187,7 +238,7 @@ def test_out_of_memory():
     written out.
     """
     script = Path("python-benchmarks") / "oom.py"
-    output_dir = profile(script, expect_exit_code=5)  # -signal.SIGABRT)
+    output_dir = profile(script, expect_exit_code=5)
     time.sleep(10)  # wait for child process to finish
     allocations = get_allocations(
         output_dir,
@@ -209,3 +260,65 @@ def test_out_of_memory():
     assert match(allocations, {toobig_alloc: big}, as_mb) == pytest.approx(
         1024 * 1024 * 1024, 0.1
     )
+
+
+def test_external_behavior():
+    """
+    1. Stdout and stderr from the code is printed normally.
+    2. Fil only adds stderr lines prefixed with =fil-profile=
+    3. A browser is launched with file:// URL pointing to an HTML file.
+    """
+    script = Path("python-benchmarks") / "printer.py"
+    env = os.environ.copy()
+    f = NamedTemporaryFile("r+")
+    # A custom "browser" that just writes the URL to a file:
+    env["BROWSER"] = "{} %s {}".format(
+        Path("python-benchmarks") / "write-to-file.py", f.name
+    )
+    output_dir = Path(mkdtemp())
+    result = run(
+        ["fil-profile", "-o", str(output_dir), "run", str(script)],
+        env=env,
+        stdout=PIPE,
+        stderr=PIPE,
+        check=True,
+        encoding=sys.getdefaultencoding(),
+    )
+    assert result.stdout == "Hello, world.\n"
+    for line in result.stderr.splitlines():
+        assert line.startswith("=fil-profile= ")
+    url = f.read()
+    assert url.startswith("file://")
+    assert url.endswith(".html")
+    assert os.path.exists(url[len("file://") :])
+
+
+def test_no_args():
+    """
+    Running fil-profile with no arguments gives same result as --help.
+    """
+    no_args = run(["fil-profile"], stdout=PIPE, stderr=PIPE)
+    with_help = run(["fil-profile", "--help"], stdout=PIPE, stderr=PIPE)
+    assert no_args.returncode == with_help.returncode
+    assert no_args.stdout == with_help.stdout
+    assert no_args.stderr == with_help.stderr
+
+
+def test_fortran():
+    """
+    Fil can capture Fortran allocations.
+    """
+    script = Path("python-benchmarks") / "fortranallocate.py"
+    output_dir = profile(script)
+    allocations = get_allocations(output_dir)
+
+    script = str(script)
+    path = ((script, "<module>", 3),)
+
+    assert match(allocations, {path: big}, as_mb) == pytest.approx(40, 0.1)
+
+
+def test_free():
+    """free() frees allocations as far as Fil is concerned."""
+    script = Path("python-benchmarks") / "ldpreload.py"
+    profile(script)

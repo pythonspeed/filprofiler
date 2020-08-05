@@ -1,7 +1,7 @@
 # The Fil memory profiler for Python
 
 Fil a memory profiler designed for data processing applications.
-At the moment it only runs on Linux.
+At the moment it only runs on Linux and macOS.
 
 Your code reads some data, processes it, and—uses too much memory.
 What you need to reduce is _peak_ memory usage.
@@ -10,9 +10,49 @@ And that's exactly what Fil will help you find: exactly which code was responsib
 
 For more information see https://pythonspeed.com/products/filmemoryprofiler/
 
+## What Fil tracks
+
+Fil will track memory allocated by:
+
+* Normal Python code.
+* C code using `malloc()`/`calloc()`/`realloc()`/`posix_memalign()`.
+* C++ code using `new` (including via `aligned_alloc()`).
+* Anonymous `mmap()`s.
+* Fortran 90 explicitly allocated memory (tested with gcc's `gfortran`).
+
+Still not supported, but planned:
+
+* `mremap()` (resizing of `mmap()`).
+* File-backed `mmap()`.
+  The usage here is inconsistent since the OS can swap it in or out, so probably supporting this will involve a different kind of resource usage.
+* Other forms of shared memory, need to investigate if any of them allow sufficient allocation.
+* Anonymous `mmap()`s created via `/dev/zero` (not common, since it's not cross-platform, e.g. macOS doesn't support this).
+* `memfd_create()`.
+* Possibly `memalign`, `valloc()`, `pvalloc()`, `reallocarray()`.
+
 ## Installation
 
-To install:
+### Prerequisites
+
+To install the latest version of Fil you'll need Pip 19 or newer.
+You can check like this:
+
+```
+$ pip --version
+pip 20.0.2
+```
+
+If you're using something older than that, do:
+
+```
+$ pip install --upgrade pip
+```
+
+If _that_ doesn't work, try running that a virtualenv or Conda env.
+
+### Installing Fil
+
+Assuming you're on macOS or Linux, and are using Python 3.6 or later:
 
 ```
 $ pip install filprofiler

@@ -5,7 +5,6 @@ mkdir /tmp/wheel
 export HOME=/tmp/home
 cd /src
 mkdir -p dist
-make target/release/libpymemprofile_api.a
 
 
 rm -f filprofiler/_filpreload.o
@@ -19,7 +18,7 @@ rm -rf build
 
 /opt/python/cp38-cp38/bin/python3 setup.py bdist_wheel -d /tmp/wheel
 
-auditwheel repair --plat manylinux1_x86_64 -w dist/ /tmp/wheel/filprofiler*cp36*whl
-auditwheel repair --plat manylinux1_x86_64 -w dist/ /tmp/wheel/filprofiler*cp37*whl
-auditwheel repair --plat manylinux1_x86_64 -w dist/ /tmp/wheel/filprofiler*cp38*whl
+auditwheel repair --plat manylinux2010_x86_64 -w dist/ /tmp/wheel/filprofiler*cp36*whl
+auditwheel repair --plat manylinux2010_x86_64 -w dist/ /tmp/wheel/filprofiler*cp37*whl
+auditwheel repair --plat manylinux2010_x86_64 -w dist/ /tmp/wheel/filprofiler*cp38*whl
 

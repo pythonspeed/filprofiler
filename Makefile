@@ -28,6 +28,8 @@ test-rust:
 .PHONY: test-python
 test-python: build
 	cythonize -3 -i python-benchmarks/pymalloc.pyx
+	c++ -shared python-benchmarks/cpp.cpp -o python-benchmarks/cpp.so
+	cd python-benchmarks && python -m numpy.f2py -c fortran.f90 -m fortran
 	env RUST_BACKTRACE=1 py.test
 
 .PHONY: docker-image
@@ -36,16 +38,22 @@ docker-image:
 
 .PHONY: wheel
 wheel:
-	docker run -u $(shell id -u):$(shell id -g) -v $(PWD):/src manylinux-rust /src/wheels/build-wheels.sh
+	python setup.py bdist_wheel
+
+.PHONY: manylinux-wheel
+manylinux-wheel:
+	docker run -u $(shell id -u):$(shell id -g) -v $(PWD):/src quay.io/pypa/manylinux2010_x86_64:latest /src/wheels/build-wheels.sh
 
 .PHONY: clean
 clean:
 	rm -f filprofiler/fil-python
 	rm -rf target
 	rm -rf filprofiler/*.so
+	rm -rf filprofiler/*.dylib
 	python setup.py clean
 
 .PHONY: licenses
 licenses:
 	cd memapi && cargo lichking check
-	cd memapi && cargo lichking bundle --file ../filprofiler/licenses.txt
+	cd memapi && cargo lichking bundle --file ../filprofiler/licenses.txt || true
+	cat extra-licenses/APSL.txt >> filprofiler/licenses.txt
