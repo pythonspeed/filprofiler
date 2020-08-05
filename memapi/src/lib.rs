@@ -28,6 +28,12 @@ pub extern "C" fn pymemprofile_free_allocation(address: usize) {
     memorytracking::free_allocation(address);
 }
 
+/// Returns allocation size, or 0 if not stored. Useful for tests, mostly.
+#[no_mangle]
+pub extern "C" fn pymemprofile_get_allocation_size(address: usize) -> libc::size_t {
+    memorytracking::get_allocation_size(address)
+}
+
 #[no_mangle]
 pub extern "C" fn pymemprofile_add_anon_mmap(address: usize, size: libc::size_t, line_number: u16) {
     memorytracking::add_allocation(address, size, line_number, true);

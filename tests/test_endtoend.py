@@ -316,3 +316,9 @@ def test_fortran():
     path = ((script, "<module>", 3),)
 
     assert match(allocations, {path: big}, as_mb) == pytest.approx(40, 0.1)
+
+
+def test_free():
+    """free() frees allocations as far as Fil is concerned."""
+    script = Path("python-benchmarks") / "ldpreload.py"
+    profile(script)
