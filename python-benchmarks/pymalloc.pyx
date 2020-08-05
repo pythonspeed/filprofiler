@@ -3,6 +3,7 @@ from libc.stdint cimport uint64_t
 
 cdef extern from "stdlib.h":
     void* aligned_alloc(size_t alignment, size_t size)
+    int posix_memalign(void **memptr, size_t alignment, size_t size)
 
 cdef extern from "Python.h":
     void* PyMem_Malloc(size_t n)
@@ -29,3 +30,7 @@ def pyallocation_api():
         <uint64_t>PyObject_Malloc(1024 * 1024 * 10),
         <uint64_t>PyMem_RawMalloc(1024 * 1024 * 10),
     ]
+
+def pyposix_memalign():
+    cdef void *result;
+    return posix_memalign(&result, 64, 1024 * 1024 * 15)
