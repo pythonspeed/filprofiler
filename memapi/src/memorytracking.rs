@@ -25,6 +25,8 @@ extern "C" {
     // Technically these take PyCodeObject*...
     pub fn fil_file_name_from_id(function_id: usize) -> *const c_char;
     pub fn fil_function_name_from_id(function_id: usize) -> *const c_char;
+    // Convert line number-y thing to actual line number.
+    pub fn fil_real_line_number(function_id: usize, line_number: libc::c_int) -> libc::c_int;
 }
 
 unsafe impl Send for FunctionId {}
@@ -66,6 +68,10 @@ impl CallSiteId {
             function,
             line_number,
         }
+    }
+
+    fn real_line_number(&self) -> libc::c_int {
+        unsafe { fil_real_line_number(self.function.function_id, self.line_number) }
     }
 }
 
@@ -112,18 +118,19 @@ impl Callstack {
             self.calls
                 .iter()
                 .map(|id| {
+                    let line = id.real_line_number();
                     if to_be_post_processed {
                         format!(
                             "{filename}:{line} ({function});TB@@{filename}:{line}@@TB",
                             filename = id.function.get_filename(),
-                            line = id.line_number,
+                            line = line,
                             function = id.function.get_function_name(),
                         )
                     } else {
                         format!(
                             "{filename}:{line} ({function})",
                             filename = id.function.get_filename(),
-                            line = id.line_number,
+                            line = line,
                             function = id.function.get_function_name()
                         )
                     }

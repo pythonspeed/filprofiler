@@ -131,6 +131,10 @@ const char *fil_file_name_from_id(PyCodeObject *code_object) {
   return PyUnicode_AsUTF8(code_object->co_filename);
 }
 
+int fil_real_line_number(PyCodeObject *code_object, int bytecode_index) {
+  return PyCode_Addr2Line(code_object, bytecode_index);
+}
+
 // Implemented in the Rust library:
 extern void pymemprofile_start_call(int parent_line_number,
                                     size_t codeobject_id,
@@ -153,7 +157,7 @@ static void start_call(PyCodeObject *loc, int line_number) {
     int parent_line_number = 0;
     if (current_frame != NULL && current_frame->f_back != NULL) {
       PyFrameObject *f = current_frame->f_back;
-      parent_line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
+      parent_line_number = f->f_lasti;
     }
     pymemprofile_start_call(parent_line_number, (size_t)loc, line_number);
     set_will_i_be_reentrant(0);
@@ -201,7 +205,7 @@ static void add_allocation(size_t address, size_t size) {
   int line_number = 0;
   PyFrameObject *f = current_frame;
   if (f != NULL) {
-    line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
+    line_number = f->f_lasti;
   }
   pymemprofile_add_allocation(address, size, line_number);
 }
@@ -210,7 +214,7 @@ static void add_anon_mmap(size_t address, size_t size) {
   int line_number = 0;
   PyFrameObject *f = current_frame;
   if (f != NULL) {
-    line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
+    line_number = f->f_lasti;
   }
   pymemprofile_add_anon_mmap(address, size, line_number);
 }
