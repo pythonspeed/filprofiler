@@ -369,7 +369,7 @@ fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
     // Ensure the code object never gets garbage collected:
     PyObject *code_as_obj = ((PyObject *)frame->f_code);
     if (unlikely(code_as_obj->ob_refcnt < 1000000)) {
-      code_as_obj->ob_refcnt = 1000000;
+      code_as_obj->ob_refcnt = 2000000;
     }
     start_call(frame->f_code, frame->f_lineno);
     break;
