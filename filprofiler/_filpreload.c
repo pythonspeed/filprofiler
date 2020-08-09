@@ -366,17 +366,10 @@ fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
       We want an efficient identifier for filename+fuction name. So we use the
       code object pointer address.
     */
-    uint64_t seen = 0;
-    assert(extra_code_index != -1);
-    _PyCode_GetExtra((PyObject *)frame->f_code, extra_code_index,
-                     (void **)&seen);
-    if (unlikely(!seen)) {
-      // Ensure the code object never gets garbage collected:
-      Py_INCREF(frame->f_code);
-      // Set marker indicating we've done that.
-      seen = 1;
-      _PyCode_SetExtra((PyObject *)frame->f_code, extra_code_index,
-                       (void*)seen);
+    // Ensure the code object never gets garbage collected:
+    PyObject *code_as_obj = ((PyObject *)frame->f_code);
+    if (unlikely(code_as_obj->ob_refcnt < 1000000)) {
+      code_as_obj->ob_refcnt = 1000000;
     }
     start_call(frame->f_code, frame->f_lineno);
     break;
