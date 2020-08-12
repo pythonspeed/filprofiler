@@ -1,6 +1,6 @@
 use super::rangemap::RangeMap;
 use core::ffi;
-use im::hashmap as imhashmap;
+use im::Vector as ImVector;
 use inferno::flamegraph;
 use itertools::Itertools;
 use libc;
@@ -9,6 +9,7 @@ use std::collections;
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
+use std::iter;
 use std::path::Path;
 use std::path::PathBuf;
 use std::slice;
@@ -229,17 +230,17 @@ impl Allocation {
 /// The main data structure tracking everything.
 struct AllocationTracker {
     // malloc()/calloc():
-    current_allocations: imhashmap::HashMap<usize, Allocation>,
-    peak_allocations: imhashmap::HashMap<usize, Allocation>,
+    current_allocations: HashMap<usize, Allocation>,
     // anonymous mmap(), i.e. not file backed:
     current_anon_mmaps: RangeMap<CallstackId>,
-    peak_anon_mmaps: RangeMap<CallstackId>,
 
     // Map CallstackIds to Callstacks, so we can store the former and save
     // memory:
     interner: CallstackInterner,
 
     // Both malloc() and mmap():
+    current_memory_usage: ImVector<usize>, // Map CallstackId -> total memory usage
+    peak_memory_usage: ImVector<usize>,    // Map CallstackId -> total memory usage
     current_allocated_bytes: usize,
     peak_allocated_bytes: usize,
     // Some spare memory in case we run out:
@@ -251,11 +252,11 @@ struct AllocationTracker {
 impl<'a> AllocationTracker {
     fn new(default_path: String) -> AllocationTracker {
         AllocationTracker {
-            current_allocations: imhashmap::HashMap::default(),
-            peak_allocations: imhashmap::HashMap::default(),
+            current_allocations: HashMap::default(),
             current_anon_mmaps: RangeMap::new(),
-            peak_anon_mmaps: RangeMap::new(),
             interner: CallstackInterner::new(),
+            current_memory_usage: ImVector::new(),
+            peak_memory_usage: ImVector::new(),
             current_allocated_bytes: 0,
             peak_allocated_bytes: 0,
             spare_memory: Vec::with_capacity(16 * 1024 * 1024),
@@ -267,18 +268,39 @@ impl<'a> AllocationTracker {
     fn check_if_new_peak(&mut self) {
         if self.current_allocated_bytes > self.peak_allocated_bytes {
             self.peak_allocated_bytes = self.current_allocated_bytes;
-            self.peak_allocations = self.current_allocations.clone();
-            self.peak_anon_mmaps = self.current_anon_mmaps.clone();
+            self.peak_memory_usage
+                .clone_from(&self.current_memory_usage);
         }
+    }
+
+    fn add_memory_usage(&mut self, callstack_id: CallstackId, bytes: usize) {
+        self.current_allocated_bytes += bytes;
+        let index = callstack_id as usize;
+        // TODO It would be more efficient to add space whenever
+        // get_or_insert_id adds ne ID, but that requires refactoring so putting
+        // that off for now.
+        let len = self.current_memory_usage.len();
+        if len <= index {
+            self.current_memory_usage
+                .append(iter::repeat(0).take(index - len + 1).collect());
+        }
+        self.current_memory_usage[index] += bytes;
+    }
+
+    fn remove_memory_usage(&mut self, callstack_id: CallstackId, bytes: usize) {
+        self.current_allocated_bytes -= bytes;
+        let index = callstack_id as usize;
+        // TODO what if goes below zero? add a check I guess, in case of bugs.
+        self.current_memory_usage[index] -= bytes;
     }
 
     /// Add a new allocation based off the current callstack.
     fn add_allocation(&mut self, address: usize, size: libc::size_t, callstack: &Callstack) {
         let callstack_id = self.interner.get_or_insert_id(callstack);
         let alloc = Allocation::new(callstack_id, size);
+        let compressed_size = alloc.size();
         self.current_allocations.insert(address, alloc);
-        self.current_allocated_bytes += size;
-        //self.allocation_added(size);
+        self.add_memory_usage(callstack_id, compressed_size as usize);
     }
 
     /// Free an existing allocation.
@@ -288,7 +310,7 @@ impl<'a> AllocationTracker {
         // Possibly this allocation doesn't exist; that's OK! It can if e.g. we
         // didn't capture an allocation for some reason.
         if let Some(removed) = self.current_allocations.remove(&address) {
-            self.current_allocated_bytes -= removed.size();
+            self.remove_memory_usage(removed.callstack_id, removed.size());
         }
     }
 
@@ -296,8 +318,7 @@ impl<'a> AllocationTracker {
     fn add_anon_mmap(&mut self, address: usize, size: libc::size_t, callstack: &Callstack) {
         let callstack_id = self.interner.get_or_insert_id(callstack);
         self.current_anon_mmaps.add(address, size, callstack_id);
-        self.current_allocated_bytes += size;
-        // Peak will be updated next time we either free or extract information.
+        self.add_memory_usage(callstack_id, size);
     }
 
     fn free_anon_mmap(&mut self, address: usize, size: libc::size_t) {
@@ -305,7 +326,8 @@ impl<'a> AllocationTracker {
         self.check_if_new_peak();
         // Possibly this allocation doesn't exist; that's OK!
         let removed = self.current_anon_mmaps.remove(address, size);
-        self.current_allocated_bytes -= removed;
+        // TODO need to fix remove to return callstack_ids.
+        self.remove_memory_usage(0, removed);
     }
 
     /// Combine Callstacks and make them human-readable. Duplicate callstacks
@@ -320,26 +342,22 @@ impl<'a> AllocationTracker {
 
         let mut by_call: collections::HashMap<CallstackId, usize> = collections::HashMap::new();
 
-        // Aggregate normal malloc() allocations:
-        let normal_allocations = if peak {
-            &self.peak_allocations
+        if peak {
+            for i in 0..self.current_memory_usage.len() {
+                let size = self.current_memory_usage[i];
+                if size > 0 {
+                    by_call.insert(i as CallstackId, size);
+                }
+            }
         } else {
-            &self.current_allocations
-        };
-        for allocation in normal_allocations.values() {
-            let entry = by_call.entry(allocation.callstack_id).or_insert(0);
-            *entry += allocation.size();
-        }
-
-        // Aggregate anonymous mmap()s:
-        let anon_mmap_allocations = if peak {
-            &self.peak_anon_mmaps
-        } else {
-            &self.current_anon_mmaps
-        };
-        for (size, callstack_id) in anon_mmap_allocations.as_hashmap().values() {
-            let entry = by_call.entry(**callstack_id).or_insert(0);
-            *entry += size;
+            for allocation in self.current_allocations.values() {
+                let entry = by_call.entry(allocation.callstack_id).or_insert(0);
+                *entry += allocation.size();
+            }
+            for (size, callstack_id) in self.current_anon_mmaps.as_hashmap().values() {
+                let entry = by_call.entry(**callstack_id).or_insert(0);
+                *entry += size;
+            }
         }
 
         // Convert callstacks to be human-readable:

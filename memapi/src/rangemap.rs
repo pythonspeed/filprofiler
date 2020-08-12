@@ -58,6 +58,7 @@ impl<V: Clone> RangeMap<V> {
     }
 
     /// Return how many bytes were removed.
+    /// TODO needs to return mapping from CallstackId to removed size, e.g. vec of pairs or something.
     pub fn remove(&mut self, start: usize, length: libc::size_t) -> usize {
         if length <= 0 {
             return 0;
