@@ -167,7 +167,11 @@ impl<'a> CallstackInterner {
     }
 
     /// Add a (possibly) new Function, returning its ID.
-    fn get_or_insert_id(&mut self, callstack: &Callstack) -> CallstackId {
+    fn get_or_insert_id<F: FnOnce() -> ()>(
+        &mut self,
+        callstack: &Callstack,
+        call_on_new: F,
+    ) -> CallstackId {
         let max_id = &mut self.max_id;
         if let Some(result) = self.callstack_to_id.get(callstack) {
             *result
@@ -175,6 +179,7 @@ impl<'a> CallstackInterner {
             let new_id = *max_id;
             *max_id += 1;
             self.callstack_to_id.insert(callstack.clone(), new_id);
+            call_on_new();
             new_id
         }
     }
@@ -276,14 +281,6 @@ impl<'a> AllocationTracker {
     fn add_memory_usage(&mut self, callstack_id: CallstackId, bytes: usize) {
         self.current_allocated_bytes += bytes;
         let index = callstack_id as usize;
-        // TODO It would be more efficient to add space whenever
-        // get_or_insert_id adds ne ID, but that requires refactoring so putting
-        // that off for now.
-        let len = self.current_memory_usage.len();
-        if len <= index {
-            self.current_memory_usage
-                .append(iter::repeat(0).take(index - len + 1).collect());
-        }
         self.current_memory_usage[index] += bytes;
     }
 
@@ -294,9 +291,15 @@ impl<'a> AllocationTracker {
         self.current_memory_usage[index] -= bytes;
     }
 
+    fn get_callstack_id(&mut self, callstack: &Callstack) -> CallstackId {
+        let current_memory_usage = &mut self.current_memory_usage;
+        self.interner
+            .get_or_insert_id(callstack, || current_memory_usage.push_back(0))
+    }
+
     /// Add a new allocation based off the current callstack.
     fn add_allocation(&mut self, address: usize, size: libc::size_t, callstack: &Callstack) {
-        let callstack_id = self.interner.get_or_insert_id(callstack);
+        let callstack_id = self.get_callstack_id(callstack);
         let alloc = Allocation::new(callstack_id, size);
         let compressed_size = alloc.size();
         self.current_allocations.insert(address, alloc);
@@ -316,7 +319,7 @@ impl<'a> AllocationTracker {
 
     /// Add a new anonymous mmap() based of the current callstack.
     fn add_anon_mmap(&mut self, address: usize, size: libc::size_t, callstack: &Callstack) {
-        let callstack_id = self.interner.get_or_insert_id(callstack);
+        let callstack_id = self.get_callstack_id(callstack);
         self.current_anon_mmaps.add(address, size, callstack_id);
         self.add_memory_usage(callstack_id, size);
     }
