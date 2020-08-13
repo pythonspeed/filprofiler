@@ -343,8 +343,8 @@ impl<'a> AllocationTracker {
         let mut by_call: collections::HashMap<CallstackId, usize> = collections::HashMap::new();
 
         if peak {
-            for i in 0..self.current_memory_usage.len() {
-                let size = self.current_memory_usage[i];
+            for i in 0..self.peak_memory_usage.len() {
+                let size = self.peak_memory_usage[i];
                 if size > 0 {
                     by_call.insert(i as CallstackId, size);
                 }
