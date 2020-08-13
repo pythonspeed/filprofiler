@@ -702,21 +702,27 @@ mod tests {
             free_indices in prop::collection::btree_set(0..10 as usize, 1..5)
         ) {
             let mut tracker = AllocationTracker::new(".".to_string());
+            let mut expected_memory_usage = im::vector![];
             for i in 0..allocated_sizes.len() {
-                tracker.add_allocation(i as usize,*allocated_sizes.get(i).unwrap(), &Callstack::new());
+                let mut cs = Callstack::new();
+                cs.start_call(0, CallSiteId::new(FunctionId::new(i as *const FunctionLocation), 0));
+                tracker.add_allocation(i as usize,*allocated_sizes.get(i).unwrap(), &cs);
+                expected_memory_usage.push_back(*allocated_sizes.get(i).unwrap());
             }
             let mut expected_sum = allocated_sizes.iter().sum();
             let expected_peak : usize = expected_sum;
             prop_assert_eq!(tracker.current_allocated_bytes, expected_sum);
+            prop_assert_eq!(&tracker.current_memory_usage, &expected_memory_usage);
             for i in free_indices.iter() {
                 expected_sum -= allocated_sizes.get(*i).unwrap();
                 tracker.free_allocation(*i);
+                expected_memory_usage[*i] -= allocated_sizes.get(*i).unwrap();
                 prop_assert_eq!(tracker.current_allocated_bytes, expected_sum);
+                prop_assert_eq!(&tracker.current_memory_usage, &expected_memory_usage);
             }
             prop_assert_eq!(tracker.peak_allocated_bytes, expected_peak);
         }
 
-        // TODO test current_memory_usage too
         #[test]
         fn current_allocated_anon_maps_matches_sum_of_allocations(
             // Allocated bytes. Will use index as the memory address.
@@ -725,18 +731,25 @@ mod tests {
             free_indices in prop::collection::btree_set(0..10 as usize, 1..5)
         ) {
             let mut tracker = AllocationTracker::new(".".to_string());
+            let mut expected_memory_usage = im::vector![];
             // Make sure addresses don't overlap:
             let addresses : Vec<usize> = (0..allocated_sizes.len()).map(|i| i * 10000).collect();
             for i in 0..allocated_sizes.len() {
-                tracker.add_anon_mmap(addresses[i] as usize, *allocated_sizes.get(i).unwrap(), &Callstack::new());
+                let mut cs = Callstack::new();
+                cs.start_call(0, CallSiteId::new(FunctionId::new(i as *const FunctionLocation), 0));
+                tracker.add_anon_mmap(addresses[i] as usize, *allocated_sizes.get(i).unwrap(), &cs);
+                expected_memory_usage.push_back(*allocated_sizes.get(i).unwrap());
             }
             let mut expected_sum = allocated_sizes.iter().sum();
             let expected_peak : usize = expected_sum;
             prop_assert_eq!(tracker.current_allocated_bytes, expected_sum);
+            prop_assert_eq!(&tracker.current_memory_usage, &expected_memory_usage);
             for i in free_indices.iter() {
                 expected_sum -= allocated_sizes.get(*i).unwrap();
                 tracker.free_anon_mmap(addresses[*i], *allocated_sizes.get(*i).unwrap());
+                expected_memory_usage[*i] -= allocated_sizes.get(*i).unwrap();
                 prop_assert_eq!(tracker.current_allocated_bytes, expected_sum);
+                prop_assert_eq!(&tracker.current_memory_usage, &expected_memory_usage);
             }
             prop_assert_eq!(tracker.peak_allocated_bytes, expected_peak);
         }
