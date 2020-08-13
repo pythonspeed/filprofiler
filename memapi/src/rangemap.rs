@@ -58,36 +58,36 @@ impl<V: Clone> RangeMap<V> {
     }
 
     /// Return how many bytes were removed.
-    /// TODO needs to return mapping from CallstackId to removed size, e.g. vec of pairs or something.
-    pub fn remove(&mut self, start: usize, length: libc::size_t) -> usize {
+    pub fn remove(&mut self, start: usize, length: libc::size_t) -> Vec<(V, usize)> {
         if length <= 0 {
-            return 0;
+            return vec![];
         }
         let mut new_ranges = vec![];
+        let mut removed = vec![];
         let remove = Range::new(start, length);
         for (range, value) in self.ranges.iter() {
             match range.intersection(&remove) {
                 // Total overlap, remove it all:
-                Some(i) if (i.start == range.start) && (i.end == range.end) => (),
+                Some(i) if (i.start == range.start) && (i.end == range.end) => {
+                    removed.push((value.clone(), range.size()));
+                }
                 // Remove chunk from start:
                 Some(i) if (i.start == range.start) && (i.end < range.end) => {
-                    new_ranges.push((
-                        Range {
-                            start: i.end,
-                            end: range.end,
-                        },
-                        value.clone(),
-                    ));
+                    let new_range = Range {
+                        start: i.end,
+                        end: range.end,
+                    };
+                    removed.push((value.clone(), range.size() - new_range.size()));
+                    new_ranges.push((new_range, value.clone()));
                 }
                 // Remove chunk from end:
                 Some(i) if (i.start > range.start) && (i.end == range.end) => {
-                    new_ranges.push((
-                        Range {
-                            start: range.start,
-                            end: i.start,
-                        },
-                        value.clone(),
-                    ));
+                    let new_range = Range {
+                        start: range.start,
+                        end: i.start,
+                    };
+                    removed.push((value.clone(), range.size() - new_range.size()));
+                    new_ranges.push((new_range, value.clone()));
                 }
                 // Remove chunk from the middle:
                 Some(i) => {
@@ -105,6 +105,7 @@ impl<V: Clone> RangeMap<V> {
                         },
                         value.clone(),
                     ));
+                    removed.push((value.clone(), length));
                 }
                 // No overlap, remove nothing:
                 None => {
@@ -112,9 +113,8 @@ impl<V: Clone> RangeMap<V> {
                 }
             }
         }
-        let old_size = self.size();
         self.ranges = new_ranges;
-        old_size - self.size()
+        removed
     }
 
     pub fn size(&self) -> usize {
@@ -134,6 +134,7 @@ mod tests {
     use super::RangeMap;
     use proptest::prelude::*;
     use std::collections::{BTreeMap, HashMap};
+    use std::hash::Hash;
 
     /// RangeMap that has a key for each address in the range, rather than a
     /// smarter technique involving ranges.
@@ -141,7 +142,7 @@ mod tests {
         items: BTreeMap<usize, V>,
     }
 
-    impl<V: PartialEq + Clone + std::fmt::Debug> StupidRangeMap<V> {
+    impl<V: Copy + PartialEq + Clone + std::fmt::Debug + Eq + Hash + Ord> StupidRangeMap<V> {
         fn new() -> Self {
             StupidRangeMap {
                 items: BTreeMap::new(),
@@ -155,15 +156,15 @@ mod tests {
             }
         }
 
-        fn remove(&mut self, start: usize, length: libc::size_t) -> usize {
+        fn remove(&mut self, start: usize, length: libc::size_t) -> Vec<(V, usize)> {
             assert!(length > 0);
-            let mut removed = 0;
+            let mut removed = HashMap::new();
             for i in start..(start + length) {
-                if let Some(_) = self.items.remove(&i) {
-                    removed += 1;
+                if let Some(value) = self.items.remove(&i) {
+                    *removed.entry(value).or_insert(0) += 1;
                 }
             }
-            removed
+            removed.iter().map(|(k, v)| (*k, *v)).collect()
         }
 
         pub fn size(&self) -> usize {
@@ -229,7 +230,12 @@ mod tests {
             for (start, length) in remove_ranges {
                 let removed1 = real_rangemap.remove(start, length * 2);
                 let removed2 = stupid_rangemap.remove(start, length * 2);
-                prop_assert_eq!(removed1, removed2);
+                let mut removed1_map = HashMap::new();
+                for (k, v) in removed1 {
+                    *removed1_map.entry(k).or_insert(0) += v;
+                }
+                let removed2_map : HashMap<usize, usize> = removed2.iter().map(|v| *v).collect();
+                prop_assert_eq!(removed1_map, removed2_map);
                 prop_assert_eq!(real_rangemap.size(), stupid_rangemap.size());
                 prop_assert_eq!(real_rangemap.as_hashmap(), stupid_rangemap.as_hashmap());
             }
