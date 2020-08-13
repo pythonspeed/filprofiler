@@ -1,0 +1,1 @@
+Fil now runs _much_ faster, and adds _far_ less memory overhead, when tracking large numbers of allocations.
