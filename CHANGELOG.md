@@ -1,3 +1,16 @@
+# Fil 0.9.0 (2020-08-13)
+
+
+### Features
+
+- When tracking large numbers of allocations, Fil now runs _much_ faster, and has much less memory overhead. ([#65](https://github.com/pythonspeed/filprofiler/issues/65))
+- Added support for tracking allocations done using `posix_memalign(3)`. ([#61](https://github.com/pythonspeed/filprofiler/issues/61))
+
+### Bugfixes
+
+- Fixed edge case for large allocations, where wrong number of bytes was recorded as freed. ([#66](https://github.com/pythonspeed/filprofiler/issues/66))
+
+
 # Fil 0.8.0 (2020-07-24)
 
 

@@ -1,1 +1,0 @@
-Fixed edge case where wrong number of bytes was recorded as freed in very large allocations weren't.
