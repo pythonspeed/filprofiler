@@ -9,7 +9,6 @@ use std::collections;
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
-use std::iter;
 use std::path::Path;
 use std::path::PathBuf;
 use std::slice;
@@ -668,6 +667,7 @@ mod tests {
         Allocation, AllocationTracker, CallSiteId, Callstack, CallstackInterner, FunctionId,
         FunctionLocation, HIGH_32BIT, MIB,
     };
+    use im;
     use proptest::prelude::*;
     use std::collections;
 
@@ -693,6 +693,7 @@ mod tests {
             prop_assert!(diff <= MIB / 2)
         }
 
+        // TODO test current_memory_usage too
         #[test]
         fn current_allocated_matches_sum_of_allocations(
             // Allocated bytes. Will use index as the memory address.
@@ -715,6 +716,7 @@ mod tests {
             prop_assert_eq!(tracker.peak_allocated_bytes, expected_peak);
         }
 
+        // TODO test current_memory_usage too
         #[test]
         fn current_allocated_anon_maps_matches_sum_of_allocations(
             // Allocated bytes. Will use index as the memory address.
@@ -797,11 +799,27 @@ mod tests {
         let cs3b = Callstack::new();
 
         let mut interner = CallstackInterner::new();
-        let id1 = interner.get_or_insert_id(&cs1);
-        let id1b = interner.get_or_insert_id(&cs1b);
-        let id2 = interner.get_or_insert_id(&cs2);
-        let id3 = interner.get_or_insert_id(&cs3);
-        let id3b = interner.get_or_insert_id(&cs3b);
+
+        let mut new = false;
+        let id1 = interner.get_or_insert_id(&cs1, || new = true);
+        assert!(new);
+
+        new = false;
+        let id1b = interner.get_or_insert_id(&cs1b, || new = true);
+        assert!(!new);
+
+        new = false;
+        let id2 = interner.get_or_insert_id(&cs2, || new = true);
+        assert!(new);
+
+        new = false;
+        let id3 = interner.get_or_insert_id(&cs3, || new = true);
+        assert!(new);
+
+        new = false;
+        let id3b = interner.get_or_insert_id(&cs3b, || new = true);
+        assert!(!new);
+
         assert_eq!(id1, id1b);
         assert_ne!(id1, id2);
         assert_ne!(id1, id3);
@@ -830,6 +848,7 @@ mod tests {
         tracker.add_allocation(1, 1000, &cs1);
         tracker.check_if_new_peak();
         // Peak should now match current allocations:
+        assert_eq!(tracker.current_memory_usage, im::vector![1000]);
         assert_eq!(tracker.current_memory_usage, tracker.peak_memory_usage);
         assert_eq!(tracker.peak_allocated_bytes, 1000);
         let previous_peak = tracker.peak_memory_usage.clone();
@@ -837,11 +856,13 @@ mod tests {
         // Free the allocation:
         tracker.free_allocation(1);
         assert_eq!(tracker.current_allocated_bytes, 0);
+        assert_eq!(tracker.current_memory_usage, im::vector![0]);
         assert_eq!(previous_peak, tracker.peak_memory_usage);
         assert_eq!(tracker.peak_allocated_bytes, 1000);
 
         // Add allocation, still less than 1000:
         tracker.add_allocation(3, 123, &cs1);
+        assert_eq!(tracker.current_memory_usage, im::vector![123]);
         tracker.check_if_new_peak();
         assert_eq!(previous_peak, tracker.peak_memory_usage);
         assert_eq!(tracker.peak_allocated_bytes, 1000);
@@ -849,13 +870,16 @@ mod tests {
         // Add allocation that goes past previous peak
         tracker.add_allocation(2, 2000, &cs2);
         tracker.check_if_new_peak();
+        assert_eq!(tracker.current_memory_usage, im::vector![123, 2000]);
         assert_eq!(tracker.current_memory_usage, tracker.peak_memory_usage);
         assert_eq!(tracker.peak_allocated_bytes, 2123);
         let previous_peak = tracker.peak_memory_usage.clone();
 
         // Add anonymous mmap() that doesn't go past previous peak:
         tracker.free_allocation(2);
+        assert_eq!(tracker.current_memory_usage, im::vector![123, 0]);
         tracker.add_anon_mmap(50000, 1000, &cs2);
+        assert_eq!(tracker.current_memory_usage, im::vector![123, 1000]);
         tracker.check_if_new_peak();
         assert_eq!(tracker.current_allocated_bytes, 1123);
         assert_eq!(tracker.peak_allocated_bytes, 2123);
@@ -863,24 +887,21 @@ mod tests {
         assert_eq!(tracker.current_allocations.len(), 1);
         assert!(tracker.current_allocations.contains_key(&3));
         assert!(tracker.current_anon_mmaps.size() > 0);
-        // TODO assert!(tracker.peak_anon_mmaps.size() == 0);
 
         // Add anonymous mmap() that does go past previous peak:
         tracker.add_anon_mmap(600000, 2000, &cs2);
+        assert_eq!(tracker.current_memory_usage, im::vector![123, 3000]);
         tracker.check_if_new_peak();
         assert_eq!(tracker.current_memory_usage, tracker.peak_memory_usage);
-        // TODO assert_eq!(tracker.current_anon_mmaps, tracker.peak_anon_mmaps);
-        // TODO assert!(tracker.peak_anon_mmaps.size() > 0);
         assert_eq!(tracker.current_allocated_bytes, 3123);
         assert_eq!(tracker.peak_allocated_bytes, 3123);
-        // TODO let previous_peak_anon = tracker.peak_anon_mmaps.clone();
 
         // Remove mmap():
         tracker.free_anon_mmap(50000, 1000);
+        assert_eq!(tracker.current_memory_usage, im::vector![123, 2000]);
         tracker.check_if_new_peak();
         assert_eq!(tracker.current_allocated_bytes, 2123);
         assert_eq!(tracker.peak_allocated_bytes, 3123);
-        // TODO assert_eq!(previous_peak_anon, tracker.peak_anon_mmaps);
         assert_eq!(tracker.current_anon_mmaps.size(), 2000);
         assert!(tracker
             .current_anon_mmaps
@@ -889,9 +910,9 @@ mod tests {
 
         // Partial removal of anonmyous mmap():
         tracker.free_anon_mmap(600100, 1000);
+        assert_eq!(tracker.current_memory_usage, im::vector![123, 1000]);
         assert_eq!(tracker.current_allocated_bytes, 1123);
         assert_eq!(tracker.peak_allocated_bytes, 3123);
-        // TODO assert_eq!(previous_peak_anon, tracker.peak_anon_mmaps);
         assert_eq!(tracker.current_anon_mmaps.size(), 1000);
     }
 
