@@ -693,7 +693,23 @@ mod tests {
             prop_assert!(diff <= MIB / 2)
         }
 
-        // TODO test current_memory_usage too
+        // Test for https://github.com/pythonspeed/filprofiler/issues/66
+        #[test]
+        fn correct_allocation_size_tracked(size in (1 as usize)..(1<< 50)) {
+            let mut tracker = AllocationTracker::new(".".to_string());
+            tracker.add_allocation(0, size, &Callstack::new());
+            tracker.add_anon_mmap(1, size * 2, &Callstack::new());
+            // We don't track (large) allocations exactly right, but they should
+            // be quite close:
+            let ratio = ((size * 3) as f64) / (tracker.current_memory_usage[0] as f64);
+            prop_assert!(0.999 < ratio);
+            prop_assert!(ratio < 1.001);
+            tracker.free_allocation(0);
+            tracker.free_anon_mmap(1, size * 2);
+            // Once we've freed everything, it should be _exactly_ 0.
+            prop_assert_eq!(&im::vector![0], &tracker.current_memory_usage);
+        }
+
         #[test]
         fn current_allocated_matches_sum_of_allocations(
             // Allocated bytes. Will use index as the memory address.
