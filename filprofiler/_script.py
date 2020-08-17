@@ -159,7 +159,7 @@ def stage_2():
 
     # Only import here since we don't want the parent process accessing any of
     # the _filpread.so code.
-    from ._tracer import trace, create_report
+    from ._tracer import trace_until_exit, create_report
 
     signal.signal(signal.SIGUSR2, lambda *args: create_report(arguments.output_path))
     print(
@@ -170,7 +170,7 @@ def stage_2():
     )
     if not exists(arguments.output_path):
         makedirs(arguments.output_path)
-    trace(code, globals_, arguments.output_path)
+    trace_until_exit(code, globals_, arguments.output_path)
 
 
 if __name__ == "__main__":
