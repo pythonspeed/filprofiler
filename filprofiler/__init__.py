@@ -14,3 +14,17 @@ except ImportError:
     except ImportError:
         # Python 3.6 doesn't have importlib.metadata:
         __version__ = "unknown"
+
+
+def load_ipython_extension(ipython):
+    """Load our IPython magic."""
+    from ._ipython import FilMagics
+
+    ipython.register_magics(FilMagics)
+
+
+def unload_ipython_extension(ipython):
+    """Unload our IPython magic."""
+    from ._ipython import FilMagics
+
+    ipython.unregister_magics(FilMagics)
