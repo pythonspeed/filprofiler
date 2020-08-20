@@ -83,6 +83,7 @@ def stage_1():
     ] = "dirty_decay_ms:100,muzzy_decay_ms:1000,abort_conf:true"
 
     if sys.argv[1] == "python":
+        environ["FIL_PYTHON"] = "1"
         # Start the normal Python interpreter, with Fil available but inactive.
         execv(sys.executable, [sys.executable] + sys.argv[2:])
     else:
