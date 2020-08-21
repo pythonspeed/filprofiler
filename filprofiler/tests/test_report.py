@@ -19,6 +19,19 @@ def test_replace_code_references():
     )
 
 
+def test_replace_code_references_encoded():
+    """
+    replace_code_references() replaces special text with the Python code line,
+    handling HTML-encoded paths.
+    """
+    file_path = "".join(f"&#{ord(c)};" for c in FILE_PATH)
+    s = f"<title>TB@@{file_path}:1@@TB</title>"
+    assert (
+        replace_code_references(s)
+        == f'''<title>&#160;&#160;&#160;&#160;"""A file used by test_report."""</title>'''
+    )
+
+
 def test_replace_code_references_quoting():
     """
     replace_code_references() XML-quotes the strings it inserts, and turns

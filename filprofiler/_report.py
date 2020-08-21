@@ -13,6 +13,7 @@ import re
 import sys
 from xml.sax.saxutils import escape
 from urllib.parse import quote_plus as url_quote
+import html
 from . import __version__
 
 LINE_REFERENCE = re.compile(r"\<title\>TB@@([^:]+):(\d+)@@TB")
@@ -34,6 +35,7 @@ def replace_code_references(string: str) -> str:
 
     def replace_with_code(match):
         filename, line = match.group(1, 2)
+        filename = html.unescape(filename)
         line = int(line)
         return "<title>&#160;&#160;&#160;&#160;" + escape(
             linecache.getline(filename, line).strip()
