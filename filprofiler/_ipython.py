@@ -29,6 +29,9 @@ class FilMagics(Magics):
     @cell_magic
     def filprofile(self, line, cell):
         """Memory profile the code in the cell."""
+        # We use a template that does the Fil setup inside the cell, rather
+        # than here, so as to keep a whole pile of irrelevant IPython code
+        # appearing as frames at the top of the memory profile flamegraph.
         self.shell.run_cell(TEMPLATE.format(indent(cell, "    ")))
 
 
