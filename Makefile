@@ -57,3 +57,7 @@ licenses:
 	cd memapi && cargo lichking check
 	cd memapi && cargo lichking bundle --file ../filprofiler/licenses.txt || true
 	cat extra-licenses/APSL.txt >> filprofiler/licenses.txt
+
+data_kernelspec/kernel.json: generate-kernelspec.py
+	rm -rf data_kernelspec
+	python generate-kernelspec.py

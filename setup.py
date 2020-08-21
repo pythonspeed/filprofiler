@@ -1,4 +1,5 @@
 from os.path import join
+from glob import glob
 from setuptools import setup, Extension
 from distutils import sysconfig
 import sys
@@ -29,6 +30,12 @@ setup(
         )
     ],
     package_data={"filprofiler": ["licenses.txt"],},
+    data_files=[
+        (
+            join("share", "jupyter", "kernels", "filprofile"),
+            glob(join("data_kernelspec", "*")),
+        )
+    ],
     use_scm_version=True,
     setup_requires=["setuptools_scm"],
     extras_require={
@@ -43,6 +50,8 @@ setup(
             "wheel",
             "auditwheel",
             "twine",
+            "ipython",
+            "ipykernel",
         ],
     },
     description="A memory profiler for data batch processing applications.",
