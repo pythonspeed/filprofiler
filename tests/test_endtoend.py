@@ -3,55 +3,18 @@
 from subprocess import check_call, check_output, CalledProcessError, run, PIPE
 from tempfile import mkdtemp, NamedTemporaryFile
 from pathlib import Path
-from glob import glob
 import os
 import time
 import sys
+from typing import Union
 
 from pampy import match, _ as ANY
 import pytest
 
-
-def get_allocations(
-    output_directory: Path,
-    expected_files=[
-        "peak-memory.svg",
-        "peak-memory-reversed.svg",
-        "index.html",
-        "peak-memory.prof",
-    ],
-    prof_file="peak-memory.prof",
-):
-    """Parses peak-memory.prof, returns mapping from callstack to size in KiB."""
-    assert sorted(os.listdir(glob(str(output_directory / "*"))[0])) == sorted(
-        expected_files
-    )
-    result = {}
-    with open(glob(str(output_directory / "*" / prof_file))[0]) as f:
-        for line in f:
-            *calls, size_kb = line.split(" ")
-            calls = " ".join(calls)
-            size_kb = int(int(size_kb) / 1024)
-            path = []
-            if calls == "[No Python stack]":
-                result[calls] = size_kb
-                continue
-            for call in calls.split(";"):
-                if call.startswith("TB@@"):
-                    continue
-                part1, func_name = call.rsplit(" ", 1)
-                assert func_name[0] == "("
-                assert func_name[-1] == ")"
-                func_name = func_name[1:-1]
-                file_name, line = part1.split(":")
-                line = int(line)
-                path.append((file_name, func_name, line))
-            if size_kb > 900:
-                result[tuple(path)] = size_kb
-    return result
+from filprofiler._testing import get_allocations, big, as_mb
 
 
-def profile(*arguments: str, expect_exit_code=0, **kwargs) -> Path:
+def profile(*arguments: Union[str, Path], expect_exit_code=0, **kwargs) -> Path:
     """Run fil-profile on given script, return path to output directory."""
     output = Path(mkdtemp())
     try:
@@ -64,14 +27,6 @@ def profile(*arguments: str, expect_exit_code=0, **kwargs) -> Path:
     assert exit_code == expect_exit_code
 
     return output
-
-
-def as_mb(*args):
-    return args[-1] / 1024
-
-
-def big(length):
-    return length > 10000
 
 
 def test_threaded_allocation_tracking():
@@ -246,7 +201,6 @@ def test_out_of_memory():
         "out-of-memory.prof",
     )
 
-    import threading
     import numpy.core.numeric
 
     ones = (numpy.core.numeric.__file__, "ones", ANY)
