@@ -252,7 +252,8 @@ __attribute__((visibility("default"))) void fil_shutting_down() {
 
 /// Register the C level Python tracer.
 __attribute__((visibility("default"))) void register_fil_tracer() {
-  PyEval_SetProfile(fil_tracer, Py_None);
+  // We use 123 as a marker object for tests.
+  PyEval_SetProfile(fil_tracer, PyLong_FromLong(123));
 }
 
 /// Dump the current peak memory usage to disk.

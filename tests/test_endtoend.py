@@ -322,3 +322,16 @@ def test_free():
     """free() frees allocations as far as Fil is concerned."""
     script = Path("python-benchmarks") / "ldpreload.py"
     profile(script)
+
+
+def test_interpreter():
+    """Run tests that require `fil-profile python`."""
+    check_call(
+        [
+            "fil-profile",
+            "python",
+            "-m",
+            "pytest",
+            str(Path("python-benchmarks") / "fil-interpreter.py"),
+        ]
+    )
