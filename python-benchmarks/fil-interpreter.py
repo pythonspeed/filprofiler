@@ -6,9 +6,9 @@ $ fil-profile python -m pytest python-benchmarks/fil-interpreter.py
 """
 
 import sys
-
 from ctypes import c_void_p
 
+import pytest
 import numpy as np
 from pampy import _ as ANY, match
 from filprofiler._tracer import preload, start_tracing, stop_tracing
@@ -27,13 +27,17 @@ def test_no_profiling():
 def test_temporary_profiling(tmpdir):
     """Profiling can be run temporarily."""
     start_tracing(tmpdir)
-    arr = np.ones((1024, 1024, 4), dtype=np.uint64)  # 32MB
+
+    def f():
+        arr = np.ones((1024, 1024, 4), dtype=np.uint64)  # 32MB
+
+    f()
     stop_tracing(tmpdir)
 
     # Allocations were tracked:
     import numpy.core.numeric
 
-    path = ((__file__, "<module>", 30), (numpy.core.numeric.__file__, "ones", ANY))
+    path = ((__file__, "f", 32), (numpy.core.numeric.__file__, "ones", ANY))
     allocations = get_allocations(tmpdir)
     assert match(allocations, {path: big}, as_mb) == pytest.approx(32, 0.1)
 
