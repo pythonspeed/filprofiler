@@ -13,12 +13,18 @@ from IPython.display import IFrame, display
 from ._tracer import start_tracing, stop_tracing
 
 
-# We use variable that is unlikely to conflict with user code.
+HOPEFULLY_UNIQUE_VAR = "__arghbldsada__"
+
+# We use a variable that is unlikely to conflict with user code.
+# We also:
+#
+# 1. Make sure line numbers line up with original code (first line is a magic,
+#    so we can put stuff there!)
+# 2. Make sure user code runs in a function, so top-level lines get recorded.
 TEMPLATE = """\
-from filprofiler._ipython import run_with_profile as __arghbldsada__
-with __arghbldsada__():
+def __magic_run_with_fil():
 {}
-del __arghbldsada__
+with {}(): __magic_run_with_fil()
 """
 
 
@@ -29,10 +35,21 @@ class FilMagics(Magics):
     @cell_magic
     def filprofile(self, line, cell):
         """Memory profile the code in the cell."""
+        # Inject run_with_profile:
+
+        self.shell.push({HOPEFULLY_UNIQUE_VAR: run_with_profile})
+
+        # Run the code.
+        #
         # We use a template that does the Fil setup inside the cell, rather
         # than here, so as to keep a whole pile of irrelevant IPython code
         # appearing as frames at the top of the memory profile flamegraph.
-        self.shell.run_cell(TEMPLATE.format(indent(cell, "    ")))
+        #
+        # TODO handle indents that aren't 4 lines
+        self.shell.run_cell(TEMPLATE.format(indent(cell, "    "), HOPEFULLY_UNIQUE_VAR))
+
+        # Uninject run_with_profile:
+        self.shell.drop_by_id({HOPEFULLY_UNIQUE_VAR: run_with_profile})
 
 
 @contextmanager
