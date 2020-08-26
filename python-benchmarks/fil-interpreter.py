@@ -10,14 +10,17 @@ import os
 from ctypes import c_void_p
 import re
 from pathlib import Path
+
 import pytest
 import numpy as np
+import numpy.core.numeric
 from pampy import _ as ANY, match
+from IPython.core.displaypub import CapturingDisplayPublisher
+from IPython.core.interactiveshell import InteractiveShell
+
 from filprofiler._tracer import preload, start_tracing, stop_tracing
 from filprofiler._testing import get_allocations, big, as_mb
 from pymalloc import pymalloc
-from IPython.core.displaypub import CapturingDisplayPublisher
-from IPython.core.interactiveshell import InteractiveShell
 
 
 def test_no_profiling():
@@ -39,9 +42,7 @@ def test_temporary_profiling(tmpdir):
     stop_tracing(tmpdir)
 
     # Allocations were tracked:
-    import numpy.core.numeric
-
-    path = ((__file__, "f", 36), (numpy.core.numeric.__file__, "ones", ANY))
+    path = ((__file__, "f", 39), (numpy.core.numeric.__file__, "ones", ANY))
     allocations = get_allocations(tmpdir)
     assert match(allocations, {path: big}, as_mb) == pytest.approx(32, 0.1)
 
@@ -85,8 +86,6 @@ arr = np.ones((1024, 1024, 4), dtype=np.uint64)  # 32MB
     )
 
     # Allocations were tracked:
-    import numpy.core.numeric
-
     path = (
         (re.compile("<ipython-input-1-.*"), "__magic_run_with_fil", 3),
         (numpy.core.numeric.__file__, "ones", ANY),
@@ -120,10 +119,42 @@ arr = np.ones((1024, 1024, 8), dtype=np.uint64)  # 64MB
     )
 
     # Allocations were tracked:
-    import numpy.core.numeric
-
     path = (
         (re.compile("<ipython-input-1-.*"), "__magic_run_with_fil", 3),
+        (numpy.core.numeric.__file__, "ones", ANY),
+    )
+    assert match(allocations, {path: big}, as_mb) == pytest.approx(16, 0.1)
+
+    # Profiling stopped:
+    test_no_profiling()
+
+
+def test_ipython_non_standard_indent(tmpdir):
+    """
+    Profiling can be run via IPython magic, still profiles and shuts down
+    correctly on an exception.
+
+    This will log a RuntimeError. That is expected.
+    """
+    cwd = os.getcwd()
+    os.chdir(tmpdir)
+    allocations = run_in_ipython_shell(
+        [
+            "%load_ext filprofiler",
+            """\
+%%filprofile
+import numpy as np
+def f():  # indented with 5 spaces what
+     arr = np.ones((1024, 1024, 2), dtype=np.uint64)  # 16MB
+f()
+""",
+        ]
+    )
+
+    # Allocations were tracked:
+    path = (
+        (re.compile("<ipython-input-1-.*"), "__magic_run_with_fil", 5),
+        (re.compile("<ipython-input-1-.*"), "f", 4),
         (numpy.core.numeric.__file__, "ones", ANY),
     )
     assert match(allocations, {path: big}, as_mb) == pytest.approx(16, 0.1)

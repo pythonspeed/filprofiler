@@ -45,7 +45,9 @@ class FilMagics(Magics):
         # than here, so as to keep a whole pile of irrelevant IPython code
         # appearing as frames at the top of the memory profile flamegraph.
         #
-        # TODO handle indents that aren't 4 lines
+        # Empirically inconsistent indents are just fine as far as Python is
+        # concerned(?!), so we don't need to do anything special for code that
+        # isn't 4-space indented.
         self.shell.run_cell(TEMPLATE.format(indent(cell, "    "), HOPEFULLY_UNIQUE_VAR))
 
         # Uninject run_with_profile:
