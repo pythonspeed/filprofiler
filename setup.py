@@ -31,20 +31,7 @@ setup(
     package_data={"filprofiler": ["licenses.txt"],},
     use_scm_version=True,
     setup_requires=["setuptools_scm"],
-    extras_require={
-        "dev": [
-            "pytest",
-            "pampy",
-            "numpy",
-            "scikit-image",
-            "cython",
-            "black",
-            "towncrier==19.9.0rc1",
-            "wheel",
-            "auditwheel",
-            "twine",
-        ],
-    },
+    extras_require={"dev": read("requirements-dev.txt").strip().splitlines()},
     description="A memory profiler for data batch processing applications.",
     classifiers=[
         "Intended Audience :: Developers",

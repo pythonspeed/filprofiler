@@ -27,6 +27,10 @@ test-rust:
 
 .PHONY: test-python
 test-python: build
+	make test-python-no-deps
+
+.PHONY: test-python-no-deps
+test-python-no-deps:
 	cythonize -3 -i python-benchmarks/pymalloc.pyx
 	c++ -shared python-benchmarks/cpp.cpp -o python-benchmarks/cpp.so
 	cd python-benchmarks && python -m numpy.f2py -c fortran.f90 -m fortran
