@@ -1,6 +1,6 @@
 target/
 *.so
-venv
+venv*
 *.egg-info
 __pycache__
 build/
@@ -8,5 +8,6 @@ dist/
 fil-result/
 .eggs/
 python-benchmarks/pymalloc.c
-filprofiler/fil-python
 filprofiler/_version.py
+.ipynb_checkpoints
+pip-wheel-metadata

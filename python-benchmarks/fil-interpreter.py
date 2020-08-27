@@ -62,7 +62,7 @@ def run_in_ipython_shell(code_cells):
         shell.run_cell(code)
     InteractiveShell.clear_instance()
     html = shell.display_pub.outputs[-1]["data"]["text/html"]
-    assert "iframe" in html
+    assert "<iframe" in html
     [svg_path] = re.findall('src="([^"]*)"', html)
     assert svg_path.endswith("peak-memory.svg")
     resultdir = Path(svg_path).parent.parent

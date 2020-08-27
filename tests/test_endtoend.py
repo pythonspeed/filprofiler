@@ -7,7 +7,10 @@ import os
 import time
 import sys
 from typing import Union
+import re
+import shutil
 
+import numpy.core.numeric
 from pampy import match, _ as ANY
 import pytest
 
@@ -41,7 +44,6 @@ def test_threaded_allocation_tracking():
     allocations = get_allocations(output_dir)
 
     import threading
-    import numpy.core.numeric
 
     threading = (threading.__file__, "run", ANY)
     ones = (numpy.core.numeric.__file__, "ones", ANY)
@@ -75,7 +77,6 @@ def test_thread_allocates_after_main_thread_is_done():
     allocations = get_allocations(output_dir)
 
     import threading
-    import numpy.core.numeric
 
     threading = (threading.__file__, "run", ANY)
     ones = (numpy.core.numeric.__file__, "ones", ANY)
@@ -201,8 +202,6 @@ def test_out_of_memory():
         "out-of-memory.prof",
     )
 
-    import numpy.core.numeric
-
     ones = (numpy.core.numeric.__file__, "ones", ANY)
     script = str(script)
     expected_small_alloc = ((script, "<module>", 9), ones)
@@ -278,7 +277,7 @@ def test_free():
     profile(script)
 
 
-def test_interpreter():
+def test_interpreter_with_fil():
     """Run tests that require `fil-profile python`."""
     check_call(
         [
@@ -289,3 +288,32 @@ def test_interpreter():
             str(Path("python-benchmarks") / "fil-interpreter.py"),
         ]
     )
+
+
+def test_jupyter(tmpdir):
+    """Jupyter magic can run Fil."""
+    tests_dir = Path(__file__).resolve().parent.parent / "python-benchmarks"
+    shutil.copyfile(tests_dir / "jupyter.ipynb", tmpdir / "jupyter.ipynb")
+    check_call(
+        ["jupyter", "nbconvert", "--execute", "jupyter.ipynb", "--to", "html",],
+        cwd=tmpdir,
+    )
+    output_dir = tmpdir / "fil-result"
+
+    # IFrame with SVG was included in output:
+    with open(tmpdir / "jupyter.html") as f:
+        html = f.read()
+    assert "<iframe" in html
+    [svg_path] = re.findall(r'src="([^"]*\.svg)"', html)
+    assert svg_path.endswith("peak-memory.svg")
+    assert Path(tmpdir / svg_path).exists()
+
+    # Allocations were tracked:
+    allocations = get_allocations(output_dir)
+    print(allocations)
+    path = (
+        (re.compile("<ipython-input-3-.*"), "__magic_run_with_fil", 2),
+        (re.compile("<ipython-input-2-.*"), "alloc", 4),
+        (numpy.core.numeric.__file__, "ones", ANY),
+    )
+    assert match(allocations, {path: big}, as_mb) == pytest.approx(48, 0.1)
