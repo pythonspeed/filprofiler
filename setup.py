@@ -52,6 +52,7 @@ setup(
             "twine",
             "ipython",
             "ipykernel",
+            "nbconvert",
         ],
     },
     description="A memory profiler for data batch processing applications.",
