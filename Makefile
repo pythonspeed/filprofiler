@@ -28,13 +28,14 @@ test-rust:
 .PHONY: test-python
 test-python: build
 	make test-python-no-deps
+	env RUST_BACKTRACE=1 py.test filprofiler/tests/
 
 .PHONY: test-python-no-deps
 test-python-no-deps:
 	cythonize -3 -i python-benchmarks/pymalloc.pyx
 	c++ -shared python-benchmarks/cpp.cpp -o python-benchmarks/cpp.so
 	cd python-benchmarks && python -m numpy.f2py -c fortran.f90 -m fortran
-	env RUST_BACKTRACE=1 py.test
+	env RUST_BACKTRACE=1 py.test tests/
 
 .PHONY: docker-image
 docker-image:
