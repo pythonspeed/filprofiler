@@ -9,6 +9,7 @@ build: target/release/libpymemprofile_api.a
 	pip install -e .
 	rm -rf build/
 	python setup.py build_ext --inplace
+	python setup.py install_data
 
 target/release/libpymemprofile_api.a: Cargo.lock memapi/Cargo.toml memapi/src/*.rs
 	cargo build --release
