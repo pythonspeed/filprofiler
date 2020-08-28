@@ -1,3 +1,12 @@
+# Fil 0.10.0 (2020-08-28)
+
+
+### Features
+
+- Added support for profiling inside Jupyter. ([#12](https://github.com/pythonspeed/filprofiler/issues/12))
+- Fil can now be installed via Conda-Forge. ([#20](https://github.com/pythonspeed/filprofiler/issues/20))
+
+
 # Fil 0.9.0 (2020-08-13)
 
 
