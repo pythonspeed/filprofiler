@@ -8,6 +8,10 @@ Fil an open source memory profiler designed for data processing applications wri
 
 At the moment it only runs on Linux and macOS.
 
+> "Within minutes of using your tool, I was able to identify a major memory bottleneck that I never would have thought existed.  The ability to track memory allocated via the Python interface and also C allocation is awesome, especially for my NumPy / Pandas programs."
+> 
+> —Derrick Kondo
+
 For more information, including an example of the output, see https://pythonspeed.com/products/filmemoryprofiler/
 
 * [Installation](#installation)
@@ -16,6 +20,7 @@ For more information, including an example of the output, see https://pythonspee
     * [Measuring peak memory usage for Python scripts](#peak-python)
     * [Debugging out-of-memory crashes in your code](#oom)
 * [Reducing memory usage in your code](#reducing-memory-usage)
+* [Known limitations](#known-limitations)
 * [What Fil tracks](#what-fil-tracks)
 
 ## Installation
@@ -129,6 +134,19 @@ Still not supported, but planned:
 * Anonymous `mmap()`s created via `/dev/zero` (not common, since it's not cross-platform, e.g. macOS doesn't support this).
 * `memfd_create()`.
 * Possibly `memalign`, `valloc()`, `pvalloc()`, `reallocarray()`.
+
+## Known limitations
+
+Fil is under heavy development, since it's a new project; it still has some known issues that need fixing.
+
+For example:
+
+* Not all memory allocation APIs are currently supported, though I have been steadily adding more over time.
+* NumPy's and Zarr/BLOSC's multithreaded backends are disabled, to make sure that allocations can be tied to the correct callstack.
+  This can make code run slower, because it's no longer multi-threaded.
+* Windows is not yet supported.
+
+For other details [see the issue tracker](https://github.com/pythonspeed/filprofiler/issues).
 
 ## License
 
