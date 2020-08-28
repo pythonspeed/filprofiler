@@ -14,3 +14,19 @@ except ImportError:
     except ImportError:
         # Python 3.6 doesn't have importlib.metadata:
         __version__ = "unknown"
+
+
+def load_ipython_extension(ipython):
+    """Load our IPython magic."""
+    from IPython.core.error import UsageError
+    import os
+
+    if os.environ.get("FIL_PYTHON") != "1":
+        raise UsageError(
+            "In order to use Fil, you need to run your notebook with the Fil kernel.\n\n"
+            "You can change the kernel via the 'Change Kernel' option at the bottom of "
+            "the Kernel menu in Jupyter."
+        )
+    from ._ipython import FilMagics
+
+    ipython.register_magics(FilMagics)

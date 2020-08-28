@@ -44,6 +44,11 @@ extern int _rjem_posix_memalign(void **memptr, size_t alignment, size_t size);
 // Note whether we've been initialized yet or not:
 static int initialized = 0;
 
+// Note whether we're currently tracking allocations. Jupyter users might turn
+// this on and then off, for example, whereas full process profiling will have
+// this on from start until finish.
+static int tracking_allocations = 0;
+
 // ID of Python code object extra data:
 static Py_ssize_t extra_code_index = -1;
 
@@ -73,6 +78,18 @@ static inline int am_i_reentrant() { return will_i_be_reentrant; }
 
 static inline void set_will_i_be_reentrant(int i) { will_i_be_reentrant = i; }
 #endif
+
+// Return whether to pass malloc() etc. to Rust tracking code.
+// Will be true if all conditions are true:
+//
+// 1. The shared library constructor is initialized; always true after that.
+// 2. Allocations are being tracked.
+// 3. This isn't a reentrant call: we don't want to track memory allocations
+//    triggered by the Rust tracking code, as that will result in infinite
+//    recursion.
+static inline int should_track_memory() {
+  return (likely(initialized) && tracking_allocations && !am_i_reentrant());
+}
 
 // Current thread's Python state:
 static _Thread_local PyFrameObject *current_frame = NULL;
@@ -135,7 +152,7 @@ extern void pymemprofile_add_anon_mmap(size_t address, size_t length,
 extern void pymemprofile_free_anon_mmap(size_t address, size_t length);
 
 static void start_call(struct FunctionLocation *loc, uint16_t line_number) {
-  if (!am_i_reentrant()) {
+  if (should_track_memory()) {
     set_will_i_be_reentrant(1);
     uint16_t parent_line_number = 0;
     if (current_frame != NULL && current_frame->f_back != NULL) {
@@ -148,7 +165,7 @@ static void start_call(struct FunctionLocation *loc, uint16_t line_number) {
 }
 
 static void finish_call() {
-  if (!am_i_reentrant()) {
+  if (should_track_memory()) {
     set_will_i_be_reentrant(1);
     pymemprofile_finish_call();
     set_will_i_be_reentrant(0);
@@ -157,187 +174,14 @@ static void finish_call() {
 
 __attribute__((visibility("default"))) void
 fil_new_line_number(uint16_t line_number) {
-  if (!am_i_reentrant()) {
+  if (should_track_memory()) {
     set_will_i_be_reentrant(1);
     pymemprofile_new_line_number(line_number);
     set_will_i_be_reentrant(0);
   }
 }
 
-__attribute__((visibility("default"))) void
-fil_reset(const char *default_path) {
-  if (!am_i_reentrant()) {
-    set_will_i_be_reentrant(1);
-    pymemprofile_reset(default_path);
-    set_will_i_be_reentrant(0);
-  }
-}
-
-__attribute__((visibility("default"))) void
-fil_dump_peak_to_flamegraph(const char *path) {
-  // This maybe called after we're done, when will_i_be_reentrant is permanently
-  // set to 1, or might be called mid-way through code run. Either way we want
-  // to prevent reentrant malloc() calls, but we want to run regardless.
-  int current_reentrant_status = am_i_reentrant();
-  set_will_i_be_reentrant(1);
-  pymemprofile_dump_peak_to_flamegraph(path);
-  set_will_i_be_reentrant(current_reentrant_status);
-}
-
-static void add_allocation(size_t address, size_t size) {
-  uint16_t line_number = 0;
-  PyFrameObject *f = current_frame;
-  if (f != NULL) {
-    line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
-  }
-  pymemprofile_add_allocation(address, size, line_number);
-}
-
-static void add_anon_mmap(size_t address, size_t size) {
-  uint16_t line_number = 0;
-  PyFrameObject *f = current_frame;
-  if (f != NULL) {
-    line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
-  }
-  pymemprofile_add_anon_mmap(address, size, line_number);
-}
-
-// Override memory-allocation functions:
-__attribute__((visibility("default"))) void *
-SYMBOL_PREFIX(malloc)(size_t size) {
-  void *result = REAL_IMPL(malloc)(size);
-  if (initialized && !am_i_reentrant()) {
-    set_will_i_be_reentrant(1);
-    add_allocation((size_t)result, size);
-    set_will_i_be_reentrant(0);
-  }
-  return result;
-}
-
-__attribute__((visibility("default"))) void *
-SYMBOL_PREFIX(calloc)(size_t nmemb, size_t size) {
-  void *result = REAL_IMPL(calloc)(nmemb, size);
-  size_t allocated = nmemb * size;
-  if (initialized && !am_i_reentrant()) {
-    set_will_i_be_reentrant(1);
-    add_allocation((size_t)result, allocated);
-    set_will_i_be_reentrant(0);
-  }
-  return result;
-}
-
-__attribute__((visibility("default"))) void *
-SYMBOL_PREFIX(realloc)(void *addr, size_t size) {
-  void *result = REAL_IMPL(realloc)(addr, size);
-  if (initialized && !am_i_reentrant()) {
-    set_will_i_be_reentrant(1);
-    // Sometimes you'll get same address, so if we did add first and then
-    // removed, it would remove the entry erroneously.
-    pymemprofile_free_allocation((size_t)addr);
-    add_allocation((size_t)result, size);
-    set_will_i_be_reentrant(0);
-  }
-  return result;
-}
-
-__attribute__((visibility("default"))) int
-SYMBOL_PREFIX(posix_memalign)(void **memptr, size_t alignment, size_t size) {
-  int result = REAL_IMPL(posix_memalign)(memptr, alignment, size);
-  if (!result && initialized && !am_i_reentrant()) {
-    set_will_i_be_reentrant(1);
-    add_allocation((size_t)*memptr, size);
-    set_will_i_be_reentrant(0);
-  }
-  return result;
-}
-
-__attribute__((visibility("default"))) void SYMBOL_PREFIX(free)(void *addr) {
-  REAL_IMPL(free)(addr);
-  if (initialized && !am_i_reentrant()) {
-    set_will_i_be_reentrant(1);
-    pymemprofile_free_allocation((size_t)addr);
-    set_will_i_be_reentrant(0);
-  }
-}
-
-__attribute__((visibility("default"))) void *
-SYMBOL_PREFIX(mmap)(void *addr, size_t length, int prot, int flags, int fd,
-                    off_t offset) {
-  if (unlikely(!initialized)) {
-#ifdef __APPLE__
-    return mmap(addr, length, prot, flags, fd, offset);
-#else
-    return (void *)syscall(SYS_mmap, addr, length, prot, flags, fd, offset);
-#endif
-  }
-
-  void *result = underlying_real_mmap(addr, length, prot, flags, fd, offset);
-
-  // For now we only track anonymous mmap()s:
-  if (result != MAP_FAILED && (flags & MAP_ANONYMOUS) && !am_i_reentrant()) {
-    set_will_i_be_reentrant(1);
-    add_anon_mmap((size_t)result, length);
-    set_will_i_be_reentrant(0);
-  }
-  return result;
-}
-
-__attribute__((visibility("default"))) int
-SYMBOL_PREFIX(munmap)(void *addr, size_t length) {
-  if (unlikely(!initialized)) {
-#ifdef __APPLE__
-    return munmap(addr, length);
-#else
-    return syscall(SYS_munmap, addr, length);
-#endif
-  }
-
-  int result = underlying_real_munmap(addr, length);
-  if (result != -1 && !am_i_reentrant()) {
-    set_will_i_be_reentrant(1);
-    pymemprofile_free_anon_mmap(result, length);
-    set_will_i_be_reentrant(0);
-  }
-  return result;
-}
-
-__attribute__((visibility("default"))) void *
-SYMBOL_PREFIX(aligned_alloc)(size_t alignment, size_t size) {
-  void *result = REAL_IMPL(aligned_alloc)(alignment, size);
-
-  // For now we only track anonymous mmap()s:
-  if (initialized && !am_i_reentrant()) {
-    set_will_i_be_reentrant(1);
-    add_allocation((size_t)result, size);
-    set_will_i_be_reentrant(0);
-  }
-  return result;
-}
-
-#ifdef __linux__
-// Make sure we expose jemalloc variant of malloc_usable_size(), in case someone
-// actually uses it.
-size_t SYMBOL_PREFIX(malloc_usable_size)(void *ptr) {
-  return REAL_IMPL(malloc_usable_size)(ptr);
-}
-#endif
-
-#ifdef __APPLE__
-DYLD_INTERPOSE(SYMBOL_PREFIX(malloc), malloc)
-DYLD_INTERPOSE(SYMBOL_PREFIX(calloc), calloc)
-DYLD_INTERPOSE(SYMBOL_PREFIX(realloc), realloc)
-DYLD_INTERPOSE(SYMBOL_PREFIX(free), free)
-DYLD_INTERPOSE(SYMBOL_PREFIX(mmap), mmap)
-DYLD_INTERPOSE(SYMBOL_PREFIX(munmap), munmap)
-DYLD_INTERPOSE(SYMBOL_PREFIX(aligned_alloc), aligned_alloc)
-DYLD_INTERPOSE(SYMBOL_PREFIX(posix_memalign), posix_memalign)
-#endif
-
-// Call after Python gets going.
-__attribute__((visibility("default"))) void fil_initialize_from_python() {
-  extra_code_index = _PyEval_RequestCodeExtraIndex(NULL);
-}
-
+/// Callback functions for the Python tracing API (PyEval_SetProfile).
 __attribute__((visibility("hidden"))) int
 fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
   switch (what) {
@@ -384,11 +228,193 @@ fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
   return 0;
 }
 
-__attribute__((visibility("default"))) void register_fil_tracer() {
-  PyEval_SetProfile(fil_tracer, Py_None);
+// *** APIs called by Python ***
+
+/// Called after Python gets going, allowing us to call some necessary Python
+/// APIs.
+__attribute__((visibility("default"))) void fil_initialize_from_python() {
+  extra_code_index = _PyEval_RequestCodeExtraIndex(NULL);
 }
 
-__attribute__((visibility("default"))) void fil_shutting_down() {
-  // We're shutting down, so things like PyCode_Addr2Line won't work:
+/// Start memory tracing.
+__attribute__((visibility("default"))) void
+fil_reset(const char *default_path) {
+  tracking_allocations = 1;
   set_will_i_be_reentrant(1);
+  pymemprofile_reset(default_path);
+  set_will_i_be_reentrant(0);
 }
+
+/// End memory tracing.
+__attribute__((visibility("default"))) void fil_shutting_down() {
+  tracking_allocations = 0;
+}
+
+/// Register the C level Python tracer.
+__attribute__((visibility("default"))) void register_fil_tracer() {
+  // We use 123 as a marker object for tests.
+  PyEval_SetProfile(fil_tracer, PyLong_FromLong(123));
+}
+
+/// Dump the current peak memory usage to disk.
+__attribute__((visibility("default"))) void
+fil_dump_peak_to_flamegraph(const char *path) {
+  // This maybe called after we're done, when will_i_be_reentrant is permanently
+  // set to 1, or might be called mid-way through code run. Either way we want
+  // to prevent reentrant malloc() calls, but we want to run regardless.
+  int current_reentrant_status = am_i_reentrant();
+  set_will_i_be_reentrant(1);
+  pymemprofile_dump_peak_to_flamegraph(path);
+  set_will_i_be_reentrant(current_reentrant_status);
+}
+
+// *** End APIs called by Python ***
+
+static void add_allocation(size_t address, size_t size) {
+  uint16_t line_number = 0;
+  PyFrameObject *f = current_frame;
+  if (f != NULL) {
+    line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
+  }
+  pymemprofile_add_allocation(address, size, line_number);
+}
+
+static void add_anon_mmap(size_t address, size_t size) {
+  uint16_t line_number = 0;
+  PyFrameObject *f = current_frame;
+  if (f != NULL) {
+    line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
+  }
+  pymemprofile_add_anon_mmap(address, size, line_number);
+}
+
+// Override memory-allocation functions:
+__attribute__((visibility("default"))) void *
+SYMBOL_PREFIX(malloc)(size_t size) {
+  void *result = REAL_IMPL(malloc)(size);
+  if (should_track_memory()) {
+    set_will_i_be_reentrant(1);
+    add_allocation((size_t)result, size);
+    set_will_i_be_reentrant(0);
+  }
+  return result;
+}
+
+__attribute__((visibility("default"))) void *
+SYMBOL_PREFIX(calloc)(size_t nmemb, size_t size) {
+  void *result = REAL_IMPL(calloc)(nmemb, size);
+  size_t allocated = nmemb * size;
+  if (should_track_memory()) {
+    set_will_i_be_reentrant(1);
+    add_allocation((size_t)result, allocated);
+    set_will_i_be_reentrant(0);
+  }
+  return result;
+}
+
+__attribute__((visibility("default"))) void *
+SYMBOL_PREFIX(realloc)(void *addr, size_t size) {
+  void *result = REAL_IMPL(realloc)(addr, size);
+  if (should_track_memory()) {
+    set_will_i_be_reentrant(1);
+    // Sometimes you'll get same address, so if we did add first and then
+    // removed, it would remove the entry erroneously.
+    pymemprofile_free_allocation((size_t)addr);
+    add_allocation((size_t)result, size);
+    set_will_i_be_reentrant(0);
+  }
+  return result;
+}
+
+__attribute__((visibility("default"))) int
+SYMBOL_PREFIX(posix_memalign)(void **memptr, size_t alignment, size_t size) {
+  int result = REAL_IMPL(posix_memalign)(memptr, alignment, size);
+  if (!result && should_track_memory()) {
+    set_will_i_be_reentrant(1);
+    add_allocation((size_t)*memptr, size);
+    set_will_i_be_reentrant(0);
+  }
+  return result;
+}
+
+__attribute__((visibility("default"))) void SYMBOL_PREFIX(free)(void *addr) {
+  REAL_IMPL(free)(addr);
+  if (should_track_memory()) {
+    set_will_i_be_reentrant(1);
+    pymemprofile_free_allocation((size_t)addr);
+    set_will_i_be_reentrant(0);
+  }
+}
+
+__attribute__((visibility("default"))) void *
+SYMBOL_PREFIX(mmap)(void *addr, size_t length, int prot, int flags, int fd,
+                    off_t offset) {
+  if (unlikely(!initialized)) {
+#ifdef __APPLE__
+    return mmap(addr, length, prot, flags, fd, offset);
+#else
+    return (void *)syscall(SYS_mmap, addr, length, prot, flags, fd, offset);
+#endif
+  }
+
+  void *result = underlying_real_mmap(addr, length, prot, flags, fd, offset);
+
+  // For now we only track anonymous mmap()s:
+  if (result != MAP_FAILED && (flags & MAP_ANONYMOUS) && should_track_memory()) {
+    set_will_i_be_reentrant(1);
+    add_anon_mmap((size_t)result, length);
+    set_will_i_be_reentrant(0);
+  }
+  return result;
+}
+
+__attribute__((visibility("default"))) int
+SYMBOL_PREFIX(munmap)(void *addr, size_t length) {
+  if (unlikely(!initialized)) {
+#ifdef __APPLE__
+    return munmap(addr, length);
+#else
+    return syscall(SYS_munmap, addr, length);
+#endif
+  }
+
+  int result = underlying_real_munmap(addr, length);
+  if (result != -1 && should_track_memory()) {
+    set_will_i_be_reentrant(1);
+    pymemprofile_free_anon_mmap(result, length);
+    set_will_i_be_reentrant(0);
+  }
+  return result;
+}
+
+__attribute__((visibility("default"))) void *
+SYMBOL_PREFIX(aligned_alloc)(size_t alignment, size_t size) {
+  void *result = REAL_IMPL(aligned_alloc)(alignment, size);
+
+  // For now we only track anonymous mmap()s:
+  if (should_track_memory()) {
+    set_will_i_be_reentrant(1);
+    add_allocation((size_t)result, size);
+    set_will_i_be_reentrant(0);
+  }
+  return result;
+}
+
+#ifdef __linux__
+// Make sure we expose jemalloc variant of malloc_usable_size(), in case someone
+// actually uses it.
+size_t SYMBOL_PREFIX(malloc_usable_size)(void *ptr) {
+  return REAL_IMPL(malloc_usable_size)(ptr);
+}
+#endif
+
+#ifdef __APPLE__
+DYLD_INTERPOSE(SYMBOL_PREFIX(malloc), malloc)
+DYLD_INTERPOSE(SYMBOL_PREFIX(calloc), calloc)
+DYLD_INTERPOSE(SYMBOL_PREFIX(realloc), realloc)
+DYLD_INTERPOSE(SYMBOL_PREFIX(free), free)
+DYLD_INTERPOSE(SYMBOL_PREFIX(mmap), mmap)
+DYLD_INTERPOSE(SYMBOL_PREFIX(munmap), munmap)
+DYLD_INTERPOSE(SYMBOL_PREFIX(aligned_alloc), aligned_alloc)
+DYLD_INTERPOSE(SYMBOL_PREFIX(posix_memalign), posix_memalign)
+#endif

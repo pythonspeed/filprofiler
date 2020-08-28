@@ -403,7 +403,7 @@ impl<'a> AllocationTracker {
         let directory_path = Path::new(path);
 
         if !directory_path.exists() {
-            fs::create_dir(directory_path)
+            fs::create_dir_all(directory_path)
                 .expect("=fil-profile= Couldn't create the output directory.");
         } else if !directory_path.is_dir() {
             panic!("=fil-profile= Output path must be a directory.");

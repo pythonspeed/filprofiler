@@ -1,0 +1,1 @@
+Added support for profiling inside Jupyter.

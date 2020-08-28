@@ -1,4 +1,5 @@
 from os.path import join
+from glob import glob
 from setuptools import setup, Extension
 from distutils import sysconfig
 import sys
@@ -29,6 +30,12 @@ setup(
         )
     ],
     package_data={"filprofiler": ["licenses.txt"],},
+    data_files=[
+        (
+            join("share", "jupyter", "kernels", "filprofile"),
+            glob(join("data_kernelspec", "*")),
+        )
+    ],
     use_scm_version=True,
     setup_requires=["setuptools_scm"],
     extras_require={"dev": read("requirements-dev.txt").strip().splitlines()},
@@ -36,7 +43,8 @@ setup(
     classifiers=[
         "Intended Audience :: Developers",
         "License :: OSI Approved :: Apache Software License",
-        "Operating System :: OS Independent",
+        "Operating System :: MacOS",
+        "Operating System :: POSIX :: Linux",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.6",

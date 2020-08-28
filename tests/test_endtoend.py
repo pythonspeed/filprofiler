@@ -3,55 +3,21 @@
 from subprocess import check_call, check_output, CalledProcessError, run, PIPE
 from tempfile import mkdtemp, NamedTemporaryFile
 from pathlib import Path
-from glob import glob
 import os
 import time
 import sys
+from typing import Union
+import re
+import shutil
 
+import numpy.core.numeric
 from pampy import match, _ as ANY
 import pytest
 
-
-def get_allocations(
-    output_directory: Path,
-    expected_files=[
-        "peak-memory.svg",
-        "peak-memory-reversed.svg",
-        "index.html",
-        "peak-memory.prof",
-    ],
-    prof_file="peak-memory.prof",
-):
-    """Parses peak-memory.prof, returns mapping from callstack to size in KiB."""
-    assert sorted(os.listdir(glob(str(output_directory / "*"))[0])) == sorted(
-        expected_files
-    )
-    result = {}
-    with open(glob(str(output_directory / "*" / prof_file))[0]) as f:
-        for line in f:
-            *calls, size_kb = line.split(" ")
-            calls = " ".join(calls)
-            size_kb = int(int(size_kb) / 1024)
-            path = []
-            if calls == "[No Python stack]":
-                result[calls] = size_kb
-                continue
-            for call in calls.split(";"):
-                if call.startswith("TB@@"):
-                    continue
-                part1, func_name = call.rsplit(" ", 1)
-                assert func_name[0] == "("
-                assert func_name[-1] == ")"
-                func_name = func_name[1:-1]
-                file_name, line = part1.split(":")
-                line = int(line)
-                path.append((file_name, func_name, line))
-            if size_kb > 900:
-                result[tuple(path)] = size_kb
-    return result
+from filprofiler._testing import get_allocations, big, as_mb
 
 
-def profile(*arguments: str, expect_exit_code=0, **kwargs) -> Path:
+def profile(*arguments: Union[str, Path], expect_exit_code=0, **kwargs) -> Path:
     """Run fil-profile on given script, return path to output directory."""
     output = Path(mkdtemp())
     try:
@@ -66,14 +32,6 @@ def profile(*arguments: str, expect_exit_code=0, **kwargs) -> Path:
     return output
 
 
-def as_mb(*args):
-    return args[-1] / 1024
-
-
-def big(length):
-    return length > 10000
-
-
 def test_threaded_allocation_tracking():
     """
     fil-profile tracks allocations from all threads.
@@ -86,7 +44,6 @@ def test_threaded_allocation_tracking():
     allocations = get_allocations(output_dir)
 
     import threading
-    import numpy.core.numeric
 
     threading = (threading.__file__, "run", ANY)
     ones = (numpy.core.numeric.__file__, "ones", ANY)
@@ -120,7 +77,6 @@ def test_thread_allocates_after_main_thread_is_done():
     allocations = get_allocations(output_dir)
 
     import threading
-    import numpy.core.numeric
 
     threading = (threading.__file__, "run", ANY)
     ones = (numpy.core.numeric.__file__, "ones", ANY)
@@ -248,9 +204,6 @@ def test_out_of_memory():
         "out-of-memory.prof",
     )
 
-    import threading
-    import numpy.core.numeric
-
     ones = (numpy.core.numeric.__file__, "ones", ANY)
     script = str(script)
     expected_small_alloc = ((script, "<module>", 9), ones)
@@ -324,3 +277,45 @@ def test_free():
     """free() frees allocations as far as Fil is concerned."""
     script = Path("python-benchmarks") / "ldpreload.py"
     profile(script)
+
+
+def test_interpreter_with_fil():
+    """Run tests that require `fil-profile python`."""
+    check_call(
+        [
+            "fil-profile",
+            "python",
+            "-m",
+            "pytest",
+            str(Path("python-benchmarks") / "fil-interpreter.py"),
+        ]
+    )
+
+
+def test_jupyter(tmpdir):
+    """Jupyter magic can run Fil."""
+    tests_dir = Path(__file__).resolve().parent.parent / "python-benchmarks"
+    shutil.copyfile(tests_dir / "jupyter.ipynb", tmpdir / "jupyter.ipynb")
+    check_call(
+        ["jupyter", "nbconvert", "--execute", "jupyter.ipynb", "--to", "html",],
+        cwd=tmpdir,
+    )
+    output_dir = tmpdir / "fil-result"
+
+    # IFrame with SVG was included in output:
+    with open(tmpdir / "jupyter.html") as f:
+        html = f.read()
+    assert "<iframe" in html
+    [svg_path] = re.findall(r'src="([^"]*\.svg)"', html)
+    assert svg_path.endswith("peak-memory.svg")
+    assert Path(tmpdir / svg_path).exists()
+
+    # Allocations were tracked:
+    allocations = get_allocations(output_dir)
+    print(allocations)
+    path = (
+        (re.compile("<ipython-input-3-.*"), "__magic_run_with_fil", 2),
+        (re.compile("<ipython-input-2-.*"), "alloc", 4),
+        (numpy.core.numeric.__file__, "ones", ANY),
+    )
+    assert match(allocations, {path: big}, as_mb) == pytest.approx(48, 0.1)

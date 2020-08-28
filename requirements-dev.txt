@@ -9,4 +9,5 @@ wheel
 auditwheel
 twine
 ipython
+ipykernel
 nbconvert

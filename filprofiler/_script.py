@@ -58,6 +58,10 @@ For more info visit https://pythonspeed.com/products/filmemoryprofiler/
 
 def stage_1():
     """Setup environment variables, re-execute this script."""
+    if len(sys.argv) == 1:
+        PARSER.print_help()
+        sys.exit(0)
+
     # Load the library:
     environ["LD_PRELOAD"] = library_path("_filpreload")
     environ["DYLD_INSERT_LIBRARIES"] = library_path("_filpreload")
@@ -77,9 +81,16 @@ def stage_1():
     environ[
         "_RJEM_MALLOC_CONF"
     ] = "dirty_decay_ms:100,muzzy_decay_ms:1000,abort_conf:true"
-    execv(
-        sys.executable, [sys.executable, "-m", "filprofiler._script"] + sys.argv[1:],
-    )
+
+    if sys.argv[1] == "python":
+        environ["FIL_PYTHON"] = "1"
+        # Start the normal Python interpreter, with Fil available but inactive.
+        execv(sys.executable, [sys.executable] + sys.argv[2:])
+    else:
+        execv(
+            sys.executable,
+            [sys.executable, "-m", "filprofiler._script"] + sys.argv[1:],
+        )
 
 
 PARSER = ArgumentParser(
@@ -103,16 +114,16 @@ subparsers = PARSER.add_subparsers(help="sub-command help")
 parser_run = subparsers.add_parser(
     "run", help="Run a Python script or package", prefix_chars=[""], add_help=False,
 )
+parser_run.set_defaults(command="run")
 parser_run.add_argument("rest", nargs=REMAINDER)
 del subparsers, parser_run
 
 
 def stage_2():
-    """Main CLI interface.22 Presumes LD_PRELOAD etc. has been set by stage_1()."""
-    if len(sys.argv) == 1:
-        PARSER.print_help()
-        sys.exit(0)
+    """Main CLI interface for `fil-profile run`.
 
+    Presumes LD_PRELOAD etc. has been set by stage_1().
+    """
     arguments = PARSER.parse_args()
     if arguments.license:
         print(LICENSE)
@@ -149,7 +160,7 @@ def stage_2():
 
     # Only import here since we don't want the parent process accessing any of
     # the _filpread.so code.
-    from ._tracer import trace, create_report
+    from ._tracer import trace_until_exit, create_report
 
     signal.signal(signal.SIGUSR2, lambda *args: create_report(arguments.output_path))
     print(
@@ -160,7 +171,7 @@ def stage_2():
     )
     if not exists(arguments.output_path):
         makedirs(arguments.output_path)
-    trace(code, globals_, arguments.output_path)
+    trace_until_exit(code, globals_, arguments.output_path)
 
 
 if __name__ == "__main__":
