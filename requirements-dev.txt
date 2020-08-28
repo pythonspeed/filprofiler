@@ -1,0 +1,13 @@
+pytest
+pampy
+numpy
+scikit-image
+cython
+black
+towncrier==19.9.0rc1
+wheel
+auditwheel
+twine
+ipython
+ipykernel
+nbconvert

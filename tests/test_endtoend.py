@@ -104,9 +104,11 @@ def test_malloc_in_c_extension():
     path = ((script, "<module>", 32), (script, "main", 23))
     assert match(allocations, {path: big}, as_mb) == pytest.approx(40, 0.1)
 
-    # C++ aligned_alloc():
-    path = ((script, "<module>", 32), (script, "main", 24))
-    assert match(allocations, {path: big}, as_mb) == pytest.approx(90, 0.1)
+    # C++ aligned_alloc(); not available on Conda, where it's just a macro
+    # redirecting to posix_memalign.
+    if not os.environ.get("CONDA_PREFIX"):
+        path = ((script, "<module>", 32), (script, "main", 24))
+        assert match(allocations, {path: big}, as_mb) == pytest.approx(90, 0.1)
 
     # Py*_*Malloc APIs:
     path = ((script, "<module>", 32), (script, "main", 25))

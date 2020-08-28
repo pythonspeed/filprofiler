@@ -20,29 +20,37 @@ For more information, including an example of the output, see https://pythonspee
 
 ## Installation
 
-### Prerequisites
+Assuming you're on macOS or Linux, and are using Python 3.6 or later, you can use either Conda or pip (or any tool that is pip-compatible and can install `manylinux2010` wheels).
+
+### Conda
+
+To install on Conda:
+
+```console
+$ conda install -c conda-forge filprofiler
+```
+
+### Pip
 
 To install the latest version of Fil you'll need Pip 19 or newer.
 You can check like this:
 
-```
+```console
 $ pip --version
-pip 20.0.2
+pip 19.3.0
 ```
 
-If you're using something older than that, do:
+If you're using something older than v19, you can upgrade by doing:
 
 ```
 $ pip install --upgrade pip
 ```
 
-If _that_ doesn't work, try running that a virtualenv or Conda env.
+If _that_ doesn't work, try running that in a virtualenv.
 
-### Installing Fil
+Assuming you have a new enough version of pip:
 
-Assuming you're on macOS or Linux, and are using Python 3.6 or later:
-
-```
+```console
 $ pip install filprofiler
 ```
 
@@ -64,7 +72,7 @@ To measure memory usage of some code in Jupyter you need to do three things:
 
 Instead of doing:
 
-```
+```console
 $ python yourscript.py --input-file=yourfile
 ```
 
@@ -80,7 +88,7 @@ And it will generate a report.
 
 First, run `free` to figure out how much memory is available—in this case about 6.3GB—and then set a corresponding limit on virtual memory with `ulimit`:
 
-```shell
+```console
 $ free -h
        total   used   free  shared  buff/cache  available
 Mem:   7.7Gi  1.1Gi  6.3Gi    50Mi       334Mi      6.3Gi
@@ -90,7 +98,7 @@ $ ulimit -Sv 6300000
 
 Then, run your program under Fil, and it will generate a SVG at the point in time when memory runs out:
 
-```shell
+```console
 $ fil-profile run oom.py 
 ...
 =fil-profile= Wrote memory usage flamegraph to fil-result/2020-06-15T12:37:13.033/out-of-memory.svg
