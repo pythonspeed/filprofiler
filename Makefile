@@ -34,7 +34,7 @@ test-python: build
 .PHONY: test-python-no-deps
 test-python-no-deps:
 	cythonize -3 -i python-benchmarks/pymalloc.pyx
-	c++ -shared python-benchmarks/cpp.cpp -o python-benchmarks/cpp.so
+	c++ -shared -fPIC -lpthread python-benchmarks/cpp.cpp -o python-benchmarks/cpp.so
 	cd python-benchmarks && python -m numpy.f2py -c fortran.f90 -m fortran
 	env RUST_BACKTRACE=1 py.test tests/
 
