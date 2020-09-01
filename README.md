@@ -129,22 +129,11 @@ Still not supported, but planned:
 
 * `mremap()` (resizing of `mmap()`).
 * File-backed `mmap()`.
-  The usage here is inconsistent since the OS can swap it in or out, so probably supporting this will involve a different kind of resource usage.
+  The semantics are somewhat different than normal allocations or anonymous `mmap()`, since the OS can swap it in or out from disk transparently, so supporting this will involve a different kind of resource usage and reporting.
 * Other forms of shared memory, need to investigate if any of them allow sufficient allocation.
 * Anonymous `mmap()`s created via `/dev/zero` (not common, since it's not cross-platform, e.g. macOS doesn't support this).
-* `memfd_create()`.
-* Possibly `memalign`, `valloc()`, `pvalloc()`, `reallocarray()`.
-
-## Known limitations
-
-Fil is under heavy development, since it's a new project; it still has some known issues that need fixing.
-
-For example:
-
-* Not all memory allocation APIs are currently supported, though I have been steadily adding more over time.
-* NumPy's and Zarr/BLOSC's multithreaded backends are disabled, to make sure that allocations can be tied to the correct callstack.
-  This can make code run slower, because it's no longer multi-threaded.
-* Windows is not yet supported.
+* `memfd_create()`, a Linux-only mechanism for creating in-memory files.
+* Possibly `memalign`, `valloc()`, `pvalloc()`, `reallocarray()`. These are all rarely used, as far as I can tell.
 
 For other details [see the issue tracker](https://github.com/pythonspeed/filprofiler/issues).
 
