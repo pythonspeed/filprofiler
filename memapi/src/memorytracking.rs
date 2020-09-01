@@ -1,5 +1,4 @@
 use super::rangemap::RangeMap;
-use core::ffi;
 use im::Vector as ImVector;
 use inferno::flamegraph;
 use itertools::Itertools;
@@ -86,18 +85,13 @@ impl CallSiteId {
 /// The current Python callstack. We use IDs instead of Function objects for
 /// performance reasons.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-struct Callstack {
+pub struct Callstack {
     calls: Vec<CallSiteId>,
 }
 
 impl Callstack {
-    fn new() -> Callstack {
+    pub fn new() -> Callstack {
         Callstack { calls: Vec::new() }
-    }
-
-    /// Is this a Python call?
-    fn in_python(&self) -> bool {
-        !self.calls.is_empty()
     }
 
     fn start_call(&mut self, parent_line_number: u16, callsite_id: CallSiteId) {
@@ -470,42 +464,13 @@ impl<'a> AllocationTracker {
     fn oom_break_glass(&mut self) {
         // Get some emergency memory:
         self.spare_memory.shrink_to_fit();
-        // fork()
     }
 
     /// Dump information about where we are.
     fn oom_dump(&mut self) {
-        unsafe {
-            // We want to free memory, but that can corrupt other threads. So first,
-            // fork() to get rid of the threads.
-            eprintln!("=fil-profile= Out of memory. First, we'll try to fork() and exit parent.");
-            let pid = libc::fork();
-            if pid != 0 && pid != -1 {
-                // We successfully forked, and we're the parent. Just exit.
-                libc::_exit(5);
-            }
-
-            eprintln!("=fil-profile= Next, we'll free large memory allocations.");
-            // free() all the things, so we have memory to dump an SVG. These should
-            // only be _Python_ objects, Rust code shouldn't be tracked here since
-            // we prevent reentrancy. We're not going to return to Python so
-            // free()ing should be OK.
-            let id_to_callstack = self.interner.get_reverse_map();
-            for (address, allocation) in self.current_allocations.iter() {
-                // Only clear large allocations that came out of a Python stack,
-                // to reduce chances of deallocating random important things.
-                if id_to_callstack
-                    .get(&allocation.callstack_id)
-                    .unwrap()
-                    .in_python()
-                    && allocation.size() > 300000
-                {
-                    libc::free(*address as *mut ffi::c_void);
-                }
-            }
-        }
+        eprintln!("=fil-profile= Uh oh, out of memory!");
         eprintln!(
-            "=fil-profile= And now, we'll dump out SVGs. Note that no HTML file will be written."
+            "=fil-profile= We'll try to dump out SVGs. Note that no HTML file will be written."
         );
         let default_path = self.default_path.clone();
         self.dump_to_flamegraph(
@@ -549,6 +514,19 @@ pub fn new_line_number(line_number: u16) {
     });
 }
 
+/// Get the current thread's callstack.
+pub fn get_current_callstack() -> Callstack {
+    THREAD_CALLSTACK.with(|cs| (*cs.borrow()).clone())
+}
+
+/// Set the current callstack. Typically should only be used when starting up
+/// new threads.
+pub fn set_current_callstack(callstack: &Callstack) {
+    THREAD_CALLSTACK.with(|cs| {
+        *cs.borrow_mut() = callstack.clone();
+    })
+}
+
 /// Add a new allocation based off the current callstack.
 pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_mmap: bool) {
     if address == 0 {
@@ -557,7 +535,7 @@ pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_m
         allocations.oom_break_glass();
     }
 
-    let mut callstack: Callstack = THREAD_CALLSTACK.with(|cs| (*cs.borrow()).clone());
+    let mut callstack: Callstack = get_current_callstack();
     if line_number != 0 && !callstack.calls.is_empty() {
         callstack.new_line_number(line_number);
     }
