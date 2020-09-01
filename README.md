@@ -20,8 +20,9 @@ For more information, including an example of the output, see https://pythonspee
     * [Measuring peak memory usage for Python scripts](#peak-python)
     * [Debugging out-of-memory crashes in your code](#oom)
 * [Reducing memory usage in your code](#reducing-memory-usage)
-* [Known limitations](#known-limitations)
-* [What Fil tracks](#what-fil-tracks)
+* [How Fil works](#how-fil-works)
+    * [Fil and threading, with notes on NumPy and Zarr](#threading)
+    * [What Fil tracks](#what-fil-tracks)
 
 ## Installation
 
@@ -115,7 +116,43 @@ You've found where memory usage is coming from—now what?
 
 If you're using data processing or scientific computing libraries, I have written a relevant [guide to reducing memory usage](https://pythonspeed.com/datascience/).
 
-## What Fil tracks
+## How Fil works
+
+Fil uses the `LD_PRELOAD`/`DYLD_INSERT_LIBRARIES` mechanism to preload a shared library at process startup.
+This shared library captures all memory allocations and deallocations and keeps track of them.
+
+At the same time, the Python tracing infrastructure (used e.g. by `cProfile` and `coverage.py`) to figure out which Python callstack/backtrace is responsible for each allocation.
+
+### Fil and threading, with notes on NumPy and Zarr {#threading}
+
+There are three cases:
+
+* If you start a thread via Python, running Python code, that thread will get its own callstack for tracking who is responsible for a memory allocation.
+* If you start a C thread, the calling Python code is considered responsible for any memory allocations in that thread.
+* As a result, if you start a thread pool of threads that are not Python threads, the Python code that created those threads will be responsible for all allocations created during the thread pool's lifetime.
+  This may lead to unexpected results.
+  
+In particular, both NumPy and Zarr create thread pools on startup that are used to run certain operations (BLAS linear algebra and compression, respectively).
+Any allocations in the thread pool, while logically the responsibility of other code will be reported as due to importing those modules!
+
+It's not clear to me they allocate a substantial amount of memory, so you might not have issues.
+But, if you do have issues, one thing you can do is set these and some other libraries to not use a thread pool, by running the following code _before_ you import any Python or C libraries:
+
+```python
+# Disable multi-threaded backends in various scientific computing libraries
+# (Zarr uses Blosc, NumPy uses BLAS, OpenMP is generically used):
+from os import environ
+environ["BLOSC_NTHREADS"] = "1"
+environ["OMP_NUM_THREADS"] = "1"
+environ["OPENBLAS_NUM_THREADS"] = "1"
+environ["MKL_NUM_THREADS"] = "1"
+environ["VECLIB_MAXIMUM_THREADS"] = "1"
+environ["NUMEXPR_NUM_THREADS"] = "1"
+```
+
+The Python code calling into C code will then clearly be tracked as responsible for these allocations.
+
+### What Fil tracks
 
 Fil will track memory allocated by:
 
@@ -134,8 +171,6 @@ Still not supported, but planned:
 * Anonymous `mmap()`s created via `/dev/zero` (not common, since it's not cross-platform, e.g. macOS doesn't support this).
 * `memfd_create()`, a Linux-only mechanism for creating in-memory files.
 * Possibly `memalign`, `valloc()`, `pvalloc()`, `reallocarray()`. These are all rarely used, as far as I can tell.
-
-For other details [see the issue tracker](https://github.com/pythonspeed/filprofiler/issues).
 
 ## License
 
