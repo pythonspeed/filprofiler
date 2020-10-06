@@ -89,6 +89,12 @@ $ fil-profile run yourscript.py --input-file=yourfile
 
 And it will generate a report.
 
+As of version 0.11, you can also run it like this:
+
+```
+$ python -m filprofiler run yourscript.py --input-file=yourfile
+```
+
 ### <a name="oom">Debugging out-of-memory crashes</a>
 
 First, run `free` to figure out how much memory is available—in this case about 6.3GB—and then set a corresponding limit on virtual memory with `ulimit`:
