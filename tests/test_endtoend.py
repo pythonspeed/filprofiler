@@ -170,6 +170,38 @@ def test_minus_m():
     )
 
 
+def test_minus_m_minus_m():
+    """
+    `python -m filprofiler -m package` runs the package.
+    """
+    dir = Path("python-benchmarks")
+    script = (dir / "malloc.py").absolute()
+    output_dir = Path(mkdtemp())
+    check_call(
+        [
+            sys.executable,
+            "-m",
+            "filprofiler",
+            "-o",
+            str(output_dir),
+            "run",
+            "-m",
+            "malloc",
+            "--size",
+            "50",
+        ],
+        cwd=dir,
+    )
+    allocations = get_allocations(output_dir)
+    stripped_allocations = {k[3:]: v for (k, v) in allocations.items()}
+    script = str(script)
+    path = ((script, "<module>", 32), (script, "main", 28))
+
+    assert match(stripped_allocations, {path: big}, as_mb) == pytest.approx(
+        50 + 10, 0.1
+    )
+
+
 def test_ld_preload_disabled_for_subprocesses():
     """
     LD_PRELOAD is reset so subprocesses don't get the malloc() preload.
@@ -254,9 +286,14 @@ def test_no_args():
     """
     no_args = run(["fil-profile"], stdout=PIPE, stderr=PIPE)
     with_help = run(["fil-profile", "--help"], stdout=PIPE, stderr=PIPE)
+    no_args_minus_m = run(
+        [sys.executable, "-m", "filprofiler"], stdout=PIPE, stderr=PIPE
+    )
     assert no_args.returncode == with_help.returncode
     assert no_args.stdout == with_help.stdout
     assert no_args.stderr == with_help.stderr
+    assert no_args_minus_m.stdout == with_help.stdout
+    assert no_args_minus_m.stderr == with_help.stderr
 
 
 def test_fortran():
