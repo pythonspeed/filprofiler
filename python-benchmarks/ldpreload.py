@@ -12,4 +12,6 @@ assert preload.pymemprofile_get_allocation_size(c_void_p(address)) == 365
 pyfree(address)
 result = preload.pymemprofile_get_allocation_size(c_void_p(address))
 print("SIZE AFTER FREE", result)
-assert result == 0
+# Might have ended up with memory being reused, but if so it's not going to be
+# exactly 365 bytes.
+assert result != 365
