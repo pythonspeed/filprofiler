@@ -1,4 +1,5 @@
 use super::rangemap::RangeMap;
+use ahash::AHashMap as HashMap;
 use core::ffi;
 use im::Vector as ImVector;
 use inferno::flamegraph;
@@ -6,7 +7,6 @@ use itertools::Itertools;
 use libc;
 use std::cell::RefCell;
 use std::collections;
-use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
