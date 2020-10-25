@@ -131,32 +131,20 @@ At the same time, the Python tracing infrastructure (used e.g. by `cProfile` and
 
 ### Fil and threading, with notes on NumPy and Zarr {#threading}
 
-There are three cases:
+In general, Fil will track allocations in threads correctly.
 
-* If you start a thread via Python, running Python code, that thread will get its own callstack for tracking who is responsible for a memory allocation.
-* If you start a C thread, the calling Python code is considered responsible for any memory allocations in that thread.
-* As a result, if you start a thread pool of threads that are not Python threads, the Python code that created those threads will be responsible for all allocations created during the thread pool's lifetime.
-  This may lead to unexpected results.
-  
-In particular, both NumPy and Zarr create thread pools on startup that are used to run certain operations (BLAS linear algebra and compression, respectively).
-Any allocations in the thread pool, while logically the responsibility of other code will be reported as due to importing those modules!
+First, if you start a thread via Python, running Python code, that thread will get its own callstack for tracking who is responsible for a memory allocation.
 
-It's not clear to me they allocate a substantial amount of memory, so you might not have issues.
-But, if you do have issues, one thing you can do is set these and some other libraries to not use a thread pool, by running the following code _before_ you import any Python or C libraries:
+Second, if you start a C thread, the calling Python code is considered responsible for any memory allocations in that thread.
+This works fine... except for thread pools.
+If you start a pool of threads that are not Python threads, the Python code that created those threads will be responsible for all allocations created during the thread pool's lifetime.
 
-```python
-# Disable multi-threaded backends in various scientific computing libraries
-# (Zarr uses Blosc, NumPy uses BLAS, OpenMP is generically used):
-from os import environ
-environ["BLOSC_NTHREADS"] = "1"
-environ["OMP_NUM_THREADS"] = "1"
-environ["OPENBLAS_NUM_THREADS"] = "1"
-environ["MKL_NUM_THREADS"] = "1"
-environ["VECLIB_MAXIMUM_THREADS"] = "1"
-environ["NUMEXPR_NUM_THREADS"] = "1"
-```
+Therefore, in order to ensure correct memory tracking, Fil disables thread pools in  BLAS (used by NumPy), BLOSC (used e.g. by Zarr), OpenMP, and `numexpr`.
+They are all set to use 1 thread, so calls should run in the calling Python thread and everything should be tracked correctly.
+The downside is that this can reduce performance in some cases, since you're doing computation with one CPU instead of many.
 
-The Python code calling into C code will then clearly be tracked as responsible for these allocations.
+Fil does this for the whole program when using `fil-profile run`.
+When using the Jupyter kernel, anything run with the `%%filprofile` magic will have thread pools disabled, but other code should run normally.
 
 ### What Fil tracks
 
