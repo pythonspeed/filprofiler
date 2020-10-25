@@ -72,7 +72,7 @@ To measure memory usage of some code in Jupyter you need to do three things:
 3. Add the `%%filprofile` magic to the top of the cell with the code you wish to profile.
 
 
-![Screenshot of JupyterLab](images/jupyter.png)
+![Screenshot of JupyterLab](https://raw.githubusercontent.com/pythonspeed/filprofiler/master/images/jupyter.png)
 
 ### <a name="peak-python">Measuring peak (high-water mark) memory usage for Python scripts</a>
 
@@ -89,6 +89,12 @@ $ fil-profile run yourscript.py --input-file=yourfile
 ```
 
 And it will generate a report.
+
+As of version 0.11, you can also run it like this:
+
+```
+$ python -m filprofiler run yourscript.py --input-file=yourfile
+```
 
 ### <a name="oom">Debugging out-of-memory crashes</a>
 

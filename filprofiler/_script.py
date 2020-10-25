@@ -52,7 +52,12 @@ Run it like this:
 
   $ fil-profile run -m yourpackage --your-arg=2
 
-For more info visit https://pythonspeed.com/products/filmemoryprofiler/
+You can also run the profiler this way:
+
+  $ python -m filprofiler run yourprogram.py
+
+For more info, including documentation on Jupyter usage,
+visit https://pythonspeed.com/products/filmemoryprofiler/
 """
 
 
