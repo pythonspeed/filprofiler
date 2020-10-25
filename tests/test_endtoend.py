@@ -371,3 +371,10 @@ def test_jupyter(tmpdir):
         (numpy.core.numeric.__file__, "ones", ANY),
     )
     assert match(allocations, {path: big}, as_mb) == pytest.approx(48, 0.1)
+
+
+def test_no_threadpools_filprofile_run():
+    """`fil-profile run` disables thread pools it knows about."""
+    check_call(
+        ["fil-profile", "run", str(Path("python-benchmarks") / "threadpools.py"),]
+    )
