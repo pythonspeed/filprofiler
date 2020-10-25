@@ -37,7 +37,7 @@ setup(
         )
     ],
     use_scm_version=True,
-    requires=["threadpoolctl"],
+    install_requires=["threadpoolctl"],
     setup_requires=["setuptools_scm"],
     extras_require={"dev": read("requirements-dev.txt").strip().splitlines()},
     description="A memory profiler for data batch processing applications.",
