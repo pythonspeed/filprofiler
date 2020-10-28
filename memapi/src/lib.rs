@@ -93,7 +93,7 @@ pub unsafe extern "C" fn pymemprofile_dump_peak_to_flamegraph(path: *const c_cha
 #[no_mangle]
 pub unsafe extern "C" fn pymemprofile_get_current_callstack() -> *mut c_void {
     let callstack = memorytracking::get_current_callstack();
-    let callstack = Box::from(callstack);
+    let callstack = Box::new(callstack);
     Box::into_raw(callstack) as *mut c_void
 }
 
