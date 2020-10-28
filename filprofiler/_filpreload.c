@@ -444,13 +444,19 @@ static void *wrapper_pthread_start(void *nta) {
 __attribute__((visibility("default"))) int
 SYMBOL_PREFIX(pthread_create)(pthread_t *thread, const pthread_attr_t *attr,
                               void *(*start_routine)(void *), void *arg) {
+  if (am_i_reentrant()) {
+    return underlying_real_pthread_create(thread, attr, start_routine, arg);
+  }
   struct NewThreadArgs *wrapper_args =
       REAL_IMPL(malloc)(sizeof(struct NewThreadArgs));
   wrapper_args->callstack = pymemprofile_get_current_callstack();
   wrapper_args->start_routine = start_routine;
   wrapper_args->arg = arg;
-  return underlying_real_pthread_create(thread, attr, &wrapper_pthread_start,
-                                        (void *)wrapper_args);
+  set_will_i_be_reentrant(1);
+  int result = underlying_real_pthread_create(
+      thread, attr, &wrapper_pthread_start, (void *)wrapper_args);
+  set_will_i_be_reentrant(0);
+  return result;
 }
 
 #ifdef __APPLE__
