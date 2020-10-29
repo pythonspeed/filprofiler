@@ -20,8 +20,9 @@ For more information, including an example of the output, see https://pythonspee
     * [Measuring peak memory usage for Python scripts](#peak-python)
     * [Debugging out-of-memory crashes in your code](#oom)
 * [Reducing memory usage in your code](#reducing-memory-usage)
-* [Known limitations](#known-limitations)
-* [What Fil tracks](#what-fil-tracks)
+* [How Fil works](#how-fil-works)
+    * [Fil and threading, with notes on NumPy and Zarr](#threading)
+    * [What Fil tracks](#what-fil-tracks)
 
 ## Installation
 
@@ -121,7 +122,31 @@ You've found where memory usage is coming from—now what?
 
 If you're using data processing or scientific computing libraries, I have written a relevant [guide to reducing memory usage](https://pythonspeed.com/datascience/).
 
-## What Fil tracks
+## How Fil works
+
+Fil uses the `LD_PRELOAD`/`DYLD_INSERT_LIBRARIES` mechanism to preload a shared library at process startup.
+This shared library captures all memory allocations and deallocations and keeps track of them.
+
+At the same time, the Python tracing infrastructure (used e.g. by `cProfile` and `coverage.py`) to figure out which Python callstack/backtrace is responsible for each allocation.
+
+### Fil and threading, with notes on NumPy and Zarr {#threading}
+
+In general, Fil will track allocations in threads correctly.
+
+First, if you start a thread via Python, running Python code, that thread will get its own callstack for tracking who is responsible for a memory allocation.
+
+Second, if you start a C thread, the calling Python code is considered responsible for any memory allocations in that thread.
+This works fine... except for thread pools.
+If you start a pool of threads that are not Python threads, the Python code that created those threads will be responsible for all allocations created during the thread pool's lifetime.
+
+Therefore, in order to ensure correct memory tracking, Fil disables thread pools in  BLAS (used by NumPy), BLOSC (used e.g. by Zarr), OpenMP, and `numexpr`.
+They are all set to use 1 thread, so calls should run in the calling Python thread and everything should be tracked correctly.
+The downside is that this can reduce performance in some cases, since you're doing computation with one CPU instead of many.
+
+Fil does this for the whole program when using `fil-profile run`.
+When using the Jupyter kernel, anything run with the `%%filprofile` magic will have thread pools disabled, but other code should run normally.
+
+### What Fil tracks
 
 Fil will track memory allocated by:
 
@@ -135,24 +160,11 @@ Still not supported, but planned:
 
 * `mremap()` (resizing of `mmap()`).
 * File-backed `mmap()`.
-  The usage here is inconsistent since the OS can swap it in or out, so probably supporting this will involve a different kind of resource usage.
+  The semantics are somewhat different than normal allocations or anonymous `mmap()`, since the OS can swap it in or out from disk transparently, so supporting this will involve a different kind of resource usage and reporting.
 * Other forms of shared memory, need to investigate if any of them allow sufficient allocation.
 * Anonymous `mmap()`s created via `/dev/zero` (not common, since it's not cross-platform, e.g. macOS doesn't support this).
-* `memfd_create()`.
-* Possibly `memalign`, `valloc()`, `pvalloc()`, `reallocarray()`.
-
-## Known limitations
-
-Fil is under heavy development, since it's a new project; it still has some known issues that need fixing.
-
-For example:
-
-* Not all memory allocation APIs are currently supported, though I have been steadily adding more over time.
-* NumPy's and Zarr/BLOSC's multithreaded backends are disabled, to make sure that allocations can be tied to the correct callstack.
-  This can make code run slower, because it's no longer multi-threaded.
-* Windows is not yet supported.
-
-For other details [see the issue tracker](https://github.com/pythonspeed/filprofiler/issues).
+* `memfd_create()`, a Linux-only mechanism for creating in-memory files.
+* Possibly `memalign`, `valloc()`, `pvalloc()`, `reallocarray()`. These are all rarely used, as far as I can tell.
 
 ## License
 

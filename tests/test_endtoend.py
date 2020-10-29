@@ -86,6 +86,21 @@ def test_thread_allocates_after_main_thread_is_done():
     assert match(allocations, {thread1_path1: big}, as_mb) == pytest.approx(70, 0.1)
 
 
+def test_c_thread():
+    """
+    Allocations in C-only threads are considered allocations by the Python code
+    that launched the thread.
+    """
+    script = Path("python-benchmarks") / "c-thread.py"
+    output_dir = profile(script)
+    allocations = get_allocations(output_dir)
+
+    script = str(script)
+    alloc = ((script, "<module>", 13), (script, "main", 9))
+
+    assert match(allocations, {alloc: big}, as_mb) == pytest.approx(17, 0.1)
+
+
 def test_malloc_in_c_extension():
     """
     Various malloc() and friends variants in C extension gets captured.
@@ -356,3 +371,10 @@ def test_jupyter(tmpdir):
         (numpy.core.numeric.__file__, "ones", ANY),
     )
     assert match(allocations, {path: big}, as_mb) == pytest.approx(48, 0.1)
+
+
+def test_no_threadpools_filprofile_run():
+    """`fil-profile run` disables thread pools it knows about."""
+    check_call(
+        ["fil-profile", "run", str(Path("python-benchmarks") / "threadpools.py"),]
+    )
