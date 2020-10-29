@@ -135,7 +135,7 @@ static void __attribute__((constructor)) constructor() {
   }
   underlying_real_pthread_create = dlsym(RTLD_NEXT, "pthread_create");
   if (!underlying_real_pthread_create) {
-    fprintf(stderr, "Couldn't load munmap(): %s\n", dlerror());
+    fprintf(stderr, "Couldn't load pthread_create(): %s\n", dlerror());
     exit(1);
   }
 
@@ -426,12 +426,15 @@ SYMBOL_PREFIX(malloc_usable_size)(void *ptr) {
 }
 #endif
 
+// Argument for wrapper_pthread_start().
 struct NewThreadArgs {
   void *callstack;
   void *(*start_routine)(void *);
   void *arg;
 };
 
+// Called as starting function for new threads. Sets callstack, then calls the
+// real starting function.
 static void *wrapper_pthread_start(void *nta) {
   struct NewThreadArgs *args = (struct NewThreadArgs *)nta;
   set_will_i_be_reentrant(1);
@@ -443,6 +446,8 @@ static void *wrapper_pthread_start(void *nta) {
   return start_routine(arg);
 }
 
+// Override pthread_create so that new threads copy the current thread's Python
+// callstack.
 __attribute__((visibility("default"))) int
 SYMBOL_PREFIX(pthread_create)(pthread_t *thread, const pthread_attr_t *attr,
                               void *(*start_routine)(void *), void *arg) {
