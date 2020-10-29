@@ -1,0 +1,1 @@
+When running in Jupyter, NumPy/BLOSC/etc. thread pools are only limited to one thread when actually running a Fil profile. This means the Python 3 with Fil kernel is even closer to running with a normal Python 3 kernel.
