@@ -1,6 +1,5 @@
 use super::rangemap::RangeMap;
 use ahash::AHashMap as HashMap;
-use core::ffi;
 use im::Vector as ImVector;
 use inferno::flamegraph;
 use itertools::Itertools;
@@ -9,6 +8,7 @@ use std::cell::RefCell;
 use std::collections;
 use std::fs;
 use std::io::Write;
+use std::iter::repeat;
 use std::path::Path;
 use std::path::PathBuf;
 use std::slice;
@@ -161,11 +161,7 @@ impl<'a> CallstackInterner {
     }
 
     /// Add a (possibly) new Function, returning its ID.
-    fn get_or_insert_id<F: FnOnce() -> ()>(
-        &mut self,
-        callstack: &Callstack,
-        call_on_new: F,
-    ) -> CallstackId {
+    fn get_or_insert_id(&mut self, callstack: &Callstack) -> CallstackId {
         let max_id = &mut self.max_id;
         if let Some(result) = self.callstack_to_id.get(callstack) {
             *result
@@ -173,7 +169,6 @@ impl<'a> CallstackInterner {
             let new_id = *max_id;
             *max_id += 1;
             self.callstack_to_id.insert(callstack.clone(), new_id);
-            call_on_new();
             new_id
         }
     }
@@ -275,20 +270,27 @@ impl<'a> AllocationTracker {
     fn add_memory_usage(&mut self, callstack_id: CallstackId, bytes: usize) {
         self.current_allocated_bytes += bytes;
         let index = callstack_id as usize;
-        self.current_memory_usage[index] += bytes;
+        // TODO what if goes below zero? add a check I guess, in case of bugs.
+        if let Some(current_bytes) = self.current_memory_usage.get_mut(index) {
+            *current_bytes += bytes;
+        } else {
+            self.current_memory_usage.append(
+                repeat(0)
+                    .take(index + 1 - self.current_memory_usage.len())
+                    .collect(),
+            );
+            self.current_memory_usage[index] += bytes;
+        }
     }
 
     fn remove_memory_usage(&mut self, callstack_id: CallstackId, bytes: usize) {
         self.current_allocated_bytes -= bytes;
         let index = callstack_id as usize;
-        // TODO what if goes below zero? add a check I guess, in case of bugs.
         self.current_memory_usage[index] -= bytes;
     }
 
     fn get_callstack_id(&mut self, callstack: &Callstack) -> CallstackId {
-        let current_memory_usage = &mut self.current_memory_usage;
-        self.interner
-            .get_or_insert_id(callstack, || current_memory_usage.push_back(0))
+        self.interner.get_or_insert_id(callstack)
     }
 
     /// Add a new allocation based off the current callstack.
@@ -297,7 +299,7 @@ impl<'a> AllocationTracker {
         let alloc = Allocation::new(callstack_id, size);
         let compressed_size = alloc.size();
         self.current_allocations.insert(address, alloc);
-        self.add_memory_usage(callstack_id, compressed_size as usize);
+        self.add_memory_usage(callstack_id, compressed_size);
     }
 
     /// Free an existing allocation.
@@ -646,9 +648,9 @@ mod tests {
         Allocation, AllocationTracker, CallSiteId, Callstack, CallstackInterner, FunctionId,
         FunctionLocation, HIGH_32BIT, MIB,
     };
+    use ahash::AHashMap;
     use im;
     use proptest::prelude::*;
-    use std::collections;
 
     proptest! {
         // Allocation sizes smaller than 2 ** 31 are round-tripped.
@@ -808,32 +810,18 @@ mod tests {
 
         let mut interner = CallstackInterner::new();
 
-        let mut new = false;
-        let id1 = interner.get_or_insert_id(&cs1, || new = true);
-        assert!(new);
-
-        new = false;
-        let id1b = interner.get_or_insert_id(&cs1b, || new = true);
-        assert!(!new);
-
-        new = false;
-        let id2 = interner.get_or_insert_id(&cs2, || new = true);
-        assert!(new);
-
-        new = false;
-        let id3 = interner.get_or_insert_id(&cs3, || new = true);
-        assert!(new);
-
-        new = false;
-        let id3b = interner.get_or_insert_id(&cs3b, || new = true);
-        assert!(!new);
+        let id1 = interner.get_or_insert_id(&cs1);
+        let id1b = interner.get_or_insert_id(&cs1b);
+        let id2 = interner.get_or_insert_id(&cs2);
+        let id3 = interner.get_or_insert_id(&cs3);
+        let id3b = interner.get_or_insert_id(&cs3b);
 
         assert_eq!(id1, id1b);
         assert_ne!(id1, id2);
         assert_ne!(id1, id3);
         assert_ne!(id2, id3);
         assert_eq!(id3, id3b);
-        let mut expected = collections::HashMap::default();
+        let mut expected = AHashMap::default();
         expected.insert(id1, &cs1);
         expected.insert(id2, &cs2);
         expected.insert(id3, &cs3);
