@@ -13,6 +13,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::slice;
 use std::sync::Mutex;
+use thread_local::ThreadLocal;
 
 /// A function location provided by the C code. Matches struct in _filpreload.c.
 #[repr(C)]
@@ -142,17 +143,100 @@ impl Callstack {
     }
 }
 
-thread_local!(static THREAD_CALLSTACK: RefCell<Callstack> = RefCell::new(Callstack::new()));
-
 type CallstackId = u32;
 
-/// Maps Functions to integer identifiers used in CallStacks.
+/// Thread-specific state, including the current Callstack and the current
+/// callstack_id. Later might include more cached to reduce need to recalculate
+/// callstack_id as much.
+struct ThreadCallstack {
+    callstack: Callstack,
+    id: CallstackId,
+}
+
+impl ThreadCallstack {
+    fn new(interner: &mut CallstackInterner) -> Self {
+        let callstack = Callstack::new();
+        let id = interner.get_or_insert_id(&callstack);
+        ThreadCallstack { callstack, id }
+    }
+}
+
+/// Tracks the current per-thread Callstacks, as well as corresponding
+/// CallstackIds: each unique Callstack and its callstack IDs.
+struct CallstackManager {
+    interner: Mutex<CallstackInterner>,
+    thread_callstack: ThreadLocal<RefCell<ThreadCallstack>>,
+}
+
+impl CallstackManager {
+    fn new() -> Self {
+        CallstackManager {
+            interner: Mutex::new(CallstackInterner::new()),
+            thread_callstack: ThreadLocal::new(),
+        }
+    }
+
+    // Get the current callstack_id.
+    fn get_callstack_id(&self) -> CallstackId {
+        self.get_refcell().borrow().id
+    }
+
+    // Get the current ThreadCallstack RefCell.
+    fn get_refcell(&self) -> &RefCell<ThreadCallstack> {
+        self.thread_callstack.get_or(|| {
+            let mut interner = self.interner.lock().unwrap();
+            RefCell::new(ThreadCallstack::new(&mut interner))
+        })
+    }
+
+    // Run a function on the ThreadCallstack that mutates the CallStack, then
+    // update the ID.
+    fn update_callstack<F>(&self, update: F)
+    where
+        F: FnOnce(&mut Callstack) -> (),
+    {
+        let mut tcs = self.get_refcell().borrow_mut();
+        update(&mut tcs.callstack);
+        let mut interner = self.interner.lock().unwrap();
+        tcs.id = interner.get_or_insert_id(&tcs.callstack);
+    }
+
+    fn start_call(&self, parent_line_number: u16, callsite_id: CallSiteId) {
+        self.update_callstack(|cs| {
+            cs.start_call(parent_line_number, callsite_id);
+        });
+    }
+
+    fn finish_call(&self) {
+        self.update_callstack(|cs| {
+            cs.finish_call();
+        });
+    }
+
+    fn new_line_number(&self, line_number: u16) {
+        self.get_refcell()
+            .borrow_mut()
+            .callstack
+            .new_line_number(line_number);
+    }
+
+    fn get_current_callstack(&self) -> Callstack {
+        self.get_refcell().borrow().callstack.clone()
+    }
+
+    fn set_current_callstack(&self, callstack: &Callstack) {
+        self.update_callstack(|cs| {
+            *cs = callstack.clone();
+        });
+    }
+}
+
 struct CallstackInterner {
     max_id: CallstackId,
     callstack_to_id: HashMap<Callstack, u32>,
 }
 
-impl<'a> CallstackInterner {
+impl CallstackInterner {
     fn new() -> Self {
         CallstackInterner {
             max_id: 0,
@@ -174,10 +258,10 @@ impl<'a> CallstackInterner {
     }
 
     /// Get map from IDs to Functions.
-    fn get_reverse_map(&self) -> HashMap<CallstackId, &Callstack> {
+    fn get_reverse_map(&self) -> HashMap<CallstackId, Callstack> {
         let mut result = HashMap::default();
         for (call_site, csid) in self.callstack_to_id.iter() {
-            result.insert(*csid, call_site);
+            result.insert(*csid, call_site.clone());
         }
         result
     }
@@ -230,7 +314,7 @@ struct AllocationTracker {
 
     // Map CallstackIds to Callstacks, so we can store the former and save
     // memory:
-    interner: CallstackInterner,
+    callstack_manager: CallstackManager,
 
     // Both malloc() and mmap():
     current_memory_usage: ImVector<usize>, // Map CallstackId -> total memory usage
@@ -248,7 +332,7 @@ impl<'a> AllocationTracker {
         AllocationTracker {
             current_allocations: HashMap::default(),
             current_anon_mmaps: RangeMap::new(),
-            interner: CallstackInterner::new(),
+            callstack_manager: CallstackManager::new(),
             current_memory_usage: ImVector::new(),
             peak_memory_usage: ImVector::new(),
             current_allocated_bytes: 0,
@@ -290,7 +374,7 @@ impl<'a> AllocationTracker {
     }
 
     fn get_callstack_id(&mut self, callstack: &Callstack) -> CallstackId {
-        self.interner.get_or_insert_id(callstack)
+        self.callstack_manager.get_callstack_id()
     }
 
     /// Add a new allocation based off the current callstack.
@@ -369,13 +453,12 @@ impl<'a> AllocationTracker {
         self.dump_to_flamegraph(path, true, "peak-memory", "Peak Tracked Memory Usage", true);
     }
 
-    fn to_lines(
-        &mut self,
-        peak: bool,
-        to_be_post_processed: bool,
-    ) -> impl Iterator<Item = String> + '_ {
+    fn to_lines(&mut self, peak: bool, to_be_post_processed: bool) -> impl Iterator<Item = String> {
         let by_call = self.combine_callstacks(peak);
-        let id_to_callstack = self.interner.get_reverse_map();
+        let id_to_callstack = {
+            let guard = self.callstack_manager.interner.lock();
+            guard.unwrap().get_reverse_map()
+        };
         by_call.map(move |(callstack_id, size)| {
             format!(
                 "{} {}",
@@ -496,38 +579,45 @@ lazy_static! {
 
 /// Add to per-thread function stack:
 pub fn start_call(call_site: FunctionId, parent_line_number: u16, line_number: u16) {
-    THREAD_CALLSTACK.with(|cs| {
-        cs.borrow_mut()
-            .start_call(parent_line_number, CallSiteId::new(call_site, line_number));
-    });
+    ALLOCATIONS
+        .lock()
+        .unwrap()
+        .callstack_manager
+        .start_call(parent_line_number, CallSiteId::new(call_site, line_number));
 }
 
 /// Finish off (and move to reporting structure) current function in function
 /// stack.
 pub fn finish_call() {
-    THREAD_CALLSTACK.with(|cs| {
-        cs.borrow_mut().finish_call();
-    });
+    ALLOCATIONS.lock().unwrap().callstack_manager.finish_call();
 }
 
 /// Change line number on current function in per-thread function stack:
 pub fn new_line_number(line_number: u16) {
-    THREAD_CALLSTACK.with(|cs| {
-        cs.borrow_mut().new_line_number(line_number);
-    });
+    ALLOCATIONS
+        .lock()
+        .unwrap()
+        .callstack_manager
+        .new_line_number(line_number);
 }
 
-/// Get the current thread's callstack.
+/// Get a copy of the current thread's callstack.
 pub fn get_current_callstack() -> Callstack {
-    THREAD_CALLSTACK.with(|cs| (*cs.borrow()).clone())
+    ALLOCATIONS
+        .lock()
+        .unwrap()
+        .callstack_manager
+        .get_current_callstack()
 }
 
 /// Set the current callstack. Typically should only be used when starting up
 /// new threads.
 pub fn set_current_callstack(callstack: &Callstack) {
-    THREAD_CALLSTACK.with(|cs| {
-        *cs.borrow_mut() = callstack.clone();
-    })
+    ALLOCATIONS
+        .lock()
+        .unwrap()
+        .callstack_manager
+        .set_current_callstack(callstack);
 }
 
 /// Add a new allocation based off the current callstack.
