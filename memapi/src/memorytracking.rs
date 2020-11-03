@@ -292,8 +292,7 @@ impl<'a> AllocationTracker {
     }
 
     /// Add a new allocation based off the current callstack.
-    fn add_allocation(&mut self, address: usize, size: libc::size_t, callstack: &Callstack) {
-        let callstack_id = self.get_callstack_id(callstack);
+    fn add_allocation(&mut self, address: usize, size: libc::size_t, callstack_id: CallstackId) {
         let alloc = Allocation::new(callstack_id, size);
         let compressed_size = alloc.size();
         self.current_allocations.insert(address, alloc);
@@ -312,8 +311,7 @@ impl<'a> AllocationTracker {
     }
 
     /// Add a new anonymous mmap() based of the current callstack.
-    fn add_anon_mmap(&mut self, address: usize, size: libc::size_t, callstack: &Callstack) {
-        let callstack_id = self.get_callstack_id(callstack);
+    fn add_anon_mmap(&mut self, address: usize, size: libc::size_t, callstack_id: CallstackId) {
         self.current_anon_mmaps.add(address, size, callstack_id);
         self.add_memory_usage(callstack_id, size);
     }
@@ -534,17 +532,22 @@ pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_m
         // Uh-oh, we're out of memory.
         let allocations = &mut ALLOCATIONS.lock().unwrap();
         allocations.oom_break_glass();
+        return;
     }
 
-    let mut callstack: Callstack = get_current_callstack();
-    if line_number != 0 && !callstack.calls.is_empty() {
-        callstack.new_line_number(line_number);
-    }
     let mut allocations = ALLOCATIONS.lock().unwrap();
+    let callstack_id = THREAD_CALLSTACK.with(|tcs| {
+        let mut callstack = tcs.borrow_mut();
+        if line_number != 0 && callstack.calls.len() != 0 {
+            callstack.new_line_number(line_number);
+        };
+        allocations.get_callstack_id(&callstack)
+    });
+
     if is_mmap {
-        allocations.add_anon_mmap(address, size, &callstack);
+        allocations.add_anon_mmap(address, size, callstack_id);
     } else {
-        allocations.add_allocation(address, size, &callstack);
+        allocations.add_allocation(address, size, callstack_id);
     }
     if address == 0 {
         // Uh-oh, we're out of memory.
