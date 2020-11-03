@@ -154,9 +154,10 @@ struct ThreadCallstack {
 }
 
 impl ThreadCallstack {
-    fn new(interner: &mut CallstackInterner) -> Self {
+    fn new() -> Self {
         let callstack = Callstack::new();
-        let id = interner.get_or_insert_id(&callstack);
+        // 0 is reserved for empty Callstack
+        let id = 0;
         ThreadCallstack { callstack, id }
     }
 }
@@ -170,8 +171,12 @@ struct CallstackManager {
 
 impl CallstackManager {
     fn new() -> Self {
+        let mut interner = CallstackInterner::new();
+        // Make sure empty Callstack gets id 0
+        interner.get_or_insert_id(&Callstack::new());
+        assert_eq!(interner.get_or_insert_id(&Callstack::new()), 0);
         CallstackManager {
-            interner: Mutex::new(CallstackInterner::new()),
+            interner: Mutex::new(interner),
             thread_callstack: ThreadLocal::new(),
         }
     }
@@ -183,10 +188,8 @@ impl CallstackManager {
 
     // Get the current ThreadCallstack RefCell.
     fn get_refcell(&self) -> &RefCell<ThreadCallstack> {
-        self.thread_callstack.get_or(|| {
-            let mut interner = self.interner.lock().unwrap();
-            RefCell::new(ThreadCallstack::new(&mut interner))
-        })
+        self.thread_callstack
+            .get_or(|| RefCell::new(ThreadCallstack::new()))
     }
 
     // Run a function on the ThreadCallstack that mutates the CallStack, then
@@ -214,10 +217,9 @@ impl CallstackManager {
     }
 
     fn new_line_number(&self, line_number: u16) {
-        self.get_refcell()
-            .borrow_mut()
-            .callstack
-            .new_line_number(line_number);
+        self.update_callstack(|cs| {
+            cs.new_line_number(line_number);
+        });
     }
 
     fn get_current_callstack(&self) -> Callstack {
@@ -373,13 +375,13 @@ impl<'a> AllocationTracker {
         self.current_memory_usage[index] -= bytes;
     }
 
-    fn get_callstack_id(&mut self, callstack: &Callstack) -> CallstackId {
+    fn get_callstack_id(&self) -> CallstackId {
         self.callstack_manager.get_callstack_id()
     }
 
     /// Add a new allocation based off the current callstack.
-    fn add_allocation(&mut self, address: usize, size: libc::size_t, callstack: &Callstack) {
-        let callstack_id = self.get_callstack_id(callstack);
+    fn add_allocation(&mut self, address: usize, size: libc::size_t) {
+        let callstack_id = self.get_callstack_id();
         let alloc = Allocation::new(callstack_id, size);
         let compressed_size = alloc.size();
         self.current_allocations.insert(address, alloc);
@@ -398,8 +400,8 @@ impl<'a> AllocationTracker {
     }
 
     /// Add a new anonymous mmap() based of the current callstack.
-    fn add_anon_mmap(&mut self, address: usize, size: libc::size_t, callstack: &Callstack) {
-        let callstack_id = self.get_callstack_id(callstack);
+    fn add_anon_mmap(&mut self, address: usize, size: libc::size_t) {
+        let callstack_id = self.get_callstack_id();
         self.current_anon_mmaps.add(address, size, callstack_id);
         self.add_memory_usage(callstack_id, size);
     }
@@ -626,17 +628,17 @@ pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_m
         // Uh-oh, we're out of memory.
         let allocations = &mut ALLOCATIONS.lock().unwrap();
         allocations.oom_break_glass();
+        return;
     }
 
-    let mut callstack: Callstack = get_current_callstack();
-    if line_number != 0 && !callstack.calls.is_empty() {
-        callstack.new_line_number(line_number);
-    }
     let mut allocations = ALLOCATIONS.lock().unwrap();
+    if line_number != 0 {
+        allocations.callstack_manager.new_line_number(line_number);
+    }
     if is_mmap {
-        allocations.add_anon_mmap(address, size, &callstack);
+        allocations.add_anon_mmap(address, size);
     } else {
-        allocations.add_allocation(address, size, &callstack);
+        allocations.add_allocation(address, size);
     }
     if address == 0 {
         // Uh-oh, we're out of memory.
