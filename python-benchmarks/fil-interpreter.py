@@ -17,9 +17,16 @@ import numpy.core.numeric
 from pampy import _ as ANY, match
 from IPython.core.displaypub import CapturingDisplayPublisher
 from IPython.core.interactiveshell import InteractiveShell
+import threadpoolctl
 
-from filprofiler._tracer import preload, start_tracing, stop_tracing
+from filprofiler._tracer import (
+    preload,
+    start_tracing,
+    stop_tracing,
+    disable_thread_pools,
+)
 from filprofiler._testing import get_allocations, big, as_mb
+from filprofiler._ipython import run_with_profile
 from pymalloc import pymalloc
 
 
@@ -42,7 +49,7 @@ def test_temporary_profiling(tmpdir):
     stop_tracing(tmpdir)
 
     # Allocations were tracked:
-    path = ((__file__, "f", 39), (numpy.core.numeric.__file__, "ones", ANY))
+    path = ((__file__, "f", 46), (numpy.core.numeric.__file__, "ones", ANY))
     allocations = get_allocations(tmpdir)
     assert match(allocations, {path: big}, as_mb) == pytest.approx(32, 0.1)
 
@@ -161,3 +168,49 @@ f()
 
     # Profiling stopped:
     test_no_profiling()
+
+
+def test_profiling_disables_threadpools(tmpdir):
+    """
+    Memory profiling disables thread pools, then restores them when done.
+    """
+    cwd = os.getcwd()
+    os.chdir(tmpdir)
+
+    import numexpr
+    import blosc
+
+    numexpr.set_num_threads(3)
+    blosc.set_nthreads(3)
+    with threadpoolctl.threadpool_limits(3, "blas"):
+        with run_with_profile():
+            assert numexpr.set_num_threads(2) == 1
+            assert blosc.set_nthreads(2) == 1
+
+            for d in threadpoolctl.threadpool_info():
+                assert d["num_threads"] == 1, d
+
+        # Resets when done:
+        assert numexpr.set_num_threads(2) == 3
+        assert blosc.set_nthreads(2) == 3
+
+        for d in threadpoolctl.threadpool_info():
+            if d["user_api"] == "blas":
+                assert d["num_threads"] == 3, d
+
+
+def test_profiling_without_blosc_and_numexpr(tmpdir):
+    """
+    The support for numexpr and blosc is optional; disabling them should work
+    even when they're not present.
+    """
+    import sys
+
+    sys.modules["blosc"] = None
+    sys.modules["numexpr"] = None
+    try:
+        with disable_thread_pools():
+            pass
+    finally:
+        del sys.modules["blosc"]
+        del sys.modules["numexpr"]

@@ -117,6 +117,7 @@ impl<V: Clone> RangeMap<V> {
         removed
     }
 
+    #[cfg(test)]
     pub fn size(&self) -> usize {
         self.ranges.iter().map(|(r, _)| r.size()).sum()
     }

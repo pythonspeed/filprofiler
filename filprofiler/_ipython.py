@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from IPython.core.magic import Magics, magics_class, cell_magic
 from IPython.display import IFrame, display
 
-from ._tracer import start_tracing, stop_tracing
+from ._tracer import start_tracing, stop_tracing, disable_thread_pools
 
 
 HOPEFULLY_UNIQUE_VAR = "__arghbldsada__"
@@ -59,9 +59,10 @@ def run_with_profile():
     """Run some code under Fil, display result."""
     tempdir = "fil-result"
     start_tracing(tempdir)
-    try:
-        yield
-    finally:
-        index_html_path = stop_tracing(tempdir)
-        svg_path = Path(index_html_path).parent / "peak-memory.svg"
-        display(IFrame(svg_path, width="100%", height="600"))
+    with disable_thread_pools():
+        try:
+            yield
+        finally:
+            index_html_path = stop_tracing(tempdir)
+            svg_path = Path(index_html_path).parent / "peak-memory.svg"
+            display(IFrame(svg_path, width="100%", height="600"))
