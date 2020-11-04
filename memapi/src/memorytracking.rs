@@ -1,5 +1,6 @@
 use super::rangemap::RangeMap;
 use ahash::AHashMap as HashMap;
+use desync::Desync;
 use im::Vector as ImVector;
 use inferno::flamegraph;
 use itertools::Itertools;
@@ -8,6 +9,7 @@ use std::cell::RefCell;
 use std::collections;
 use std::fs;
 use std::io::Write;
+use std::iter::repeat;
 use std::path::Path;
 use std::path::PathBuf;
 use std::slice;
@@ -160,11 +162,7 @@ impl<'a> CallstackInterner {
     }
 
     /// Add a (possibly) new Function, returning its ID.
-    fn get_or_insert_id<F: FnOnce() -> ()>(
-        &mut self,
-        callstack: &Callstack,
-        call_on_new: F,
-    ) -> CallstackId {
+    fn get_or_insert_id(&mut self, callstack: &Callstack) -> CallstackId {
         let max_id = &mut self.max_id;
         if let Some(result) = self.callstack_to_id.get(callstack) {
             *result
@@ -172,7 +170,6 @@ impl<'a> CallstackInterner {
             let new_id = *max_id;
             *max_id += 1;
             self.callstack_to_id.insert(callstack.clone(), new_id);
-            call_on_new();
             new_id
         }
     }
@@ -274,20 +271,27 @@ impl<'a> AllocationTracker {
     fn add_memory_usage(&mut self, callstack_id: CallstackId, bytes: usize) {
         self.current_allocated_bytes += bytes;
         let index = callstack_id as usize;
-        self.current_memory_usage[index] += bytes;
+        // TODO what if goes below zero? add a check I guess, in case of bugs.
+        if let Some(current_bytes) = self.current_memory_usage.get_mut(index) {
+            *current_bytes += bytes;
+        } else {
+            self.current_memory_usage.append(
+                repeat(0)
+                    .take(index + 1 - self.current_memory_usage.len())
+                    .collect(),
+            );
+            self.current_memory_usage[index] += bytes;
+        }
     }
 
     fn remove_memory_usage(&mut self, callstack_id: CallstackId, bytes: usize) {
         self.current_allocated_bytes -= bytes;
         let index = callstack_id as usize;
-        // TODO what if goes below zero? add a check I guess, in case of bugs.
         self.current_memory_usage[index] -= bytes;
     }
 
     fn get_callstack_id(&mut self, callstack: &Callstack) -> CallstackId {
-        let current_memory_usage = &mut self.current_memory_usage;
-        self.interner
-            .get_or_insert_id(callstack, || current_memory_usage.push_back(0))
+        self.interner.get_or_insert_id(callstack)
     }
 
     /// Add a new allocation based off the current callstack.
@@ -295,7 +299,7 @@ impl<'a> AllocationTracker {
         let alloc = Allocation::new(callstack_id, size);
         let compressed_size = alloc.size();
         self.current_allocations.insert(address, alloc);
-        self.add_memory_usage(callstack_id, compressed_size as usize);
+        self.add_memory_usage(callstack_id, compressed_size);
     }
 
     /// Free an existing allocation.
@@ -485,8 +489,9 @@ impl<'a> AllocationTracker {
 }
 
 lazy_static! {
-    static ref ALLOCATIONS: Mutex<AllocationTracker> =
-        Mutex::new(AllocationTracker::new("/tmp".to_string()));
+    static ref ALLOCATION_TRACKER: Desync<AllocationTracker> =
+        Desync::new(AllocationTracker::new("/tmp".to_string()));
+    static ref CALLSTACK_INTERNER: Mutex<CallstackInterner> = Mutex::new(CallstackInterner::new());
 }
 
 /// Add to per-thread function stack:
@@ -527,63 +532,66 @@ pub fn set_current_callstack(callstack: &Callstack) {
 
 /// Add a new allocation based off the current callstack.
 pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_mmap: bool) {
-    if address == 0 {
-        // Uh-oh, we're out of memory.
-        let allocations = &mut ALLOCATIONS.lock().unwrap();
-        allocations.oom_break_glass();
-    }
-
-    let mut allocations = ALLOCATIONS.lock().unwrap();
     let callstack_id = THREAD_CALLSTACK.with(|tcs| {
         let mut callstack = tcs.borrow_mut();
         if line_number != 0 && !callstack.calls.is_empty() {
             callstack.new_line_number(line_number);
         };
-        allocations.get_callstack_id(&callstack)
+        let mut interner = CALLSTACK_INTERNER.lock().unwrap();
+        interner.get_or_insert_id(&callstack)
     });
 
-    if is_mmap {
-        allocations.add_anon_mmap(address, size, callstack_id);
-    } else {
-        allocations.add_allocation(address, size, callstack_id);
-    }
-    if address == 0 {
-        // Uh-oh, we're out of memory.
-        allocations.oom_dump();
-    }
+    ALLOCATION_TRACKER.desync(move |allocations| {
+        if address == 0 {
+            // Uh-oh, we're out of memory.
+            allocations.oom_break_glass();
+        }
+
+        if is_mmap {
+            allocations.add_anon_mmap(address, size, callstack_id);
+        } else {
+            allocations.add_allocation(address, size, callstack_id);
+        }
+        if address == 0 {
+            // Uh-oh, we're out of memory.
+            allocations.oom_dump();
+        }
+    });
 }
 
 /// Free an existing allocation.
 pub fn free_allocation(address: usize) {
-    let mut allocations = ALLOCATIONS.lock().unwrap();
-    allocations.free_allocation(address);
+    ALLOCATION_TRACKER.desync(move |allocations| allocations.free_allocation(address));
 }
 
 /// Get the size of an allocation, or 0 if it's not tracked.
 pub fn get_allocation_size(address: usize) -> libc::size_t {
-    let allocations = ALLOCATIONS.lock().unwrap();
-    if let Some(allocation) = allocations.current_allocations.get(&address) {
-        allocation.size()
-    } else {
-        0
-    }
+    ALLOCATION_TRACKER.sync(move |allocations| {
+        if let Some(allocation) = allocations.current_allocations.get(&address) {
+            allocation.size()
+        } else {
+            0
+        }
+    })
 }
 
 /// Free an anonymous mmap().
 pub fn free_anon_mmap(address: usize, length: libc::size_t) {
-    let mut allocations = ALLOCATIONS.lock().unwrap();
-    allocations.free_anon_mmap(address, length);
+    ALLOCATION_TRACKER.desync(move |allocations| allocations.free_anon_mmap(address, length));
 }
 
 /// Reset internal state.
 pub fn reset(default_path: String) {
-    *ALLOCATIONS.lock().unwrap() = AllocationTracker::new(default_path);
+    ALLOCATION_TRACKER.desync(|allocations| {
+        *allocations = AllocationTracker::new(default_path);
+    });
 }
 
 /// Dump all callstacks in peak memory usage to format used by flamegraph.
 pub fn dump_peak_to_flamegraph(path: &str) {
-    let mut allocations = ALLOCATIONS.lock().unwrap();
-    allocations.dump_peak_to_flamegraph(path);
+    ALLOCATION_TRACKER.sync(|allocations| {
+        allocations.dump_peak_to_flamegraph(path);
+    });
 }
 
 /// Write strings to disk, one line per string.
