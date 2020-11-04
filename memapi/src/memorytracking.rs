@@ -1,6 +1,6 @@
+use super::desync::Desync;
 use super::rangemap::RangeMap;
 use ahash::AHashMap as HashMap;
-use desync::Desync;
 use im::Vector as ImVector;
 use inferno::flamegraph;
 use itertools::Itertools;
@@ -573,15 +573,15 @@ pub fn free_anon_mmap(address: usize, length: libc::size_t) {
 
 /// Reset internal state.
 pub fn reset(default_path: String) {
-    ALLOCATION_TRACKER.desync(|allocations| {
+    ALLOCATION_TRACKER.desync(move |allocations| {
         *allocations = AllocationTracker::new(default_path);
     });
 }
 
 /// Dump all callstacks in peak memory usage to format used by flamegraph.
-pub fn dump_peak_to_flamegraph(path: &str) {
-    ALLOCATION_TRACKER.sync(|allocations| {
-        allocations.dump_peak_to_flamegraph(path);
+pub fn dump_peak_to_flamegraph(path: String) {
+    ALLOCATION_TRACKER.sync(move |allocations| {
+        allocations.dump_peak_to_flamegraph(&path.to_string());
     });
 }
 

@@ -11,6 +11,7 @@ use jemallocator::Jemalloc;
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 
+mod desync;
 mod memorytracking;
 mod rangemap;
 
@@ -85,7 +86,7 @@ pub unsafe extern "C" fn pymemprofile_dump_peak_to_flamegraph(path: *const c_cha
         .to_str()
         .expect("Path wasn't UTF-8")
         .to_string();
-    memorytracking::dump_peak_to_flamegraph(&path);
+    memorytracking::dump_peak_to_flamegraph(path);
 }
 
 /// # Safety
