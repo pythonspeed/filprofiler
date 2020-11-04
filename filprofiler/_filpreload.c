@@ -63,7 +63,7 @@ static pthread_key_t will_i_be_reentrant;
 static pthread_once_t will_i_be_reentrant_once = PTHREAD_ONCE_INIT;
 
 static void make_pthread_key() {
-  pthread_key_create(&will_i_be_reentrant, (void *)0);
+  pthread_key_create(&will_i_be_reentrant, (void *)1);
 }
 
 static inline uint64_t am_i_reentrant() {
@@ -76,7 +76,7 @@ static inline void set_will_i_be_reentrant(uint64_t i) {
 }
 #elif __linux__
 #include <sys/syscall.h>
-static _Thread_local int will_i_be_reentrant = 0;
+static _Thread_local int will_i_be_reentrant = 1;
 
 static inline int am_i_reentrant() { return will_i_be_reentrant; }
 
@@ -477,3 +477,9 @@ DYLD_INTERPOSE(SYMBOL_PREFIX(aligned_alloc), aligned_alloc)
 DYLD_INTERPOSE(SYMBOL_PREFIX(posix_memalign), posix_memalign)
 DYLD_INTERPOSE(SYMBOL_PREFIX(pthread_create), pthread_create)
 #endif
+
+
+// To be called by Rust.
+void fil_disable_tracking_in_thread() {
+  set_will_i_be_reentrant(0);
+}

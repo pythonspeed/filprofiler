@@ -175,10 +175,10 @@ impl<'a> CallstackInterner {
     }
 
     /// Get map from IDs to Functions.
-    fn get_reverse_map(&self) -> HashMap<CallstackId, &Callstack> {
+    fn get_reverse_map(&self) -> HashMap<CallstackId, Callstack> {
         let mut result = HashMap::default();
         for (call_site, csid) in self.callstack_to_id.iter() {
-            result.insert(*csid, call_site);
+            result.insert(*csid, call_site.clone());
         }
         result
     }
@@ -229,10 +229,6 @@ struct AllocationTracker {
     // anonymous mmap(), i.e. not file backed:
     current_anon_mmaps: RangeMap<CallstackId>,
 
-    // Map CallstackIds to Callstacks, so we can store the former and save
-    // memory:
-    interner: CallstackInterner,
-
     // Both malloc() and mmap():
     current_memory_usage: ImVector<usize>, // Map CallstackId -> total memory usage
     peak_memory_usage: ImVector<usize>,    // Map CallstackId -> total memory usage
@@ -249,7 +245,6 @@ impl<'a> AllocationTracker {
         AllocationTracker {
             current_allocations: HashMap::default(),
             current_anon_mmaps: RangeMap::new(),
-            interner: CallstackInterner::new(),
             current_memory_usage: ImVector::new(),
             peak_memory_usage: ImVector::new(),
             current_allocated_bytes: 0,
@@ -288,10 +283,6 @@ impl<'a> AllocationTracker {
         self.current_allocated_bytes -= bytes;
         let index = callstack_id as usize;
         self.current_memory_usage[index] -= bytes;
-    }
-
-    fn get_callstack_id(&mut self, callstack: &Callstack) -> CallstackId {
-        self.interner.get_or_insert_id(callstack)
     }
 
     /// Add a new allocation based off the current callstack.
@@ -374,7 +365,7 @@ impl<'a> AllocationTracker {
         to_be_post_processed: bool,
     ) -> impl Iterator<Item = String> + '_ {
         let by_call = self.combine_callstacks(peak);
-        let id_to_callstack = self.interner.get_reverse_map();
+        let id_to_callstack = CALLSTACK_INTERNER.lock().unwrap().get_reverse_map();
         by_call.map(move |(callstack_id, size)| {
             format!(
                 "{} {}",
