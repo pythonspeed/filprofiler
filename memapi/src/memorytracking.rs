@@ -13,7 +13,7 @@ use std::iter::repeat;
 use std::path::Path;
 use std::path::PathBuf;
 use std::slice;
-use std::sync::Mutex;
+use std::sync::RwLock;
 
 /// A function location provided by the C code. Matches struct in _filpreload.c.
 #[repr(C)]
@@ -147,37 +147,45 @@ thread_local!(static THREAD_CALLSTACK: RefCell<Callstack> = RefCell::new(Callsta
 
 type CallstackId = u32;
 
-/// Maps Functions to integer identifiers used in CallStacks.
-struct CallstackInterner {
+struct CallstackInternerData {
     max_id: CallstackId,
     callstack_to_id: HashMap<Callstack, u32>,
+}
+/// Maps Functions to integer identifiers used in CallStacks.
+struct CallstackInterner {
+    data: RwLock<CallstackInternerData>,
 }
 
 impl<'a> CallstackInterner {
     fn new() -> Self {
         CallstackInterner {
-            max_id: 0,
-            callstack_to_id: HashMap::default(),
+            data: RwLock::new(CallstackInternerData {
+                max_id: 0,
+                callstack_to_id: HashMap::default(),
+            }),
         }
     }
 
     /// Add a (possibly) new Function, returning its ID.
-    fn get_or_insert_id(&mut self, callstack: &Callstack) -> CallstackId {
-        let max_id = &mut self.max_id;
-        if let Some(result) = self.callstack_to_id.get(callstack) {
-            *result
-        } else {
-            let new_id = *max_id;
-            *max_id += 1;
-            self.callstack_to_id.insert(callstack.clone(), new_id);
-            new_id
+    fn get_or_insert_id(&self, callstack: &Callstack) -> CallstackId {
+        {
+            let data = self.data.read().unwrap();
+            if let Some(result) = data.callstack_to_id.get(callstack) {
+                return *result;
+            }
         }
+        let mut data = self.data.write().unwrap();
+        let new_id = data.max_id.clone();
+        data.max_id += 1;
+        data.callstack_to_id.insert(callstack.clone(), new_id);
+        new_id
     }
 
     /// Get map from IDs to Functions.
     fn get_reverse_map(&self) -> HashMap<CallstackId, Callstack> {
+        let data = self.data.read().unwrap();
         let mut result = HashMap::default();
-        for (call_site, csid) in self.callstack_to_id.iter() {
+        for (call_site, csid) in data.callstack_to_id.iter() {
             result.insert(*csid, call_site.clone());
         }
         result
@@ -365,7 +373,7 @@ impl<'a> AllocationTracker {
         to_be_post_processed: bool,
     ) -> impl Iterator<Item = String> + '_ {
         let by_call = self.combine_callstacks(peak);
-        let id_to_callstack = CALLSTACK_INTERNER.lock().unwrap().get_reverse_map();
+        let id_to_callstack = CALLSTACK_INTERNER.get_reverse_map();
         by_call.map(move |(callstack_id, size)| {
             format!(
                 "{} {}",
@@ -482,7 +490,7 @@ impl<'a> AllocationTracker {
 lazy_static! {
     static ref ALLOCATION_TRACKER: Desync<AllocationTracker> =
         Desync::new(AllocationTracker::new("/tmp".to_string()));
-    static ref CALLSTACK_INTERNER: Mutex<CallstackInterner> = Mutex::new(CallstackInterner::new());
+    static ref CALLSTACK_INTERNER: CallstackInterner = CallstackInterner::new();
 }
 
 /// Add to per-thread function stack:
@@ -528,8 +536,7 @@ pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_m
         if line_number != 0 && !callstack.calls.is_empty() {
             callstack.new_line_number(line_number);
         };
-        let mut interner = CALLSTACK_INTERNER.lock().unwrap();
-        interner.get_or_insert_id(&callstack)
+        CALLSTACK_INTERNER.get_or_insert_id(&callstack)
     });
 
     ALLOCATION_TRACKER.desync(move |allocations| {
