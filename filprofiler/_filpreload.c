@@ -241,10 +241,10 @@ __attribute__((visibility("default"))) void fil_initialize_from_python() {
 
 /// Start memory tracing.
 __attribute__((visibility("default"))) void
-fil_reset(const char *default_path) {
+fil_reset() {
   tracking_allocations = 1;
   set_will_i_be_reentrant(1);
-  pymemprofile_reset(default_path);
+  pymemprofile_reset();
   set_will_i_be_reentrant(0);
 }
 

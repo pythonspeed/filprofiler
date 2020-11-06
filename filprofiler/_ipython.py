@@ -58,7 +58,7 @@ class FilMagics(Magics):
 def run_with_profile():
     """Run some code under Fil, display result."""
     tempdir = "fil-result"
-    start_tracing(tempdir)
+    start_tracing()
     with disable_thread_pools():
         try:
             yield

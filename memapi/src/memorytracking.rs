@@ -273,14 +273,10 @@ struct AllocationTracker {
     peak_memory_usage: ImVector<usize>,    // Map CallstackId -> total memory usage
     current_allocated_bytes: usize,
     peak_allocated_bytes: usize,
-    // Some spare memory in case we run out:
-    spare_memory: Vec<u8>,
-    // Default directory to write out data lacking other info:
-    default_path: String,
 }
 
 impl<'a> AllocationTracker {
-    fn new(default_path: String) -> AllocationTracker {
+    fn new() -> AllocationTracker {
         AllocationTracker {
             current_allocations: HashMap::default(),
             current_anon_mmaps: RangeMap::new(),
@@ -289,8 +285,6 @@ impl<'a> AllocationTracker {
             peak_memory_usage: ImVector::new(),
             current_allocated_bytes: 0,
             peak_allocated_bytes: 0,
-            spare_memory: Vec::with_capacity(16 * 1024 * 1024),
-            default_path,
         }
     }
 
@@ -491,19 +485,13 @@ impl<'a> AllocationTracker {
         }
     }
 
-    /// Uh-oh, we just ran out of memory.
-    fn oom_break_glass(&mut self) {
-        // Get some emergency memory:
-        self.spare_memory.shrink_to_fit();
-    }
-
     /// Dump information about where we are.
     fn oom_dump(&mut self) {
         eprintln!("=fil-profile= Uh oh, out of memory!");
         eprintln!(
             "=fil-profile= We'll try to dump out SVGs. Note that no HTML file will be written."
         );
-        let default_path = self.default_path.clone();
+        let default_path = "/tmp";
         self.dump_to_flamegraph(
             &default_path,
             false,
@@ -518,8 +506,7 @@ impl<'a> AllocationTracker {
 }
 
 lazy_static! {
-    static ref ALLOCATIONS: Mutex<AllocationTracker> =
-        Mutex::new(AllocationTracker::new("/tmp".to_string()));
+    static ref ALLOCATIONS: Mutex<AllocationTracker> = Mutex::new(AllocationTracker::new());
 }
 
 /// Add to per-thread function stack:
@@ -553,12 +540,6 @@ pub fn set_current_callstack(callstack: &Callstack) {
 
 /// Add a new allocation based off the current callstack.
 pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_mmap: bool) {
-    if address == 0 {
-        // Uh-oh, we're out of memory.
-        let allocations = &mut ALLOCATIONS.lock();
-        allocations.oom_break_glass();
-    }
-
     let mut allocations = ALLOCATIONS.lock();
     let callstack_id = THREAD_CALLSTACK.with(|tcs| {
         let mut callstack = tcs.borrow_mut();
@@ -572,6 +553,7 @@ pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_m
     } else {
         allocations.add_allocation(address, size, callstack_id);
     }
+
     if address == 0 {
         // Uh-oh, we're out of memory.
         allocations.oom_dump();
@@ -601,8 +583,8 @@ pub fn free_anon_mmap(address: usize, length: libc::size_t) {
 }
 
 /// Reset internal state.
-pub fn reset(default_path: String) {
-    *ALLOCATIONS.lock() = AllocationTracker::new(default_path);
+pub fn reset() {
+    *ALLOCATIONS.lock() = AllocationTracker::new();
 }
 
 /// Dump all callstacks in peak memory usage to format used by flamegraph.

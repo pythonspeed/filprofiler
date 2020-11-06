@@ -40,7 +40,7 @@ def test_no_profiling():
 
 def test_temporary_profiling(tmpdir):
     """Profiling can be run temporarily."""
-    start_tracing(tmpdir)
+    start_tracing()
 
     def f():
         arr = np.ones((1024, 1024, 4), dtype=np.uint64)  # 32MB
