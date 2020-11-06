@@ -87,11 +87,15 @@ impl CallSiteId {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Callstack {
     calls: Vec<CallSiteId>,
+    cached_callstack_id: Option<(u16, CallstackId)>, // first bit is line number
 }
 
 impl Callstack {
     pub fn new() -> Callstack {
-        Callstack { calls: Vec::new() }
+        Callstack {
+            calls: Vec::new(),
+            cached_callstack_id: None,
+        }
     }
 
     fn start_call(&mut self, parent_line_number: u16, callsite_id: CallSiteId) {
@@ -101,17 +105,45 @@ impl Callstack {
             }
         }
         self.calls.push(callsite_id);
+        self.cached_callstack_id = None;
     }
 
     fn finish_call(&mut self) {
         self.calls.pop();
+        self.cached_callstack_id = None;
     }
 
+    fn id_for_new_allocation<F>(&mut self, line_number: u16, get_callstack_id: F) -> CallstackId
+    where
+        F: FnOnce(&Callstack) -> CallstackId,
+    {
+        // If same line number as last callstack, and we have cached callstack
+        // ID, reuse it:
+        if let Some((previous_line_number, callstack_id)) = self.cached_callstack_id {
+            if line_number == previous_line_number {
+                return callstack_id;
+            }
+        }
+
+        // Set the new line number:
+        if line_number != 0 {
+            if let Some(call) = self.calls.last_mut() {
+                call.line_number = line_number;
+            }
+        }
+
+        // Calculate callstack ID, cache it, and then return it;
+        let callstack_id = get_callstack_id(self);
+        self.cached_callstack_id = Some((line_number, callstack_id));
+        callstack_id
+    }
+
+    /*
     fn new_line_number(&mut self, line_number: u16) {
         if let Some(callsite_id) = self.calls.last_mut() {
             callsite_id.line_number = line_number;
         }
-    }
+    }*/
 
     fn as_string(&self, to_be_post_processed: bool) -> String {
         if self.calls.is_empty() {
@@ -506,13 +538,6 @@ pub fn finish_call() {
     });
 }
 
-/// Change line number on current function in per-thread function stack:
-pub fn new_line_number(line_number: u16) {
-    THREAD_CALLSTACK.with(|cs| {
-        cs.borrow_mut().new_line_number(line_number);
-    });
-}
-
 /// Get the current thread's callstack.
 pub fn get_current_callstack() -> Callstack {
     THREAD_CALLSTACK.with(|cs| (*cs.borrow()).clone())
@@ -537,10 +562,9 @@ pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_m
     let mut allocations = ALLOCATIONS.lock();
     let callstack_id = THREAD_CALLSTACK.with(|tcs| {
         let mut callstack = tcs.borrow_mut();
-        if line_number != 0 && !callstack.calls.is_empty() {
-            callstack.new_line_number(line_number);
-        };
-        allocations.get_callstack_id(&callstack)
+        callstack.id_for_new_allocation(line_number, |callstack| {
+            allocations.get_callstack_id(callstack)
+        })
     });
 
     if is_mmap {

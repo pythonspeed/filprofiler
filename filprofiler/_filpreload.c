@@ -184,15 +184,6 @@ static void finish_call() {
   }
 }
 
-__attribute__((visibility("default"))) void
-fil_new_line_number(uint16_t line_number) {
-  if (should_track_memory()) {
-    set_will_i_be_reentrant(1);
-    pymemprofile_new_line_number(line_number);
-    set_will_i_be_reentrant(0);
-  }
-}
-
 /// Callback functions for the Python tracing API (PyEval_SetProfile).
 __attribute__((visibility("hidden"))) int
 fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
