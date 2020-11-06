@@ -4,6 +4,7 @@ use im::Vector as ImVector;
 use inferno::flamegraph;
 use itertools::Itertools;
 use libc;
+use parking_lot::Mutex;
 use std::cell::RefCell;
 use std::collections;
 use std::fs;
@@ -11,7 +12,6 @@ use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::slice;
-use std::sync::Mutex;
 
 /// A function location provided by the C code. Matches struct in _filpreload.c.
 #[repr(C)]
@@ -302,6 +302,7 @@ impl<'a> AllocationTracker {
     fn free_allocation(&mut self, address: usize) {
         // Before we reduce memory, let's check if we've previously hit a peak:
         self.check_if_new_peak();
+
         // Possibly this allocation doesn't exist; that's OK! It can if e.g. we
         // didn't capture an allocation for some reason.
         if let Some(removed) = self.current_allocations.remove(&address) {
@@ -529,11 +530,11 @@ pub fn set_current_callstack(callstack: &Callstack) {
 pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_mmap: bool) {
     if address == 0 {
         // Uh-oh, we're out of memory.
-        let allocations = &mut ALLOCATIONS.lock().unwrap();
+        let allocations = &mut ALLOCATIONS.lock();
         allocations.oom_break_glass();
     }
 
-    let mut allocations = ALLOCATIONS.lock().unwrap();
+    let mut allocations = ALLOCATIONS.lock();
     let callstack_id = THREAD_CALLSTACK.with(|tcs| {
         let mut callstack = tcs.borrow_mut();
         if line_number != 0 && !callstack.calls.is_empty() {
@@ -555,13 +556,13 @@ pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_m
 
 /// Free an existing allocation.
 pub fn free_allocation(address: usize) {
-    let mut allocations = ALLOCATIONS.lock().unwrap();
+    let mut allocations = ALLOCATIONS.lock();
     allocations.free_allocation(address);
 }
 
 /// Get the size of an allocation, or 0 if it's not tracked.
 pub fn get_allocation_size(address: usize) -> libc::size_t {
-    let allocations = ALLOCATIONS.lock().unwrap();
+    let allocations = ALLOCATIONS.lock();
     if let Some(allocation) = allocations.current_allocations.get(&address) {
         allocation.size()
     } else {
@@ -571,18 +572,18 @@ pub fn get_allocation_size(address: usize) -> libc::size_t {
 
 /// Free an anonymous mmap().
 pub fn free_anon_mmap(address: usize, length: libc::size_t) {
-    let mut allocations = ALLOCATIONS.lock().unwrap();
+    let mut allocations = ALLOCATIONS.lock();
     allocations.free_anon_mmap(address, length);
 }
 
 /// Reset internal state.
 pub fn reset(default_path: String) {
-    *ALLOCATIONS.lock().unwrap() = AllocationTracker::new(default_path);
+    *ALLOCATIONS.lock() = AllocationTracker::new(default_path);
 }
 
 /// Dump all callstacks in peak memory usage to format used by flamegraph.
 pub fn dump_peak_to_flamegraph(path: &str) {
-    let mut allocations = ALLOCATIONS.lock().unwrap();
+    let mut allocations = ALLOCATIONS.lock();
     allocations.dump_peak_to_flamegraph(path);
 }
 
