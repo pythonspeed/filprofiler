@@ -232,7 +232,7 @@ print(subprocess.check_output(["env"]))
         result = check_output(
             ["fil-profile", "-o", mkdtemp(), "run", str(script_file.name)]
         )
-        assert b"LD_PRELOAD" not in result
+        assert b"\nLD_PRELOAD=" not in result.splitlines()
         # Not actually done at the moment, though perhaps it should be:
         # assert b"DYLD_INSERT_LIBRARIES" not in result
 

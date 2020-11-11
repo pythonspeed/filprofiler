@@ -273,10 +273,12 @@ struct AllocationTracker {
     peak_memory_usage: ImVector<usize>,    // Map CallstackId -> total memory usage
     current_allocated_bytes: usize,
     peak_allocated_bytes: usize,
+    // Default directory to write out data lacking other info:
+    default_path: String,
 }
 
 impl<'a> AllocationTracker {
-    fn new() -> AllocationTracker {
+    fn new(default_path: String) -> AllocationTracker {
         AllocationTracker {
             current_allocations: HashMap::default(),
             current_anon_mmaps: RangeMap::new(),
@@ -285,6 +287,7 @@ impl<'a> AllocationTracker {
             peak_memory_usage: ImVector::new(),
             current_allocated_bytes: 0,
             peak_allocated_bytes: 0,
+            default_path,
         }
     }
 
@@ -491,7 +494,7 @@ impl<'a> AllocationTracker {
         eprintln!(
             "=fil-profile= We'll try to dump out SVGs. Note that no HTML file will be written."
         );
-        let default_path = "/tmp";
+        let default_path = self.default_path.clone();
         self.dump_to_flamegraph(
             &default_path,
             false,
@@ -506,7 +509,8 @@ impl<'a> AllocationTracker {
 }
 
 lazy_static! {
-    static ref ALLOCATIONS: Mutex<AllocationTracker> = Mutex::new(AllocationTracker::new());
+    static ref ALLOCATIONS: Mutex<AllocationTracker> =
+        Mutex::new(AllocationTracker::new("/tmp".to_string()));
 }
 
 /// Add to per-thread function stack:
@@ -583,8 +587,8 @@ pub fn free_anon_mmap(address: usize, length: libc::size_t) {
 }
 
 /// Reset internal state.
-pub fn reset() {
-    *ALLOCATIONS.lock() = AllocationTracker::new();
+pub fn reset(default_path: String) {
+    *ALLOCATIONS.lock() = AllocationTracker::new(default_path);
 }
 
 /// Dump all callstacks in peak memory usage to format used by flamegraph.

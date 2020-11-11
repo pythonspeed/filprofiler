@@ -16,9 +16,10 @@ preload = PyDLL(library_path("_filpreload"))
 preload.fil_initialize_from_python()
 
 
-def start_tracing():
+def start_tracing(output_path: str):
     """Start tracing allocations."""
-    preload.fil_reset()
+    path = os.path.join(output_path, timestamp_now()).encode("utf-8")
+    preload.fil_reset(path)
     threading.setprofile(_start_thread_trace)
     preload.register_fil_tracer()
 
@@ -75,7 +76,7 @@ def trace_until_exit(code, globals_, output_path: str):
     # Use atexit rather than try/finally so threads that live beyond main
     # thread also get profiled:
     atexit.register(shutdown)
-    start_tracing()
+    start_tracing(output_path)
     with disable_thread_pools():
         exec(code, globals_, None)
 
