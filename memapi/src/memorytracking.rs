@@ -138,13 +138,6 @@ impl Callstack {
         callstack_id
     }
 
-    /*
-    fn new_line_number(&mut self, line_number: u16) {
-        if let Some(callsite_id) = self.calls.last_mut() {
-            callsite_id.line_number = line_number;
-        }
-    }*/
-
     fn as_string(&self, to_be_post_processed: bool) -> String {
         if self.calls.is_empty() {
             "[No Python stack]".to_string()
