@@ -851,6 +851,52 @@ mod tests {
     }
 
     #[test]
+    fn callstack_id_for_new_allocation() {
+        let mut interner = CallstackInterner::new();
+
+        let mut cs1 = Callstack::new();
+        let id0 = cs1.id_for_new_allocation(0, |cs| interner.get_or_insert_id(cs, || ()));
+        let id0b = cs1.id_for_new_allocation(0, |cs| interner.get_or_insert_id(cs, || ()));
+        assert_eq!(id0, id0b);
+
+        let func1 = FunctionLocation::from_strings("a", "af");
+        let fid1 = FunctionId::new(&func1 as *const FunctionLocation);
+
+        cs1.start_call(0, CallSiteId::new(fid1, 2));
+        let id1 = cs1.id_for_new_allocation(1, |cs| interner.get_or_insert_id(cs, || ()));
+        let id2 = cs1.id_for_new_allocation(2, |cs| interner.get_or_insert_id(cs, || ()));
+        let id1b = cs1.id_for_new_allocation(1, |cs| interner.get_or_insert_id(cs, || ()));
+        assert_eq!(id1, id1b);
+        assert_ne!(id2, id0);
+        assert_ne!(id2, id1);
+
+        cs1.start_call(3, CallSiteId::new(fid1, 2));
+        let id3 = cs1.id_for_new_allocation(4, |cs| interner.get_or_insert_id(cs, || ()));
+        assert_ne!(id3, id0);
+        assert_ne!(id3, id1);
+        assert_ne!(id3, id2);
+
+        cs1.finish_call();
+        let id2b = cs1.id_for_new_allocation(2, |cs| interner.get_or_insert_id(cs, || ()));
+        assert_eq!(id2, id2b);
+        let id1c = cs1.id_for_new_allocation(1, |cs| interner.get_or_insert_id(cs, || ()));
+        assert_eq!(id1, id1c);
+
+        // Check for cache invalidation in start_call:
+        cs1.start_call(1, CallSiteId::new(fid1, 1));
+        let id4 = cs1.id_for_new_allocation(1, |cs| interner.get_or_insert_id(cs, || ()));
+        assert_ne!(id4, id0);
+        assert_ne!(id4, id1);
+        assert_ne!(id4, id2);
+        assert_ne!(id4, id3);
+
+        // Check for cache invalidation in finish_call:
+        cs1.finish_call();
+        let id1d = cs1.id_for_new_allocation(1, |cs| interner.get_or_insert_id(cs, || ()));
+        assert_eq!(id1, id1d);
+    }
+
+    #[test]
     fn peak_allocations_only_updated_on_new_peaks() {
         let func1 = FunctionLocation::from_strings("a", "af");
         let func3 = FunctionLocation::from_strings("b", "bf");
