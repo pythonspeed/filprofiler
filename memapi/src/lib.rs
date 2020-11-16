@@ -4,6 +4,9 @@ use std::os::raw::c_char;
 #[macro_use]
 extern crate lazy_static;
 
+#[macro_use]
+extern crate derivative;
+
 #[cfg(target_os = "linux")]
 use jemallocator::Jemalloc;
 

@@ -84,9 +84,11 @@ impl CallSiteId {
 
 /// The current Python callstack. We use IDs instead of Function objects for
 /// performance reasons.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Derivative)]
+#[derivative(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Callstack {
     calls: Vec<CallSiteId>,
+    #[derivative(Hash = "ignore", PartialEq = "ignore")]
     cached_callstack_id: Option<(u16, CallstackId)>, // first bit is line number
 }
 
