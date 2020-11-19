@@ -4,6 +4,7 @@ use im::Vector as ImVector;
 use inferno::flamegraph;
 use itertools::Itertools;
 use libc;
+use parking_lot::Mutex;
 use std::cell::RefCell;
 use std::collections;
 use std::fs;
@@ -11,7 +12,6 @@ use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::slice;
-use std::sync::Mutex;
 
 /// A function location provided by the C code. Matches struct in _filpreload.c.
 #[repr(C)]
@@ -84,14 +84,20 @@ impl CallSiteId {
 
 /// The current Python callstack. We use IDs instead of Function objects for
 /// performance reasons.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Derivative)]
+#[derivative(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Callstack {
     calls: Vec<CallSiteId>,
+    #[derivative(Hash = "ignore", PartialEq = "ignore")]
+    cached_callstack_id: Option<(u16, CallstackId)>, // first bit is line number
 }
 
 impl Callstack {
     pub fn new() -> Callstack {
-        Callstack { calls: Vec::new() }
+        Callstack {
+            calls: Vec::new(),
+            cached_callstack_id: None,
+        }
     }
 
     fn start_call(&mut self, parent_line_number: u16, callsite_id: CallSiteId) {
@@ -101,16 +107,37 @@ impl Callstack {
             }
         }
         self.calls.push(callsite_id);
+        self.cached_callstack_id = None;
     }
 
     fn finish_call(&mut self) {
         self.calls.pop();
+        self.cached_callstack_id = None;
     }
 
-    fn new_line_number(&mut self, line_number: u16) {
-        if let Some(callsite_id) = self.calls.last_mut() {
-            callsite_id.line_number = line_number;
+    fn id_for_new_allocation<F>(&mut self, line_number: u16, get_callstack_id: F) -> CallstackId
+    where
+        F: FnOnce(&Callstack) -> CallstackId,
+    {
+        // If same line number as last callstack, and we have cached callstack
+        // ID, reuse it:
+        if let Some((previous_line_number, callstack_id)) = self.cached_callstack_id {
+            if line_number == previous_line_number {
+                return callstack_id;
+            }
         }
+
+        // Set the new line number:
+        if line_number != 0 {
+            if let Some(call) = self.calls.last_mut() {
+                call.line_number = line_number;
+            }
+        }
+
+        // Calculate callstack ID, cache it, and then return it;
+        let callstack_id = get_callstack_id(self);
+        self.cached_callstack_id = Some((line_number, callstack_id));
+        callstack_id
     }
 
     fn as_string(&self, to_be_post_processed: bool) -> String {
@@ -241,8 +268,6 @@ struct AllocationTracker {
     peak_memory_usage: ImVector<usize>,    // Map CallstackId -> total memory usage
     current_allocated_bytes: usize,
     peak_allocated_bytes: usize,
-    // Some spare memory in case we run out:
-    spare_memory: Vec<u8>,
     // Default directory to write out data lacking other info:
     default_path: String,
 }
@@ -257,7 +282,6 @@ impl<'a> AllocationTracker {
             peak_memory_usage: ImVector::new(),
             current_allocated_bytes: 0,
             peak_allocated_bytes: 0,
-            spare_memory: Vec::with_capacity(16 * 1024 * 1024),
             default_path,
         }
     }
@@ -302,6 +326,7 @@ impl<'a> AllocationTracker {
     fn free_allocation(&mut self, address: usize) {
         // Before we reduce memory, let's check if we've previously hit a peak:
         self.check_if_new_peak();
+
         // Possibly this allocation doesn't exist; that's OK! It can if e.g. we
         // didn't capture an allocation for some reason.
         if let Some(removed) = self.current_allocations.remove(&address) {
@@ -458,12 +483,6 @@ impl<'a> AllocationTracker {
         }
     }
 
-    /// Uh-oh, we just ran out of memory.
-    fn oom_break_glass(&mut self) {
-        // Get some emergency memory:
-        self.spare_memory.shrink_to_fit();
-    }
-
     /// Dump information about where we are.
     fn oom_dump(&mut self) {
         eprintln!("=fil-profile= Uh oh, out of memory!");
@@ -505,13 +524,6 @@ pub fn finish_call() {
     });
 }
 
-/// Change line number on current function in per-thread function stack:
-pub fn new_line_number(line_number: u16) {
-    THREAD_CALLSTACK.with(|cs| {
-        cs.borrow_mut().new_line_number(line_number);
-    });
-}
-
 /// Get the current thread's callstack.
 pub fn get_current_callstack() -> Callstack {
     THREAD_CALLSTACK.with(|cs| (*cs.borrow()).clone())
@@ -527,19 +539,12 @@ pub fn set_current_callstack(callstack: &Callstack) {
 
 /// Add a new allocation based off the current callstack.
 pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_mmap: bool) {
-    if address == 0 {
-        // Uh-oh, we're out of memory.
-        let allocations = &mut ALLOCATIONS.lock().unwrap();
-        allocations.oom_break_glass();
-    }
-
-    let mut allocations = ALLOCATIONS.lock().unwrap();
+    let mut allocations = ALLOCATIONS.lock();
     let callstack_id = THREAD_CALLSTACK.with(|tcs| {
         let mut callstack = tcs.borrow_mut();
-        if line_number != 0 && !callstack.calls.is_empty() {
-            callstack.new_line_number(line_number);
-        };
-        allocations.get_callstack_id(&callstack)
+        callstack.id_for_new_allocation(line_number, |callstack| {
+            allocations.get_callstack_id(callstack)
+        })
     });
 
     if is_mmap {
@@ -547,6 +552,7 @@ pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_m
     } else {
         allocations.add_allocation(address, size, callstack_id);
     }
+
     if address == 0 {
         // Uh-oh, we're out of memory.
         allocations.oom_dump();
@@ -555,13 +561,13 @@ pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_m
 
 /// Free an existing allocation.
 pub fn free_allocation(address: usize) {
-    let mut allocations = ALLOCATIONS.lock().unwrap();
+    let mut allocations = ALLOCATIONS.lock();
     allocations.free_allocation(address);
 }
 
 /// Get the size of an allocation, or 0 if it's not tracked.
 pub fn get_allocation_size(address: usize) -> libc::size_t {
-    let allocations = ALLOCATIONS.lock().unwrap();
+    let allocations = ALLOCATIONS.lock();
     if let Some(allocation) = allocations.current_allocations.get(&address) {
         allocation.size()
     } else {
@@ -571,18 +577,18 @@ pub fn get_allocation_size(address: usize) -> libc::size_t {
 
 /// Free an anonymous mmap().
 pub fn free_anon_mmap(address: usize, length: libc::size_t) {
-    let mut allocations = ALLOCATIONS.lock().unwrap();
+    let mut allocations = ALLOCATIONS.lock();
     allocations.free_anon_mmap(address, length);
 }
 
 /// Reset internal state.
 pub fn reset(default_path: String) {
-    *ALLOCATIONS.lock().unwrap() = AllocationTracker::new(default_path);
+    *ALLOCATIONS.lock() = AllocationTracker::new(default_path);
 }
 
 /// Dump all callstacks in peak memory usage to format used by flamegraph.
 pub fn dump_peak_to_flamegraph(path: &str) {
-    let mut allocations = ALLOCATIONS.lock().unwrap();
+    let mut allocations = ALLOCATIONS.lock();
     allocations.dump_peak_to_flamegraph(path);
 }
 
@@ -842,6 +848,52 @@ mod tests {
         expected.insert(id2, &cs2);
         expected.insert(id3, &cs3);
         assert_eq!(interner.get_reverse_map(), expected);
+    }
+
+    #[test]
+    fn callstack_id_for_new_allocation() {
+        let mut interner = CallstackInterner::new();
+
+        let mut cs1 = Callstack::new();
+        let id0 = cs1.id_for_new_allocation(0, |cs| interner.get_or_insert_id(cs, || ()));
+        let id0b = cs1.id_for_new_allocation(0, |cs| interner.get_or_insert_id(cs, || ()));
+        assert_eq!(id0, id0b);
+
+        let func1 = FunctionLocation::from_strings("a", "af");
+        let fid1 = FunctionId::new(&func1 as *const FunctionLocation);
+
+        cs1.start_call(0, CallSiteId::new(fid1, 2));
+        let id1 = cs1.id_for_new_allocation(1, |cs| interner.get_or_insert_id(cs, || ()));
+        let id2 = cs1.id_for_new_allocation(2, |cs| interner.get_or_insert_id(cs, || ()));
+        let id1b = cs1.id_for_new_allocation(1, |cs| interner.get_or_insert_id(cs, || ()));
+        assert_eq!(id1, id1b);
+        assert_ne!(id2, id0);
+        assert_ne!(id2, id1);
+
+        cs1.start_call(3, CallSiteId::new(fid1, 2));
+        let id3 = cs1.id_for_new_allocation(4, |cs| interner.get_or_insert_id(cs, || ()));
+        assert_ne!(id3, id0);
+        assert_ne!(id3, id1);
+        assert_ne!(id3, id2);
+
+        cs1.finish_call();
+        let id2b = cs1.id_for_new_allocation(2, |cs| interner.get_or_insert_id(cs, || ()));
+        assert_eq!(id2, id2b);
+        let id1c = cs1.id_for_new_allocation(1, |cs| interner.get_or_insert_id(cs, || ()));
+        assert_eq!(id1, id1c);
+
+        // Check for cache invalidation in start_call:
+        cs1.start_call(1, CallSiteId::new(fid1, 1));
+        let id4 = cs1.id_for_new_allocation(1, |cs| interner.get_or_insert_id(cs, || ()));
+        assert_ne!(id4, id0);
+        assert_ne!(id4, id1);
+        assert_ne!(id4, id2);
+        assert_ne!(id4, id3);
+
+        // Check for cache invalidation in finish_call:
+        cs1.finish_call();
+        let id1d = cs1.id_for_new_allocation(1, |cs| interner.get_or_insert_id(cs, || ()));
+        assert_eq!(id1, id1d);
     }
 
     #[test]

@@ -4,6 +4,9 @@ use std::os::raw::c_char;
 #[macro_use]
 extern crate lazy_static;
 
+#[macro_use]
+extern crate derivative;
+
 #[cfg(target_os = "linux")]
 use jemallocator::Jemalloc;
 
@@ -59,11 +62,6 @@ pub unsafe extern "C" fn pymemprofile_start_call(
 #[no_mangle]
 pub extern "C" fn pymemprofile_finish_call() {
     memorytracking::finish_call();
-}
-
-#[no_mangle]
-pub extern "C" fn pymemprofile_new_line_number(line_number: u16) {
-    memorytracking::new_line_number(line_number);
 }
 
 /// # Safety
