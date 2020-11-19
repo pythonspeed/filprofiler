@@ -1,1 +1,0 @@
-Allocations in C threads are now considered allocations by the Python code that launched the thread, to help give some sense of where they came from.

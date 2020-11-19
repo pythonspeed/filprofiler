@@ -1,3 +1,17 @@
+# Fil 0.11.0 (2020-11-19)
+
+### Features
+
+- Allocations in C threads are now considered allocations by the Python code that launched the thread, to help give some sense of where they came from. ([#72](https://github.com/pythonspeed/filprofiler/issues/72))
+- It's now possible to run Fil by doing `python -m filprofiler` in addition to running it as `fil-profile`. ([#82](https://github.com/pythonspeed/filprofiler/issues/82))
+- Small performance improvements reducing overhead of malloc()/free() tracking. ([#88](https://github.com/pythonspeed/filprofiler/issues/88) and [#95](https://github.com/pythonspeed/filprofiler/issues/95))
+
+
+### Bugfixes
+
+- When running in Jupyter, NumPy/BLOSC/etc. thread pools are only limited to one thread when actually running a Fil profile. This means Fil's Jupyter kernel is even closer to running the way a normal Python 3 kernel would. ([#72](https://github.com/pythonspeed/filprofiler/issues/72))
+
+
 # Fil 0.10.0 (2020-08-28)
 
 

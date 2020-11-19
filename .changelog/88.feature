@@ -1,1 +1,0 @@
-Small performance improvements reducing overhead of malloc()/free() tracking.
