@@ -424,17 +424,31 @@ struct NewThreadArgs {
   void *arg;
 };
 
+// Called during thread shutdown. Makes sure we don't call back into the Rust
+// code, since that uses thread-local storage which will not be valid
+// momentarily.
+static void thread_shutdown_handler(void *arg) {
+  set_will_i_be_reentrant(1);
+}
+
 // Called as starting function for new threads. Sets callstack, then calls the
 // real starting function.
 static void *wrapper_pthread_start(void *nta) {
   struct NewThreadArgs *args = (struct NewThreadArgs *)nta;
+  void* result = NULL;
   set_will_i_be_reentrant(1);
   pymemprofile_set_current_callstack(args->callstack);
   set_will_i_be_reentrant(0);
   void *(*start_routine)(void *) = args->start_routine;
   void *arg = args->arg;
   REAL_IMPL(free)(args);
-  return start_routine(arg);
+
+  // Register shutdown handler:
+  pthread_cleanup_push(thread_shutdown_handler, NULL);
+  // Run the underlying thread code:
+  result = start_routine(arg);
+  pthread_cleanup_pop(1);
+  return result;
 }
 
 // Override pthread_create so that new threads copy the current thread's Python
