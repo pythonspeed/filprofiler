@@ -3,7 +3,6 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <threads.h>
 
 static void cleanup_handler(void* arg) {
   void* data = malloc(sizeof(int));
@@ -17,9 +16,9 @@ static void cleanup_handler(void* arg) {
 // cleanup—they can't be tracked because the tracking code uses thread-local
 // storage which doesn't exist anymore at this point!
 static void* runs_in_thread(void *arg) {
-  tss_t thread_specific_storage;
-  tss_create(&thread_specific_storage, cleanup_handler);
-  tss_set(thread_specific_storage, (void*)12);
+  pthread_key_t thread_specific_storage;
+  pthread_key_create(&thread_specific_storage, cleanup_handler);
+  pthread_setspecific(thread_specific_storage, (void*)12);
   pthread_exit(NULL);
   return NULL;
 }
