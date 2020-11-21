@@ -35,6 +35,7 @@ test-python: build
 test-python-no-deps:
 	cythonize -3 -i python-benchmarks/pymalloc.pyx
 	c++ -shared -fPIC -lpthread python-benchmarks/cpp.cpp -o python-benchmarks/cpp.so
+	cc -shared -fPIC -lpthread python-benchmarks/malloc_on_thread_exit.c -o python-benchmarks/malloc_on_thread_exit.so
 	cd python-benchmarks && python -m numpy.f2py -c fortran.f90 -m fortran
 	env RUST_BACKTRACE=1 py.test tests/
 

@@ -378,3 +378,13 @@ def test_no_threadpools_filprofile_run():
     check_call(
         ["fil-profile", "run", str(Path("python-benchmarks") / "threadpools.py"),]
     )
+
+
+def test_malloc_on_thread_exit():
+    """malloc() in thread shutdown handler doesn't blow things up.
+
+    Reproducer for https://github.com/pythonspeed/filprofiler/issues/99
+    """
+    check_call(
+        ["fil-profile", "run", str(Path("python-benchmarks") / "thread_exit.py"),]
+    )

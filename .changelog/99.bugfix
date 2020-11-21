@@ -1,0 +1,1 @@
+Fixed bug that would cause crashes when thread-local storage destructors allocated or freed memory. Thanks to @winash12 for reporting the issue.
