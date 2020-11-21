@@ -1,3 +1,11 @@
+# Fil 0.12.0 (2020-11-21)
+
+
+### Bugfixes
+
+- Fixed bug that would cause crashes when thread-local storage destructors allocated or freed memory. Thanks to @winash12 for reporting the issue. ([#99](https://github.com/pythonspeed/filprofiler/issues/99))
+
+
 # Fil 0.11.0 (2020-11-19)
 
 ### Features
