@@ -383,9 +383,13 @@ impl<'a> AllocationTracker {
                 // Stop once we've hit 99% of allocations (TODO maybe don't
                 // filter if peak memory usage is small enough that this would
                 // leave out useful info?):
-                .take_while(|(stored, _, _)| (stored / self.peak_allocated_bytes as f64) <= 0.99)
-                // Drop the unneeded data:
-                .map(|(_, i, size)| (i, *size))
+                .scan(false, |past_threshold, (stored, i, size)| {
+                    if *past_threshold {
+                        return None;
+                    }
+                    *past_threshold = (stored / self.peak_allocated_bytes as f64) > 0.99;
+                    Some((i, *size))
+                })
                 .collect();
         } else {
             // TODO Why isn't this the same as peak?!
@@ -1036,9 +1040,10 @@ mod tests {
         tracker.add_anon_mmap(3, 50000, cs1_id);
         tracker.add_allocation(4, 6000, cs3_id);
 
+        // 234 allocation is too small, below the 99% total allocations
+        // threshold, so its omitted.
         let mut expected = vec![
             "a:1 (af);TB@@a:1@@TB;b:2 (bf);TB@@b:2@@TB 51000".to_string(),
-            "c:3 (cf);TB@@c:3@@TB 234".to_string(),
             "a:7 (af);TB@@a:7@@TB;b:2 (bf);TB@@b:2@@TB 6000".to_string(),
         ];
         let mut result: Vec<String> = tracker.to_lines(true, true).collect();
@@ -1046,11 +1051,7 @@ mod tests {
         expected.sort();
         assert_eq!(expected, result);
 
-        let mut expected2 = vec![
-            "a:1 (af);b:2 (bf) 51000",
-            "c:3 (cf) 234",
-            "a:7 (af);b:2 (bf) 6000",
-        ];
+        let mut expected2 = vec!["a:1 (af);b:2 (bf) 51000", "a:7 (af);b:2 (bf) 6000"];
         let mut result2: Vec<String> = tracker.to_lines(true, false).collect();
         result2.sort();
         expected2.sort();
