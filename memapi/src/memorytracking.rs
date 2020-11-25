@@ -361,14 +361,34 @@ impl<'a> AllocationTracker {
 
         let mut by_call: collections::HashMap<CallstackId, usize> = collections::HashMap::new();
 
+        // We get a LOT of tiny allocations. To reduce overhead of creating
+        // flamegraph (which currently loads EVERYTHING into memory), just do
+        // the top 99% of allocations.
         if peak {
-            for i in 0..self.peak_memory_usage.len() {
-                let size = self.peak_memory_usage[i];
-                if size > 0 {
-                    by_call.insert(i as CallstackId, size);
-                }
-            }
+            let mut stored = 0.0;
+            by_call = self
+                .peak_memory_usage
+                .iter()
+                // Convert to (callstack id, size) tuples:
+                .enumerate()
+                // Filter out callstacks with no allocations:
+                .filter(|(_, size)| **size > 0)
+                // Sort in descending size of allocation:
+                .sorted_by(|a, b| Ord::cmp(b.1, a.1))
+                // Keep track of how much total allocations we've accumulated so far:
+                .map(|(i, size)| {
+                    stored += *size as f64;
+                    (stored.clone(), i as u32, size)
+                })
+                // Stop once we've hit 99% of allocations (TODO maybe don't
+                // filter if peak memory usage is small enough that this would
+                // leave out useful info?):
+                .take_while(|(stored, _, _)| (stored / self.peak_allocated_bytes as f64) <= 0.99)
+                // Drop the unneeded data:
+                .map(|(_, i, size)| (i, *size))
+                .collect();
         } else {
+            // TODO Why isn't this the same as peak?!
             for allocation in self.current_allocations.values() {
                 let entry = by_call.entry(allocation.callstack_id).or_insert(0);
                 *entry += allocation.size();
