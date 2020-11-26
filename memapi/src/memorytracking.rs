@@ -257,10 +257,8 @@ impl Allocation {
 // 2. Top 99% of allocations, starting with largest, are kept.
 // 3. If that's less than 100 allocations, thrown in up to 100, main goal is
 //    just to not have a vast number of useless tiny allocations.
-fn filter_to_useful_callstacks(
-    allocations: &ImVector<usize>,
-    total_allocated: usize,
-) -> HashMap<CallstackId, usize> {
+fn filter_to_useful_callstacks(allocations: &ImVector<usize>) -> HashMap<CallstackId, usize> {
+    let total_allocated: usize = allocations.iter().sum();
     let mut stored = 0.0;
     allocations
         .iter()
@@ -275,9 +273,8 @@ fn filter_to_useful_callstacks(
             stored += *size as f64;
             (stored.clone(), i as u32, size)
         })
-        // Stop once we've hit 99% of allocations (TODO maybe don't
-        // filter if peak memory usage is small enough that this would
-        // leave out useful info?):
+        // Stop once we've hit 99% of allocations, but include at least 100 just
+        // so there's some context:
         .scan((false, 0), |(past_threshold, taken), (stored, i, size)| {
             if *past_threshold && (*taken > 99) {
                 return None;
@@ -400,9 +397,9 @@ impl<'a> AllocationTracker {
         // flamegraph (which currently loads EVERYTHING into memory), just do
         // the top 99% of allocations.
         if peak {
-            filter_to_useful_callstacks(&self.peak_memory_usage, self.peak_allocated_bytes)
+            filter_to_useful_callstacks(&self.peak_memory_usage)
         } else {
-            filter_to_useful_callstacks(&self.current_memory_usage, self.current_allocated_bytes)
+            filter_to_useful_callstacks(&self.current_memory_usage)
         }
     }
 
@@ -673,8 +670,8 @@ fn write_flamegraph(
 #[cfg(test)]
 mod tests {
     use super::{
-        Allocation, AllocationTracker, CallSiteId, Callstack, CallstackInterner, FunctionId,
-        FunctionLocation, HIGH_32BIT, MIB,
+        filter_to_useful_callstacks, Allocation, AllocationTracker, CallSiteId, Callstack,
+        CallstackInterner, FunctionId, FunctionLocation, HIGH_32BIT, MIB,
     };
     use ahash::AHashMap as HashMap;
     use im;
@@ -780,6 +777,23 @@ mod tests {
                 prop_assert_eq!(&tracker.current_memory_usage, &expected_memory_usage);
             }
             prop_assert_eq!(tracker.peak_allocated_bytes, expected_peak);
+        }
+
+        #[test]
+        fn filtering_of_callstacks(
+            // Allocated bytes. Will use index as the memory address.
+            allocated_sizes in prop::collection::vec(1..1000 as usize, 5..5000),
+        ) {
+            let total_size : usize = allocated_sizes.iter().sum();
+            let filtered = filter_to_useful_callstacks(&im::Vector::from(allocated_sizes));
+            let filtered_size = filtered.values().into_iter().sum::<usize>() as f64;
+            prop_assert!(filtered_size >= 0.99 * (total_size as f64));
+            if filtered.len() > 100 {
+                // Removing any item should take us below 99%
+                for value in filtered.values() {
+                    prop_assert!(filtered_size - (*value as f64) < 0.99 * (total_size as f64));
+                }
+            }
         }
     }
 

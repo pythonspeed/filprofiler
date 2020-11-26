@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc db501471d453d135f043607d02e100772e2b99cd04bd4d99869df326edf774a2 # shrinks to allocated_sizes = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 864, 248, 883, 782, 452, 769, 923, 654, 460, 408, 903, 360, 715, 262, 222, 639, 830, 480, 93, 427, 204, 199, 601, 424, 364, 769, 650, 503, 594, 767, 867, 113, 288, 904, 915, 568, 530, 513, 731, 438, 688, 452, 590, 561, 144, 216]
