@@ -279,7 +279,7 @@ fn filter_to_useful_callstacks(allocations: &ImVector<usize>) -> HashMap<Callsta
             if *past_threshold && (*taken > 99) {
                 return None;
             }
-            *past_threshold = (stored / total_allocated as f64) > 0.99;
+            *past_threshold = (stored / total_allocated as f64) >= 0.99;
             *taken += 1;
             Some((i, *size))
         })
