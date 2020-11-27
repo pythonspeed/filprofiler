@@ -9,7 +9,7 @@ In order to reduce memory usage, you need to figure out:
 That's exactly what Fil will help you find.
 Fil an open source memory profiler designed for data processing applications written in Python, and includes native support for Jupyter.
 
-At the moment it only runs on Linux and macOS.
+At the moment it only runs on Linux and macOS, and while it supports threading, it does not yet support multiprocessing or multiple processes in general.
 
 > "Within minutes of using your tool, I was able to identify a major memory bottleneck that I never would have thought existed.  The ability to track memory allocated via the Python interface and also C allocation is awesome, especially for my NumPy / Pandas programs."
 > 
@@ -156,6 +156,9 @@ Fil uses the `LD_PRELOAD`/`DYLD_INSERT_LIBRARIES` mechanism to preload a shared 
 This shared library captures all memory allocations and deallocations and keeps track of them.
 
 At the same time, the Python tracing infrastructure (used e.g. by `cProfile` and `coverage.py`) to figure out which Python callstack/backtrace is responsible for each allocation.
+
+For performance reasons, only the largest allocations are reported, with a minimum of 99% of allocated memory reported.
+The remaining <1% is highly unlikely to be relevant when trying to reduce usage; it's effectively noise.
 
 ### Fil and threading, with notes on NumPy and Zarr {#threading}
 
