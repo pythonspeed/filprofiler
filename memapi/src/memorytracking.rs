@@ -6,7 +6,6 @@ use itertools::Itertools;
 use libc;
 use parking_lot::Mutex;
 use std::cell::RefCell;
-use std::collections;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
@@ -252,6 +251,41 @@ impl Allocation {
     }
 }
 
+// Filter down to top 99% of allocated memory.
+//
+// 1. Empty callstacks are dropped.
+// 2. Top 99% of allocations, starting with largest, are kept.
+// 3. If that's less than 100 allocations, thrown in up to 100, main goal is
+//    just to not have a vast number of useless tiny allocations.
+fn filter_to_useful_callstacks(allocations: &ImVector<usize>) -> HashMap<CallstackId, usize> {
+    let total_allocated: usize = allocations.iter().sum();
+    let mut stored = 0.0;
+    allocations
+        .iter()
+        // Convert to (callstack id, size) tuples:
+        .enumerate()
+        // Filter out callstacks with no allocations:
+        .filter(|(_, size)| **size > 0)
+        // Sort in descending size of allocation:
+        .sorted_by(|a, b| Ord::cmp(b.1, a.1))
+        // Keep track of how much total allocations we've accumulated so far:
+        .map(|(i, size)| {
+            stored += *size as f64;
+            (stored.clone(), i as u32, size)
+        })
+        // Stop once we've hit 99% of allocations, but include at least 100 just
+        // so there's some context:
+        .scan((false, 0), |(past_threshold, taken), (stored, i, size)| {
+            if *past_threshold && (*taken > 99) {
+                return None;
+            }
+            *past_threshold = (stored / total_allocated as f64) >= 0.99;
+            *taken += 1;
+            Some((i, *size))
+        })
+        .collect()
+}
+
 /// The main data structure tracking everything.
 struct AllocationTracker {
     // malloc()/calloc():
@@ -355,32 +389,18 @@ impl<'a> AllocationTracker {
         &mut self,
         // If false, will do the current allocations:
         peak: bool,
-    ) -> std::collections::hash_map::IntoIter<CallstackId, usize> {
+    ) -> HashMap<CallstackId, usize> {
         // First, make sure peaks are correct:
         self.check_if_new_peak();
 
-        let mut by_call: collections::HashMap<CallstackId, usize> = collections::HashMap::new();
-
+        // We get a LOT of tiny allocations. To reduce overhead of creating
+        // flamegraph (which currently loads EVERYTHING into memory), just do
+        // the top 99% of allocations.
         if peak {
-            for i in 0..self.peak_memory_usage.len() {
-                let size = self.peak_memory_usage[i];
-                if size > 0 {
-                    by_call.insert(i as CallstackId, size);
-                }
-            }
+            filter_to_useful_callstacks(&self.peak_memory_usage)
         } else {
-            for allocation in self.current_allocations.values() {
-                let entry = by_call.entry(allocation.callstack_id).or_insert(0);
-                *entry += allocation.size();
-            }
-            for (size, callstack_id) in self.current_anon_mmaps.as_hashmap().values() {
-                let entry = by_call.entry(**callstack_id).or_insert(0);
-                *entry += size;
-            }
+            filter_to_useful_callstacks(&self.current_memory_usage)
         }
-
-        // Convert callstacks to be human-readable:
-        by_call.into_iter()
     }
 
     /// Dump all callstacks in peak memory usage to various files describing the
@@ -394,7 +414,7 @@ impl<'a> AllocationTracker {
         peak: bool,
         to_be_post_processed: bool,
     ) -> impl Iterator<Item = String> + '_ {
-        let by_call = self.combine_callstacks(peak);
+        let by_call = self.combine_callstacks(peak).into_iter();
         let id_to_callstack = self.interner.get_reverse_map();
         by_call.map(move |(callstack_id, size)| {
             format!(
@@ -650,8 +670,8 @@ fn write_flamegraph(
 #[cfg(test)]
 mod tests {
     use super::{
-        Allocation, AllocationTracker, CallSiteId, Callstack, CallstackInterner, FunctionId,
-        FunctionLocation, HIGH_32BIT, MIB,
+        filter_to_useful_callstacks, Allocation, AllocationTracker, CallSiteId, Callstack,
+        CallstackInterner, FunctionId, FunctionLocation, HIGH_32BIT, MIB,
     };
     use ahash::AHashMap as HashMap;
     use im;
@@ -757,6 +777,23 @@ mod tests {
                 prop_assert_eq!(&tracker.current_memory_usage, &expected_memory_usage);
             }
             prop_assert_eq!(tracker.peak_allocated_bytes, expected_peak);
+        }
+
+        #[test]
+        fn filtering_of_callstacks(
+            // Allocated bytes. Will use index as the memory address.
+            allocated_sizes in prop::collection::vec(1..1000 as usize, 5..5000),
+        ) {
+            let total_size : usize = allocated_sizes.iter().sum();
+            let filtered = filter_to_useful_callstacks(&im::Vector::from(allocated_sizes));
+            let filtered_size = filtered.values().into_iter().sum::<usize>() as f64;
+            prop_assert!(filtered_size >= 0.99 * (total_size as f64));
+            if filtered.len() > 100 {
+                // Removing any item should take us below 99%
+                for value in filtered.values() {
+                    prop_assert!(filtered_size - (*value as f64) < 0.99 * (total_size as f64));
+                }
+            }
         }
     }
 
@@ -1016,6 +1053,8 @@ mod tests {
         tracker.add_anon_mmap(3, 50000, cs1_id);
         tracker.add_allocation(4, 6000, cs3_id);
 
+        // 234 allocation is too small, below the 99% total allocations
+        // threshold, but we always guarantee at least 100 allocations.
         let mut expected = vec![
             "a:1 (af);TB@@a:1@@TB;b:2 (bf);TB@@b:2@@TB 51000".to_string(),
             "c:3 (cf);TB@@c:3@@TB 234".to_string(),

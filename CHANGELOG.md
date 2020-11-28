@@ -1,3 +1,11 @@
+# Fil 0.13.0 (2020-11-27)
+
+
+### Bugfixes
+
+- Fil no longer uses a vast amount of memory to generate the SVG report. ([#102](https://github.com/pythonspeed/filprofiler/issues/102))
+
+
 # Fil 0.12.0 (2020-11-21)
 
 
