@@ -1,8 +1,11 @@
-use std::ffi::CStr;
+use std::ffi::{c_void, CStr};
 use std::os::raw::c_char;
 
 #[macro_use]
 extern crate lazy_static;
+
+#[macro_use]
+extern crate derivative;
 
 #[cfg(target_os = "linux")]
 use jemallocator::Jemalloc;
@@ -61,11 +64,6 @@ pub extern "C" fn pymemprofile_finish_call() {
     memorytracking::finish_call();
 }
 
-#[no_mangle]
-pub extern "C" fn pymemprofile_new_line_number(line_number: u16) {
-    memorytracking::new_line_number(line_number);
-}
-
 /// # Safety
 /// Intended for use from C.
 #[no_mangle]
@@ -88,5 +86,31 @@ pub unsafe extern "C" fn pymemprofile_dump_peak_to_flamegraph(path: *const c_cha
     memorytracking::dump_peak_to_flamegraph(&path);
 }
 
+/// # Safety
+/// Intended for use from C.
+#[no_mangle]
+pub unsafe extern "C" fn pymemprofile_get_current_callstack() -> *mut c_void {
+    let callstack = memorytracking::get_current_callstack();
+    let callstack = Box::new(callstack);
+    Box::into_raw(callstack) as *mut c_void
+}
+
+/// # Safety
+/// Intended for use from C.
+#[no_mangle]
+pub unsafe extern "C" fn pymemprofile_set_current_callstack(callstack: *mut c_void) {
+    // The callstack is a Box created via pymemprofile_get_callstack()
+    let callstack =
+        Box::<memorytracking::Callstack>::from_raw(callstack as *mut memorytracking::Callstack);
+    memorytracking::set_current_callstack(&callstack);
+}
+
+/// # Safety
+/// Intended for use from C.
+#[no_mangle]
+pub unsafe extern "C" fn pymemprofile_clear_current_callstack() {
+    let callstack = memorytracking::Callstack::new();
+    memorytracking::set_current_callstack(&callstack);
+}
 #[cfg(test)]
 mod tests {}

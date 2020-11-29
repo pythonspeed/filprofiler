@@ -1,12 +1,15 @@
 # The Fil memory profiler for Python
 
 Your code reads some data, processes it, and uses too much memory.
-In order to reduce memory usage, you need to learn what code is responsible, and specifically what code is responsible for peak memory usage.
+In order to reduce memory usage, you need to figure out:
 
-And that's exactly what Fil will help you find.
+1. Where peak memory usage is, also known as the high-water mark.
+2. What code was responsible for allocating the memory that was present at that peak moment.
+
+That's exactly what Fil will help you find.
 Fil an open source memory profiler designed for data processing applications written in Python, and includes native support for Jupyter.
 
-At the moment it only runs on Linux and macOS.
+At the moment it only runs on Linux and macOS, and while it supports threading, it does not yet support multiprocessing or multiple processes in general.
 
 > "Within minutes of using your tool, I was able to identify a major memory bottleneck that I never would have thought existed.  The ability to track memory allocated via the Python interface and also C allocation is awesome, especially for my NumPy / Pandas programs."
 > 
@@ -14,14 +17,40 @@ At the moment it only runs on Linux and macOS.
 
 For more information, including an example of the output, see https://pythonspeed.com/products/filmemoryprofiler/
 
+* [Fil vs. other Python memory tools](#other-tools)
 * [Installation](#installation)
 * [Using Fil](#using-fil)
     * [Measuring peak (high-water mark) memory usage in Jupyter](#peak-jupyter)
     * [Measuring peak memory usage for Python scripts](#peak-python)
     * [Debugging out-of-memory crashes in your code](#oom)
 * [Reducing memory usage in your code](#reducing-memory-usage)
-* [Known limitations](#known-limitations)
-* [What Fil tracks](#what-fil-tracks)
+* [How Fil works](#how-fil-works)
+    * [Fil and threading, with notes on NumPy and Zarr](#threading)
+    * [What Fil tracks](#what-fil-tracks)
+
+## <a name="other-tools">Fil vs. other Python memory tools</a>
+
+There are two distinct patterns of Python usage, each with its own source of memory problems.
+
+In a long-running server, memory usage can grow indefinitely due to memory leaks.
+That is, some memory is not being freed.
+
+* If the issue is in Python code, tools like [`tracemalloc`](https://docs.python.org/3/library/tracemalloc.html) and [Pympler](https://pypi.org/project/Pympler/) can tell you which objects are leaking and what is preventing them from being leaked.
+* If you're leaking memory in C code, you can use tools like [Valgrind](https://valgrind.org).
+
+Fil, however, is not aimed at memory leaks, but at the other use case: data processing applications.
+These applications load in data, process it somehow, and then finish running.
+
+The problem with these applications is that they can, on purpose or by mistake, allocate huge amounts of memory.
+It might get freed soon after, but if you allocate 16GB RAM and only have 8GB in your computer, the lack of leaks doesn't help you.
+
+Fil will therefore tell you, in an easy to understand way:
+
+1. Where peak memory usage is, also known as the high-water mark.
+2. What code was responsible for allocating the memory that was present at that peak moment.
+3. This includes C/Fortran/C++/whatever extensions that don't use Python's memory allocation API (`tracemalloc` only does Python memory APIs).
+
+This allows you to [optimize that code in a variety of ways](https://pythonspeed.com/datascience/).
 
 ## Installation
 
@@ -89,6 +118,12 @@ $ fil-profile run yourscript.py --input-file=yourfile
 
 And it will generate a report.
 
+As of version 0.11, you can also run it like this:
+
+```
+$ python -m filprofiler run yourscript.py --input-file=yourfile
+```
+
 ### <a name="oom">Debugging out-of-memory crashes</a>
 
 First, run `free` to figure out how much memory is available—in this case about 6.3GB—and then set a corresponding limit on virtual memory with `ulimit`:
@@ -115,7 +150,38 @@ You've found where memory usage is coming from—now what?
 
 If you're using data processing or scientific computing libraries, I have written a relevant [guide to reducing memory usage](https://pythonspeed.com/datascience/).
 
-## What Fil tracks
+## How Fil works
+
+Fil uses the `LD_PRELOAD`/`DYLD_INSERT_LIBRARIES` mechanism to preload a shared library at process startup.
+This shared library captures all memory allocations and deallocations and keeps track of them.
+
+At the same time, the Python tracing infrastructure (used e.g. by `cProfile` and `coverage.py`) to figure out which Python callstack/backtrace is responsible for each allocation.
+
+For performance reasons, only the largest allocations are reported, with a minimum of 99% of allocated memory reported.
+The remaining <1% is highly unlikely to be relevant when trying to reduce usage; it's effectively noise.
+
+### Fil and threading, with notes on NumPy and Zarr {#threading}
+
+In general, Fil will track allocations in threads correctly.
+
+First, if you start a thread via Python, running Python code, that thread will get its own callstack for tracking who is responsible for a memory allocation.
+
+Second, if you start a C thread, the calling Python code is considered responsible for any memory allocations in that thread.
+This works fine... except for thread pools.
+If you start a pool of threads that are not Python threads, the Python code that created those threads will be responsible for all allocations created during the thread pool's lifetime.
+
+Therefore, in order to ensure correct memory tracking, Fil disables thread pools in  BLAS (used by NumPy), BLOSC (used e.g. by Zarr), OpenMP, and `numexpr`.
+They are all set to use 1 thread, so calls should run in the calling Python thread and everything should be tracked correctly.
+
+This has some costs:
+
+1. This can reduce performance in some cases, since you're doing computation with one CPU instead of many.
+2. Insofar as these libraries allocate memory proportional to number of threads, the measured memory usage might be wrong.
+
+Fil does this for the whole program when using `fil-profile run`.
+When using the Jupyter kernel, anything run with the `%%filprofile` magic will have thread pools disabled, but other code should run normally.
+
+### What Fil tracks
 
 Fil will track memory allocated by:
 
@@ -129,24 +195,11 @@ Still not supported, but planned:
 
 * `mremap()` (resizing of `mmap()`).
 * File-backed `mmap()`.
-  The usage here is inconsistent since the OS can swap it in or out, so probably supporting this will involve a different kind of resource usage.
+  The semantics are somewhat different than normal allocations or anonymous `mmap()`, since the OS can swap it in or out from disk transparently, so supporting this will involve a different kind of resource usage and reporting.
 * Other forms of shared memory, need to investigate if any of them allow sufficient allocation.
 * Anonymous `mmap()`s created via `/dev/zero` (not common, since it's not cross-platform, e.g. macOS doesn't support this).
-* `memfd_create()`.
-* Possibly `memalign`, `valloc()`, `pvalloc()`, `reallocarray()`.
-
-## Known limitations
-
-Fil is under heavy development, since it's a new project; it still has some known issues that need fixing.
-
-For example:
-
-* Not all memory allocation APIs are currently supported, though I have been steadily adding more over time.
-* NumPy's and Zarr/BLOSC's multithreaded backends are disabled, to make sure that allocations can be tied to the correct callstack.
-  This can make code run slower, because it's no longer multi-threaded.
-* Windows is not yet supported.
-
-For other details [see the issue tracker](https://github.com/pythonspeed/filprofiler/issues).
+* `memfd_create()`, a Linux-only mechanism for creating in-memory files.
+* Possibly `memalign`, `valloc()`, `pvalloc()`, `reallocarray()`. These are all rarely used, as far as I can tell.
 
 ## License
 

@@ -52,7 +52,12 @@ Run it like this:
 
   $ fil-profile run -m yourpackage --your-arg=2
 
-For more info visit https://pythonspeed.com/products/filmemoryprofiler/
+You can also run the profiler this way:
+
+  $ python -m filprofiler run yourprogram.py
+
+For more info, including documentation on Jupyter usage,
+visit https://pythonspeed.com/products/filmemoryprofiler/
 """
 
 
@@ -69,14 +74,6 @@ def stage_1():
     environ["RUST_BACKTRACE"] = "1"
     # Route all allocations from Python through malloc() directly:
     environ["PYTHONMALLOC"] = "malloc"
-    # Disable multi-threaded backends in various scientific computing libraries
-    # (Zarr uses Blosc, NumPy uses BLAS, OpenMP is generically used):
-    environ["BLOSC_NTHREADS"] = "1"
-    environ["OMP_NUM_THREADS"] = "1"
-    environ["OPENBLAS_NUM_THREADS"] = "1"
-    environ["MKL_NUM_THREADS"] = "1"
-    environ["VECLIB_MAXIMUM_THREADS"] = "1"
-    environ["NUMEXPR_NUM_THREADS"] = "1"
     # Tell jemalloc code (if used) to clean up faster:
     environ[
         "_RJEM_MALLOC_CONF"

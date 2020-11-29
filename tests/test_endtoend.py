@@ -86,6 +86,21 @@ def test_thread_allocates_after_main_thread_is_done():
     assert match(allocations, {thread1_path1: big}, as_mb) == pytest.approx(70, 0.1)
 
 
+def test_c_thread():
+    """
+    Allocations in C-only threads are considered allocations by the Python code
+    that launched the thread.
+    """
+    script = Path("python-benchmarks") / "c-thread.py"
+    output_dir = profile(script)
+    allocations = get_allocations(output_dir)
+
+    script = str(script)
+    alloc = ((script, "<module>", 13), (script, "main", 9))
+
+    assert match(allocations, {alloc: big}, as_mb) == pytest.approx(17, 0.1)
+
+
 def test_malloc_in_c_extension():
     """
     Various malloc() and friends variants in C extension gets captured.
@@ -170,6 +185,38 @@ def test_minus_m():
     )
 
 
+def test_minus_m_minus_m():
+    """
+    `python -m filprofiler -m package` runs the package.
+    """
+    dir = Path("python-benchmarks")
+    script = (dir / "malloc.py").absolute()
+    output_dir = Path(mkdtemp())
+    check_call(
+        [
+            sys.executable,
+            "-m",
+            "filprofiler",
+            "-o",
+            str(output_dir),
+            "run",
+            "-m",
+            "malloc",
+            "--size",
+            "50",
+        ],
+        cwd=dir,
+    )
+    allocations = get_allocations(output_dir)
+    stripped_allocations = {k[3:]: v for (k, v) in allocations.items()}
+    script = str(script)
+    path = ((script, "<module>", 32), (script, "main", 28))
+
+    assert match(stripped_allocations, {path: big}, as_mb) == pytest.approx(
+        50 + 10, 0.1
+    )
+
+
 def test_ld_preload_disabled_for_subprocesses():
     """
     LD_PRELOAD is reset so subprocesses don't get the malloc() preload.
@@ -185,7 +232,7 @@ print(subprocess.check_output(["env"]))
         result = check_output(
             ["fil-profile", "-o", mkdtemp(), "run", str(script_file.name)]
         )
-        assert b"LD_PRELOAD" not in result
+        assert b"\nLD_PRELOAD=" not in result.splitlines()
         # Not actually done at the moment, though perhaps it should be:
         # assert b"DYLD_INSERT_LIBRARIES" not in result
 
@@ -254,9 +301,14 @@ def test_no_args():
     """
     no_args = run(["fil-profile"], stdout=PIPE, stderr=PIPE)
     with_help = run(["fil-profile", "--help"], stdout=PIPE, stderr=PIPE)
+    no_args_minus_m = run(
+        [sys.executable, "-m", "filprofiler"], stdout=PIPE, stderr=PIPE
+    )
     assert no_args.returncode == with_help.returncode
     assert no_args.stdout == with_help.stdout
     assert no_args.stderr == with_help.stderr
+    assert no_args_minus_m.stdout == with_help.stdout
+    assert no_args_minus_m.stderr == with_help.stderr
 
 
 def test_fortran():
@@ -319,3 +371,20 @@ def test_jupyter(tmpdir):
         (numpy.core.numeric.__file__, "ones", ANY),
     )
     assert match(allocations, {path: big}, as_mb) == pytest.approx(48, 0.1)
+
+
+def test_no_threadpools_filprofile_run():
+    """`fil-profile run` disables thread pools it knows about."""
+    check_call(
+        ["fil-profile", "run", str(Path("python-benchmarks") / "threadpools.py"),]
+    )
+
+
+def test_malloc_on_thread_exit():
+    """malloc() in thread shutdown handler doesn't blow things up.
+
+    Reproducer for https://github.com/pythonspeed/filprofiler/issues/99
+    """
+    check_call(
+        ["fil-profile", "run", str(Path("python-benchmarks") / "thread_exit.py"),]
+    )

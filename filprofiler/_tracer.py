@@ -77,4 +77,37 @@ def trace_until_exit(code, globals_, output_path: str):
     # thread also get profiled:
     atexit.register(shutdown)
     start_tracing(output_path)
-    exec(code, globals_, None)
+    with disable_thread_pools():
+        exec(code, globals_, None)
+
+
+@contextmanager
+def disable_thread_pools():
+    """
+    Context manager that tries to disable thread pools in as many libraries as
+    possible.
+    """
+    try:
+        from numexpr import set_num_threads as numexpr_set_num_threads
+    except ImportError:
+
+        def numexpr_set_num_threads(i):
+            return 1
+
+    try:
+        from blosc import set_nthreads as blosc_set_nthreads
+    except ImportError:
+
+        def blosc_set_nthreads(i):
+            return 1
+
+    import threadpoolctl
+
+    numexpr_threads = numexpr_set_num_threads(1)
+    blosc_threads = blosc_set_nthreads(1)
+    with threadpoolctl.threadpool_limits({"blas": 1, "openmp": 1}):
+        try:
+            yield
+        finally:
+            numexpr_set_num_threads(numexpr_threads)
+            blosc_set_nthreads(blosc_threads)

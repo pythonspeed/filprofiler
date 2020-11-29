@@ -6,6 +6,7 @@
 #endif
 #include "frameobject.h"
 #include <dlfcn.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/mman.h>
@@ -31,6 +32,10 @@
 static void *(*underlying_real_mmap)(void *addr, size_t length, int prot,
                                      int flags, int fd, off_t offset) = 0;
 static int (*underlying_real_munmap)(void *addr, size_t length) = 0;
+static int (*underlying_real_pthread_create)(pthread_t *thread,
+                                             const pthread_attr_t *attr,
+                                             void *(*start_routine)(void *),
+                                             void *arg) = 0;
 
 // Used on Linux to implement these APIs:
 extern void *_rjem_malloc(size_t length);
@@ -54,7 +59,6 @@ static Py_ssize_t extra_code_index = -1;
 
 #ifdef __APPLE__
 #include "interpose.h"
-#include <pthread.h>
 static pthread_key_t will_i_be_reentrant;
 static pthread_once_t will_i_be_reentrant_once = PTHREAD_ONCE_INIT;
 
@@ -129,6 +133,11 @@ static void __attribute__((constructor)) constructor() {
     fprintf(stderr, "Couldn't load munmap(): %s\n", dlerror());
     exit(1);
   }
+  underlying_real_pthread_create = dlsym(RTLD_NEXT, "pthread_create");
+  if (!underlying_real_pthread_create) {
+    fprintf(stderr, "Couldn't load pthread_create(): %s\n", dlerror());
+    exit(1);
+  }
 
   initialized = 1;
   unsetenv("LD_PRELOAD");
@@ -150,6 +159,9 @@ extern void pymemprofile_free_allocation(size_t address);
 extern void pymemprofile_add_anon_mmap(size_t address, size_t length,
                                        uint16_t line_number);
 extern void pymemprofile_free_anon_mmap(size_t address, size_t length);
+extern void *pymemprofile_get_current_callstack();
+extern void pymemprofile_set_current_callstack(void *callstack);
+extern void pymemprofile_clear_current_callstack();
 
 static void start_call(struct FunctionLocation *loc, uint16_t line_number) {
   if (should_track_memory()) {
@@ -168,15 +180,6 @@ static void finish_call() {
   if (should_track_memory()) {
     set_will_i_be_reentrant(1);
     pymemprofile_finish_call();
-    set_will_i_be_reentrant(0);
-  }
-}
-
-__attribute__((visibility("default"))) void
-fil_new_line_number(uint16_t line_number) {
-  if (should_track_memory()) {
-    set_will_i_be_reentrant(1);
-    pymemprofile_new_line_number(line_number);
     set_will_i_be_reentrant(0);
   }
 }
@@ -250,8 +253,12 @@ __attribute__((visibility("default"))) void fil_shutting_down() {
   tracking_allocations = 0;
 }
 
-/// Register the C level Python tracer.
+/// Register the C level Python tracer for the current thread.
 __attribute__((visibility("default"))) void register_fil_tracer() {
+  // C threads inherit their callstack from the creating Python thread. That's
+  // fine. However, if a tracer is being registered, that means this is not a
+  // pure C thread, it's a new Python thread with its own callstack.
+  pymemprofile_clear_current_callstack();
   // We use 123 as a marker object for tests.
   PyEval_SetProfile(fil_tracer, PyLong_FromLong(123));
 }
@@ -360,7 +367,8 @@ SYMBOL_PREFIX(mmap)(void *addr, size_t length, int prot, int flags, int fd,
   void *result = underlying_real_mmap(addr, length, prot, flags, fd, offset);
 
   // For now we only track anonymous mmap()s:
-  if (result != MAP_FAILED && (flags & MAP_ANONYMOUS) && should_track_memory()) {
+  if (result != MAP_FAILED && (flags & MAP_ANONYMOUS) &&
+      should_track_memory()) {
     set_will_i_be_reentrant(1);
     add_anon_mmap((size_t)result, length);
     set_will_i_be_reentrant(0);
@@ -403,10 +411,65 @@ SYMBOL_PREFIX(aligned_alloc)(size_t alignment, size_t size) {
 #ifdef __linux__
 // Make sure we expose jemalloc variant of malloc_usable_size(), in case someone
 // actually uses it.
-size_t SYMBOL_PREFIX(malloc_usable_size)(void *ptr) {
+__attribute__((visibility("default"))) size_t
+SYMBOL_PREFIX(malloc_usable_size)(void *ptr) {
   return REAL_IMPL(malloc_usable_size)(ptr);
 }
 #endif
+
+// Argument for wrapper_pthread_start().
+struct NewThreadArgs {
+  void *callstack;
+  void *(*start_routine)(void *);
+  void *arg;
+};
+
+// Called during thread shutdown. Makes sure we don't call back into the Rust
+// code, since that uses thread-local storage which will not be valid
+// momentarily.
+static void thread_shutdown_handler(void *arg) {
+  set_will_i_be_reentrant(1);
+}
+
+// Called as starting function for new threads. Sets callstack, then calls the
+// real starting function.
+static void *wrapper_pthread_start(void *nta) {
+  struct NewThreadArgs *args = (struct NewThreadArgs *)nta;
+  void* result = NULL;
+  set_will_i_be_reentrant(1);
+  pymemprofile_set_current_callstack(args->callstack);
+  set_will_i_be_reentrant(0);
+  void *(*start_routine)(void *) = args->start_routine;
+  void *arg = args->arg;
+  REAL_IMPL(free)(args);
+
+  // Register shutdown handler:
+  pthread_cleanup_push(thread_shutdown_handler, NULL);
+  // Run the underlying thread code:
+  result = start_routine(arg);
+  pthread_cleanup_pop(1);
+  return result;
+}
+
+// Override pthread_create so that new threads copy the current thread's Python
+// callstack.
+__attribute__((visibility("default"))) int
+SYMBOL_PREFIX(pthread_create)(pthread_t *thread, const pthread_attr_t *attr,
+                              void *(*start_routine)(void *), void *arg) {
+  if (!likely(initialized) || am_i_reentrant()) {
+    return underlying_real_pthread_create(thread, attr, start_routine, arg);
+  }
+  set_will_i_be_reentrant(1);
+  struct NewThreadArgs *wrapper_args =
+      REAL_IMPL(malloc)(sizeof(struct NewThreadArgs));
+  wrapper_args->callstack = pymemprofile_get_current_callstack();
+  wrapper_args->start_routine = start_routine;
+  wrapper_args->arg = arg;
+  int result = underlying_real_pthread_create(
+      thread, attr, &wrapper_pthread_start, (void *)wrapper_args);
+  set_will_i_be_reentrant(0);
+  return result;
+}
 
 #ifdef __APPLE__
 DYLD_INTERPOSE(SYMBOL_PREFIX(malloc), malloc)
@@ -417,4 +480,5 @@ DYLD_INTERPOSE(SYMBOL_PREFIX(mmap), mmap)
 DYLD_INTERPOSE(SYMBOL_PREFIX(munmap), munmap)
 DYLD_INTERPOSE(SYMBOL_PREFIX(aligned_alloc), aligned_alloc)
 DYLD_INTERPOSE(SYMBOL_PREFIX(posix_memalign), posix_memalign)
+DYLD_INTERPOSE(SYMBOL_PREFIX(pthread_create), pthread_create)
 #endif
