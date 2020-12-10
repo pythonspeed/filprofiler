@@ -18,7 +18,10 @@ rm -rf build
 
 /opt/python/cp38-cp38/bin/python3 setup.py bdist_wheel -d /tmp/wheel
 
+/opt/python/cp39-cp39/bin/python3 setup.py bdist_wheel -d /tmp/wheel
+
 auditwheel repair --plat manylinux2010_x86_64 -w dist/ /tmp/wheel/filprofiler*cp36*whl
 auditwheel repair --plat manylinux2010_x86_64 -w dist/ /tmp/wheel/filprofiler*cp37*whl
 auditwheel repair --plat manylinux2010_x86_64 -w dist/ /tmp/wheel/filprofiler*cp38*whl
+auditwheel repair --plat manylinux2010_x86_64 -w dist/ /tmp/wheel/filprofiler*cp39*whl
 

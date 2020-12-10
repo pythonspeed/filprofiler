@@ -1,3 +1,11 @@
+# Fil 0.13.1 (2020-11-30)
+
+
+### Features
+
+- Fil now supports Python 3.9. ([#83](https://github.com/pythonspeed/filprofiler/issues/83))
+
+
 # Fil 0.13.0 (2020-11-27)
 
 

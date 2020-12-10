@@ -1,7 +1,7 @@
 pytest
 pampy
 numpy
-scikit-image
+#scikit-image
 cython
 black
 towncrier==19.9.0rc1
