@@ -49,11 +49,6 @@ extern int _rjem_posix_memalign(void **memptr, size_t alignment, size_t size);
 // Note whether we've been initialized yet or not:
 static int initialized = 0;
 
-// Note whether we're currently tracking allocations. Jupyter users might turn
-// this on and then off, for example, whereas full process profiling will have
-// this on from start until finish.
-static int tracking_allocations = 0;
-
 // ID of Python code object extra data:
 static Py_ssize_t extra_code_index = -1;
 
@@ -87,12 +82,14 @@ static inline void set_will_i_be_reentrant(int i) { will_i_be_reentrant = i; }
 // Will be true if all conditions are true:
 //
 // 1. The shared library constructor is initialized; always true after that.
-// 2. Allocations are being tracked.
-// 3. This isn't a reentrant call: we don't want to track memory allocations
+// 2. This isn't a reentrant call: we don't want to track memory allocations
 //    triggered by the Rust tracking code, as that will result in infinite
 //    recursion.
+//
+// The Rust code will do an additional check to see if allocations are being
+// tracked.
 static inline int should_track_memory() {
-  return (likely(initialized) && tracking_allocations && !am_i_reentrant());
+  return (likely(initialized) && !am_i_reentrant());
 }
 
 // Current thread's Python state:
@@ -151,7 +148,8 @@ extern void pymemprofile_start_call(uint16_t parent_line_number,
                                     uint16_t line_number);
 extern void pymemprofile_finish_call();
 extern void pymemprofile_new_line_number(uint16_t line_number);
-extern void pymemprofile_reset();
+extern void pymemprofile_start_tracking(const char *path);
+extern void pymemprofile_stop_tracking();
 extern void pymemprofile_dump_peak_to_flamegraph(const char *path);
 extern void pymemprofile_add_allocation(size_t address, size_t length,
                                         uint16_t line_number);
@@ -241,16 +239,15 @@ __attribute__((visibility("default"))) void fil_initialize_from_python() {
 
 /// Start memory tracing.
 __attribute__((visibility("default"))) void
-fil_reset(const char *default_path) {
-  tracking_allocations = 1;
+fil_start_tracking(const char *default_path) {
   set_will_i_be_reentrant(1);
-  pymemprofile_reset(default_path);
+  pymemprofile_start_tracking(default_path);
   set_will_i_be_reentrant(0);
 }
 
 /// End memory tracing.
-__attribute__((visibility("default"))) void fil_shutting_down() {
-  tracking_allocations = 0;
+__attribute__((visibility("default"))) void fil_stop_tracking() {
+  pymemprofile_stop_tracking();
 }
 
 /// Register the C level Python tracer for the current thread.

@@ -19,7 +19,7 @@ preload.fil_initialize_from_python()
 def start_tracing(output_path: str):
     """Start tracing allocations."""
     path = os.path.join(output_path, timestamp_now()).encode("utf-8")
-    preload.fil_reset(path)
+    preload.fil_start_tracking(path)
     threading.setprofile(_start_thread_trace)
     preload.register_fil_tracer()
 
@@ -44,7 +44,7 @@ def stop_tracing(output_path: str) -> str:
     """
     sys.setprofile(None)
     threading.setprofile(None)
-    preload.fil_shutting_down()
+    preload.fil_stop_tracking()
     return create_report(output_path)
 
 

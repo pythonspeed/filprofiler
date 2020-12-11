@@ -565,9 +565,16 @@ impl<'a> AllocationTracker {
     }
 }
 
+struct TrackerState {
+    currently_tracking: bool,
+    allocations: AllocationTracker,
+}
+
 lazy_static! {
-    static ref ALLOCATIONS: Mutex<AllocationTracker> =
-        Mutex::new(AllocationTracker::new("/tmp".to_string()));
+    static ref TRACKER_STATE: Mutex<TrackerState> = Mutex::new(TrackerState {
+        currently_tracking: false,
+        allocations: AllocationTracker::new("/tmp".to_string())
+    });
 }
 
 /// Add to per-thread function stack:
@@ -601,8 +608,13 @@ pub fn set_current_callstack(callstack: &Callstack) {
 
 /// Add a new allocation based off the current callstack.
 pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_mmap: bool) {
-    let mut allocations = ALLOCATIONS.lock();
+    let mut tracker_state = TRACKER_STATE.lock();
 
+    if !tracker_state.currently_tracking {
+        return;
+    }
+    let allocations = &mut tracker_state.allocations;
+    /*
     if allocations.oomchecker.out_of_memory(size) {
         // TODO switch tracking on/off switch from C to Rust.
         if tracking {
@@ -614,7 +626,7 @@ pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_m
     if !tracking {
         return;
     }
-
+    */
     let callstack_id = THREAD_CALLSTACK.with(|tcs| {
         let mut callstack = tcs.borrow_mut();
         callstack.id_for_new_allocation(line_number, |callstack| {
@@ -636,13 +648,19 @@ pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_m
 
 /// Free an existing allocation.
 pub fn free_allocation(address: usize) {
-    let mut allocations = ALLOCATIONS.lock();
+    let mut tracker_state = TRACKER_STATE.lock();
+
+    if !tracker_state.currently_tracking {
+        return;
+    }
+    let allocations = &mut tracker_state.allocations;
     allocations.free_allocation(address);
 }
 
 /// Get the size of an allocation, or 0 if it's not tracked.
 pub fn get_allocation_size(address: usize) -> libc::size_t {
-    let allocations = ALLOCATIONS.lock();
+    let tracker_state = TRACKER_STATE.lock();
+    let allocations = &tracker_state.allocations;
     if let Some(allocation) = allocations.current_allocations.get(&address) {
         allocation.size()
     } else {
@@ -652,18 +670,31 @@ pub fn get_allocation_size(address: usize) -> libc::size_t {
 
 /// Free an anonymous mmap().
 pub fn free_anon_mmap(address: usize, length: libc::size_t) {
-    let mut allocations = ALLOCATIONS.lock();
+    let mut tracker_state = TRACKER_STATE.lock();
+
+    if !tracker_state.currently_tracking {
+        return;
+    }
+    let allocations = &mut tracker_state.allocations;
     allocations.free_anon_mmap(address, length);
 }
 
 /// Reset internal state.
-pub fn reset(default_path: String) {
-    *ALLOCATIONS.lock() = AllocationTracker::new(default_path);
+pub fn start_tracking(default_path: String) {
+    let mut tracker_state = TRACKER_STATE.lock();
+    tracker_state.allocations = AllocationTracker::new(default_path);
+    tracker_state.currently_tracking = true;
+}
+
+pub fn stop_tracking() {
+    let mut tracker_state = TRACKER_STATE.lock();
+    tracker_state.currently_tracking = false;
 }
 
 /// Dump all callstacks in peak memory usage to format used by flamegraph.
 pub fn dump_peak_to_flamegraph(path: &str) {
-    let mut allocations = ALLOCATIONS.lock();
+    let mut tracker_state = TRACKER_STATE.lock();
+    let allocations = &mut tracker_state.allocations;
     allocations.dump_peak_to_flamegraph(path);
 }
 
