@@ -251,6 +251,48 @@ impl Allocation {
     }
 }
 
+/// Estimate whether we're about to run out of memory.
+struct OutOfMemoryEstimator<GetAvailable>
+where
+    GetAvailable: Fn() -> usize,
+{
+    bytes_allocated_since_last_check: usize,
+    get_available_bytes: GetAvailable,
+}
+
+impl<GetAvailable> OutOfMemoryEstimator<GetAvailable>
+where
+    GetAvailable: Fn() -> usize,
+{
+    fn new(get_available_bytes: GetAvailable) -> Self {
+        Self {
+            bytes_allocated_since_last_check: 0,
+            get_available_bytes: get_available_bytes,
+        }
+    }
+
+    /// Given allocation size, return whether we're out-of-memory.
+    fn out_of_memory(&mut self, allocated_bytes: usize) -> bool {
+        const CHECK_THRESHOLD: usize = 10 * 1024 * 1024;
+        const MINIMAL_FREE: usize = 100 * 1024 * 1024;
+        self.bytes_allocated_since_last_check += allocated_bytes;
+        if self.bytes_allocated_since_last_check < CHECK_THRESHOLD {
+            // Don't bother checking, he check threshold is much smaller than
+            // minimal free bytes we want, so it's reasonable to hope that other
+            // applications haven't gobbled it all up.
+            return false;
+        }
+        // If we've reached this point, it's time to check whether we're out o
+        // memory.
+
+        // Reset counter, so we know when to check again:
+        self.bytes_allocated_since_last_check = 0;
+
+        // Return whether there are sufficient free bytes:
+        return (self.get_available_bytes)() < MINIMAL_FREE;
+    }
+}
+
 // Filter down to top 99% of allocated memory.
 //
 // 1. Empty callstacks are dropped.
@@ -560,6 +602,19 @@ pub fn set_current_callstack(callstack: &Callstack) {
 /// Add a new allocation based off the current callstack.
 pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_mmap: bool) {
     let mut allocations = ALLOCATIONS.lock();
+
+    if allocations.oomchecker.out_of_memory(size) {
+        // TODO switch tracking on/off switch from C to Rust.
+        if tracking {
+            dump_oom();
+        }
+        exit(53);
+    }
+
+    if !tracking {
+        return;
+    }
+
     let callstack_id = THREAD_CALLSTACK.with(|tcs| {
         let mut callstack = tcs.borrow_mut();
         callstack.id_for_new_allocation(line_number, |callstack| {
