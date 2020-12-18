@@ -243,7 +243,7 @@ def test_out_of_memory():
     written out.
     """
     script = Path("python-benchmarks") / "oom.py"
-    output_dir = profile(script, expect_exit_code=5)
+    output_dir = profile(script, expect_exit_code=53)
     time.sleep(10)  # wait for child process to finish
     allocations = get_allocations(
         output_dir,

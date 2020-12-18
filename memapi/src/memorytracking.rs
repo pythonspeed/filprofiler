@@ -11,6 +11,7 @@ use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::slice;
+use sysinfo::SystemExt;
 
 /// A function location provided by the C code. Matches struct in _filpreload.c.
 #[repr(C)]
@@ -252,44 +253,84 @@ impl Allocation {
 }
 
 /// Estimate whether we're about to run out of memory.
-struct OutOfMemoryEstimator<GetAvailable>
-where
-    GetAvailable: Fn() -> usize,
-{
+///
+/// First, we need to define what "running out of memory" means. As a first
+/// pass, 100MB or less of non-swap memory availability, minimum of OS in
+/// general, current cgroup, and rusage limit. Don't count swap because goal is
+/// to avoid slowness, if someone wants to fallback to disk they should use
+/// mmap().
+///
+/// This will break on over-committing, but... we can live with that.
+///
+/// Second, we probably don't want to check every time, that's expensive. So
+/// check every 1% of allocations remaining until we hit the danger zone (we
+/// don't even check for free()s, which just means more frequent checks).
+///
+/// If current process is only one allocating, that is fine, it'll catch the
+/// situation. But there might be multiple processes allocating. So separately
+/// we'll also check every millisecond in a thread. That way if we're running
+/// out of memory due to something else, we'll still dump and not lose the info.
+/// That's implemented elsewhere. TODO
+struct OutOfMemoryEstimator {
+    // How many bytes it takes until we check again: 1% of distance between
+    // danger zone and free memory as of last check.
+    check_threshold_bytes: usize,
+    // How many bytes we've allocated since the last check. When it hits the
+    // threshold, we'll check again.
     bytes_allocated_since_last_check: usize,
-    get_available_bytes: GetAvailable,
+    // Callable that returns currently free bytes in RAM (w/o swap). In practice
+    // this may take into account things like rusage and cgroups limits, which
+    // may be lower than actual free RAM.
+    get_available_bytes: Box<dyn Fn() -> usize + Send + 'static>,
 }
 
-impl<GetAvailable> OutOfMemoryEstimator<GetAvailable>
-where
-    GetAvailable: Fn() -> usize,
-{
-    fn new(get_available_bytes: GetAvailable) -> Self {
+impl OutOfMemoryEstimator {
+    fn new<F: Fn() -> usize + Send + 'static>(get_available_bytes: F) -> Self {
         Self {
+            check_threshold_bytes: 0,
             bytes_allocated_since_last_check: 0,
-            get_available_bytes: get_available_bytes,
+            get_available_bytes: Box::new(get_available_bytes),
         }
     }
 
-    /// Given allocation size, return whether we're out-of-memory.
-    fn out_of_memory(&mut self, allocated_bytes: usize) -> bool {
-        const CHECK_THRESHOLD: usize = 10 * 1024 * 1024;
+    /// Check
+    fn are_we_oom(&mut self) -> bool {
+        // Anything less than this is too dangerous, and we should dump and
+        // exit. TODO is this actually enough?
         const MINIMAL_FREE: usize = 100 * 1024 * 1024;
-        self.bytes_allocated_since_last_check += allocated_bytes;
-        if self.bytes_allocated_since_last_check < CHECK_THRESHOLD {
-            // Don't bother checking, he check threshold is much smaller than
-            // minimal free bytes we want, so it's reasonable to hope that other
-            // applications haven't gobbled it all up.
-            return false;
-        }
-        // If we've reached this point, it's time to check whether we're out o
-        // memory.
 
         // Reset counter, so we know when to check again:
         self.bytes_allocated_since_last_check = 0;
 
-        // Return whether there are sufficient free bytes:
-        return (self.get_available_bytes)() < MINIMAL_FREE;
+        // Figure out how much is free, reset the threshold accordingly.
+        let available_bytes = (self.get_available_bytes)();
+
+        // Check if we're out of memory:
+        if available_bytes < MINIMAL_FREE {
+            return true;
+        }
+
+        // Still have enough, so threshold to 1% of distance to danger zone.
+        self.check_threshold_bytes = (available_bytes - MINIMAL_FREE) / 100;
+
+        // We're not OOM:
+        false
+    }
+
+    /// Given new allocation size, return whether we're out-of-memory. May or
+    /// may not actually check current free memory, as an optimization.
+    fn too_big_allocation(&mut self, allocated_bytes: usize) -> bool {
+        self.bytes_allocated_since_last_check += allocated_bytes;
+        if self.bytes_allocated_since_last_check < self.check_threshold_bytes {
+            // Haven't allocated any memory recently, don't bother checking, the
+            // check threshold is much smaller than minimal free bytes we want,
+            // so it's reasonable to hope that other applications haven't
+            // gobbled it all up.
+            return false;
+        }
+        // If we've reached this point, it's time to check whether we're out o
+        // memory.
+        self.are_we_oom()
     }
 }
 
@@ -545,9 +586,15 @@ impl<'a> AllocationTracker {
         }
     }
 
+    /// Clear memory we won't be needing anymore, since we're going to exit out.
+    fn oom_break_glass(&mut self) {
+        self.current_allocations.clear();
+        self.current_allocations.shrink_to_fit();
+        self.peak_memory_usage.clear();
+    }
+
     /// Dump information about where we are.
     fn oom_dump(&mut self) {
-        eprintln!("=fil-profile= Uh oh, out of memory!");
         eprintln!(
             "=fil-profile= We'll try to dump out SVGs. Note that no HTML file will be written."
         );
@@ -560,7 +607,7 @@ impl<'a> AllocationTracker {
             false,
         );
         unsafe {
-            libc::_exit(5);
+            libc::_exit(53);
         }
     }
 }
@@ -568,12 +615,24 @@ impl<'a> AllocationTracker {
 struct TrackerState {
     currently_tracking: bool,
     allocations: AllocationTracker,
+    oom: OutOfMemoryEstimator,
+}
+
+/// Return how much free memory we have, as bytes.
+fn get_available_memory() -> usize {
+    // TODO cgroups, rusage
+    let mut system = sysinfo::System::new_with_specifics(sysinfo::RefreshKind::new().with_memory());
+    system.refresh_memory();
+    // TODO this should include memory that can become available by syncing
+    // filesystem buffers to disk, which is... probably what we want.
+    (system.get_available_memory() * 1024) as usize
 }
 
 lazy_static! {
     static ref TRACKER_STATE: Mutex<TrackerState> = Mutex::new(TrackerState {
         currently_tracking: false,
-        allocations: AllocationTracker::new("/tmp".to_string())
+        allocations: AllocationTracker::new("/tmp".to_string()),
+        oom: OutOfMemoryEstimator::new(get_available_memory),
     });
 }
 
@@ -610,23 +669,34 @@ pub fn set_current_callstack(callstack: &Callstack) {
 pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_mmap: bool) {
     let mut tracker_state = TRACKER_STATE.lock();
 
-    if !tracker_state.currently_tracking {
-        return;
-    }
-    let allocations = &mut tracker_state.allocations;
-    /*
-    if allocations.oomchecker.out_of_memory(size) {
-        // TODO switch tracking on/off switch from C to Rust.
-        if tracking {
-            dump_oom();
-        }
-        exit(53);
+    // Check if we're out of memory:
+    let oom = address == 0 || tracker_state.oom.too_big_allocation(size);
+    if oom {
+        // Going to hope there's at least a few bytes left, or this allocation
+        // will fail too...
+        eprintln!("=fil-profile= Uh oh, almost out of memory, exiting.");
     }
 
-    if !tracking {
+    // If we're not tracking allocation, just do nothing, unless we're OOM in
+    // which case we at least give a helpful message and exit code, rather than
+    // freezing/hitting Linux OOM/corrupting memory/etc.
+    if !tracker_state.currently_tracking {
+        if oom {
+            unsafe {
+                libc::exit(53);
+            }
+        }
         return;
     }
-    */
+
+    // If we're out-of-memory, we're not going to exit this function or ever
+    // free() anythging ever again, so we should clear some memory in order to
+    // reduce chances of running out as part of OOM reporting.
+    if oom {
+        tracker_state.allocations.oom_break_glass();
+    }
+
+    let allocations = &mut tracker_state.allocations;
     let callstack_id = THREAD_CALLSTACK.with(|tcs| {
         let mut callstack = tcs.borrow_mut();
         callstack.id_for_new_allocation(line_number, |callstack| {
@@ -640,7 +710,7 @@ pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_m
         allocations.add_allocation(address, size, callstack_id);
     }
 
-    if address == 0 {
+    if oom {
         // Uh-oh, we're out of memory.
         allocations.oom_dump();
     }
@@ -1160,6 +1230,10 @@ mod tests {
         result2.sort();
         expected2.sort();
         assert_eq!(expected2, result2);
+    }
+
+    fn oomestimator() {
+        let mut available_memory = 300 * 1024 * 1024;
     }
 
     // TODO test to_lines(false)
