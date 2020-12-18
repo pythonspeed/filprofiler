@@ -264,6 +264,28 @@ def test_out_of_memory():
     )
 
 
+def test_out_of_memory_2():
+    """
+    If an allocation is run that runs out of memory slowly, current allocations are
+    written out.
+    """
+    script = Path("python-benchmarks") / "oom-slow.py"
+    output_dir = profile(script, expect_exit_code=53)
+    time.sleep(10)  # wait for child process to finish
+    allocations = get_allocations(
+        output_dir,
+        ["out-of-memory.svg", "out-of-memory-reversed.svg", "out-of-memory.prof",],
+        "out-of-memory.prof",
+    )
+
+    expected_alloc = ((str(script), "<module>", 4),)
+
+    # Should've allocated at least a little before running out, unless testing
+    # environment is _really_ restricted, in which case other tests would've
+    # failed.
+    assert match(allocations, {expected_alloc: big}, as_mb) > 10
+
+
 def test_external_behavior():
     """
     1. Stdout and stderr from the code is printed normally.
