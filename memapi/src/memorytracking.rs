@@ -678,15 +678,8 @@ pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_m
         eprintln!("=fil-profile= Uh oh, almost out of memory, exiting.");
     }
 
-    // If we're not tracking allocation, just do nothing, unless we're OOM in
-    // which case we at least give a helpful message and exit code, rather than
-    // freezing/hitting Linux OOM/corrupting memory/etc.
+    // If we're not tracking allocations, just do nothing.
     if !tracker_state.currently_tracking {
-        if oom {
-            unsafe {
-                libc::exit(53);
-            }
-        }
         return;
     }
 
