@@ -20,21 +20,13 @@ setup(
     name="filprofiler",
     packages=["filprofiler"],
     entry_points={"console_scripts": ["fil-profile=filprofiler._script:stage_1"],},
-    ext_modules=[
-        Extension(
-            name="filprofiler._filpreload",
-            sources=[join("filprofiler", "_filpreload.c")],
-            extra_objects=[join("target", "release", "libpymemprofile_api.a")],
-            extra_compile_args=["-fno-omit-frame-pointer"],
-            extra_link_args=["-export-dynamic"],
-        )
-    ],
     package_data={"filprofiler": ["licenses.txt"],},
     data_files=[
         (
             join("share", "jupyter", "kernels", "filprofile"),
             glob(join("data_kernelspec", "*")),
-        )
+        ),
+        ("bin", [join("filprofiler", "_fil-python")]),
     ],
     use_scm_version=True,
     install_requires=["threadpoolctl"],

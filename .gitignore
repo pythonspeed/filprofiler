@@ -11,3 +11,4 @@ python-benchmarks/pymalloc.c
 filprofiler/_version.py
 .ipynb_checkpoints
 pip-wheel-metadata
+filprofiler/_fil-python

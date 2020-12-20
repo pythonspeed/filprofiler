@@ -11,6 +11,7 @@ from os.path import abspath, dirname, join, exists
 from argparse import ArgumentParser, RawDescriptionHelpFormatter, REMAINDER
 import runpy
 import signal
+from shutil import which
 
 from ._utils import library_path
 from . import __version__, __file__
@@ -67,9 +68,6 @@ def stage_1():
         PARSER.print_help()
         sys.exit(0)
 
-    # Load the library:
-    environ["LD_PRELOAD"] = library_path("_filpreload")
-    environ["DYLD_INSERT_LIBRARIES"] = library_path("_filpreload")
     # Tracebacks when Rust crashes:
     environ["RUST_BACKTRACE"] = "1"
     # Route all allocations from Python through malloc() directly:
@@ -79,14 +77,16 @@ def stage_1():
         "_RJEM_MALLOC_CONF"
     ] = "dirty_decay_ms:100,muzzy_decay_ms:1000,abort_conf:true"
 
+    # TODO maybe add --trace option, which can benchmark with cachegrind,
+    # and... disables flamegraph generation? Optionally maybe.
+    executable = which("_fil-python")
     if sys.argv[1] == "python":
         environ["FIL_PYTHON"] = "1"
         # Start the normal Python interpreter, with Fil available but inactive.
-        execv(sys.executable, [sys.executable] + sys.argv[2:])
+        execv(executable, [executable] + sys.argv[2:])
     else:
         execv(
-            sys.executable,
-            [sys.executable, "-m", "filprofiler._script"] + sys.argv[1:],
+            executable, [executable, "-m", "filprofiler._script"] + sys.argv[1:],
         )
 
 

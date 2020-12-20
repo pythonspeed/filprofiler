@@ -5,14 +5,16 @@ MAKEFLAGS += --warn-undefined-variables
 MAKEFLAGS += --no-builtin-rules
 
 .PHONY: build
-build: target/release/libpymemprofile_api.a
+build: filprofiler/_fil-python
 	pip install -e .
 	rm -rf build/
 	python setup.py build_ext --inplace
 	python setup.py install_data
 
-filprofiler/fil-python: filprofiler/*.c target/release/libpymemprofile_api.a
-	gcc -std=c11 $(shell python3.8-config --cflags --ldflags) -O3 -lpython3.8 -export-dynamic -flto -o $@ $< ./target/release/libpymemprofile_api.a
+# TODO not always 3.8
+# TODO want to make executable optional?
+filprofiler/_fil-python: filprofiler/*.c target/release/libpymemprofile_api.a
+	gcc -std=c11 $(shell python3.8-config --cflags --ldflags) -O3 -lpython3.8 -export-dynamic -flto -o $@ $^ ./target/release/libpymemprofile_api.a
 
 target/release/libpymemprofile_api.a: Cargo.lock memapi/Cargo.toml memapi/src/*.rs
 	cargo build --release
@@ -56,7 +58,7 @@ manylinux-wheel:
 
 .PHONY: clean
 clean:
-	rm -f filprofiler/fil-python
+	rm -f filprofiler/_fil-python
 	rm -rf target
 	rm -rf filprofiler/*.so
 	rm -rf filprofiler/*.dylib
