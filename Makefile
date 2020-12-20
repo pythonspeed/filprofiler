@@ -11,6 +11,9 @@ build: target/release/libpymemprofile_api.a
 	python setup.py build_ext --inplace
 	python setup.py install_data
 
+filprofiler/fil-python: filprofiler/*.c target/release/libpymemprofile_api.a
+	gcc -std=c11 $(shell python3.8-config --cflags --ldflags) -O3 -lpython3.8 -export-dynamic -flto -o $@ $< ./target/release/libpymemprofile_api.a
+
 target/release/libpymemprofile_api.a: Cargo.lock memapi/Cargo.toml memapi/src/*.rs
 	cargo build --release
 
