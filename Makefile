@@ -11,10 +11,10 @@ build: filprofiler/_fil-python
 	python setup.py build_ext --inplace
 	python setup.py install_data
 
-# TODO not always 3.8
-# TODO want to make executable optional?
+PYTHON_VERSION := $(shell python -c "import sys; print('%d.%d' % sys.version_info[:2])")
+
 filprofiler/_fil-python: filprofiler/*.c target/release/libpymemprofile_api.a
-	gcc -std=c11 $(shell python3.8-config --cflags --ldflags) -O3 -lpython3.8 -export-dynamic -flto -o $@ $^ ./target/release/libpymemprofile_api.a
+	gcc -std=c11 $(shell python${PYTHON_VERSION}-config --cflags --ldflags) -O3 -lpython${PYTHON_VERSION} -export-dynamic -flto -o $@ $^ ./target/release/libpymemprofile_api.a
 
 target/release/libpymemprofile_api.a: Cargo.lock memapi/Cargo.toml memapi/src/*.rs
 	cargo build --release
