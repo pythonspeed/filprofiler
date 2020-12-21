@@ -77,16 +77,29 @@ def stage_1():
         "_RJEM_MALLOC_CONF"
     ] = "dirty_decay_ms:100,muzzy_decay_ms:1000,abort_conf:true"
 
-    # TODO maybe add --trace option, which can benchmark with cachegrind,
-    # and... disables flamegraph generation? Optionally maybe.
-    executable = which("_fil-python")
+    if environ.get("FIL_BENCHMARK"):
+        # Run using Valgrind + executable (Valgrind doesn't work well with
+        # LD_PRELOAD).
+        executable = which("valgrind")
+        prefix = [
+            "valgrind",
+            "--tool=cachegrind",
+            which("_fil-python"),
+        ]
+    else:
+        # Normal operation, via LD_PRELOAD or equivalent:
+        environ["LD_PRELOAD"] = library_path("_filpreload")
+        environ["DYLD_INSERT_LIBRARIES"] = library_path("_filpreload")
+        executable = sys.executable
+        prefix = [sys.executable]
+
     if sys.argv[1] == "python":
         environ["FIL_PYTHON"] = "1"
         # Start the normal Python interpreter, with Fil available but inactive.
-        execv(executable, [executable] + sys.argv[2:])
+        execv(executable, prefix + sys.argv[2:])
     else:
         execv(
-            executable, [executable, "-m", "filprofiler._script"] + sys.argv[1:],
+            executable, prefix + ["-m", "filprofiler._script"] + sys.argv[1:],
         )
 
 

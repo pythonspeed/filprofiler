@@ -5,22 +5,23 @@ MAKEFLAGS += --warn-undefined-variables
 MAKEFLAGS += --no-builtin-rules
 
 .PHONY: build
-build: filprofiler/_fil-python
+build: target/release/libpymemprofile_api.a
 	pip install -e .
 	rm -rf build/
 	python setup.py build_ext --inplace
 	python setup.py install_data
 
-PYTHON_VERSION := $(shell python -c "import sys; print('%d.%d' % sys.version_info[:2])")
+PYTHON_VERSION := 3.8
 
-filprofiler/_fil-python: filprofiler/*.c target/release/libpymemprofile_api.a
+# Only necessary for benchmarks
+venv/bin/_fil-python: filprofiler/*.c target/release/libpymemprofile_api.a
 	gcc -std=c11 $(shell python${PYTHON_VERSION}-config --cflags --ldflags) -O3 -lpython${PYTHON_VERSION} -export-dynamic -flto -o $@ $^ ./target/release/libpymemprofile_api.a
 
 target/release/libpymemprofile_api.a: Cargo.lock memapi/Cargo.toml memapi/src/*.rs
 	cargo build --release
 
 venv:
-	python3 -m venv venv/
+	python${PYTHON_VERSION} -m venv venv/
 
 .PHONY: test
 test:

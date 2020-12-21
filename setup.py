@@ -34,7 +34,7 @@ setup(
         (
             join("share", "jupyter", "kernels", "filprofile"),
             glob(join("data_kernelspec", "*")),
-        )
+        ),
     ],
     use_scm_version=True,
     install_requires=["threadpoolctl"],

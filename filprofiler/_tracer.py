@@ -12,7 +12,12 @@ from contextlib import contextmanager
 from ._utils import timestamp_now, library_path
 from ._report import render_report
 
-preload = PyDLL(None)
+if os.environ.get("FIL_BENCHMARK"):
+    # We're using Valgrind + executable:
+    preload = PyDLL(None)
+else:
+    # We're using preloaded library:
+    preload = PyDLL(library_path("_filpreload"))
 preload.fil_initialize_from_python()
 
 
