@@ -89,3 +89,9 @@ jobs:
             . venv/bin/activate
             twine check dist/*.whl
             twine upload --repository pypi dist/*.whl
+      - name: Benchmark
+        if: matrix.python-version == '3.8'
+        run: |
+          set -euo pipefail
+          . venv/bin/activate
+          make -j4 benchmark
