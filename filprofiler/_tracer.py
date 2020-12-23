@@ -67,6 +67,12 @@ def trace_until_exit(code, globals_, output_path: str):
     """
 
     def shutdown():
+        if os.environ.get("FIL_NO_REPORT"):
+            print(
+                "=fil-profile= FIL_NO_REPORT env variable is set, skipping report.",
+                file=sys.stderr,
+            )
+            return
         index_path = stop_tracing(output_path)
         print("=fil-profile= Wrote HTML report to " + index_path, file=sys.stderr)
         try:
