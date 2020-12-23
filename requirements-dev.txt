@@ -13,4 +13,5 @@ ipykernel
 # nbconvert 6 can't be used temporarily due to https://github.com/jupyter/nbconvert/issues/1440
 nbconvert<6
 numexpr
-blosc
+# blosc 1.10 can't be used temporarily due to https://github.com/Blosc/python-blosc/issues/239
+blosc<1.10
