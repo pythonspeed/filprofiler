@@ -90,8 +90,9 @@ jobs:
             twine check dist/*.whl
             twine upload --repository pypi dist/*.whl
       - name: Benchmark
-        if: matrix.python-version == '3.8'
+        if: (matrix.python-version == '3.8') && startsWith(matrix.os, 'ubuntu')
         run: |
           set -euo pipefail
+          sudo apt-get install -y valgrind
           . venv/bin/activate
           make -j4 benchmark
