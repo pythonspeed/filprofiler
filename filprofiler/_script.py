@@ -5,6 +5,7 @@ Command-line tools. Because of LD_PRELOAD, it's actually a two stage setup:
 2. Run the actual profiler CLI script.
 """
 
+import json
 import sys
 from os import environ, execv, getpid, makedirs
 from os.path import abspath, dirname, join, exists
@@ -12,8 +13,10 @@ from argparse import ArgumentParser, RawDescriptionHelpFormatter, REMAINDER
 import runpy
 import signal
 from shutil import which
+from subprocess import check_output, check_call
 
 from ._utils import library_path
+from ._cachegrind import benchmark
 from . import __version__, __file__
 
 
@@ -77,30 +80,31 @@ def stage_1():
         "_RJEM_MALLOC_CONF"
     ] = "dirty_decay_ms:100,muzzy_decay_ms:1000,abort_conf:true"
 
+    if sys.argv[1] == "python":
+        environ["FIL_PYTHON"] = "1"
+        # Start the normal Python interpreter, with Fil available but inactive.
+        args = sys.argv[2:]
+    else:
+        args = ["-m", "filprofiler._script"] + sys.argv[1:]
+
     if environ.get("FIL_BENCHMARK"):
+        destination = environ["FIL_BENCHMARK"]
+        # Set fixed hash, in order to get repeatable results:
+        environ["PYTHONHASHSEED"] = "12345"
         # Run using Valgrind + executable (Valgrind doesn't work well with
         # LD_PRELOAD).
-        executable = which("valgrind")
-        prefix = [
-            "valgrind",
-            "--tool=cachegrind",
-            which("_fil-python"),
-        ]
+        result = benchmark([which("_fil-python")] + args)
+        with open(destination, "w+") as f:
+            json.dump(result, f, sort_keys=True, indent=4)
+            f.flush()
+            f.seek(0, 0)
+            print("Wrote performance to performance.json:")
+            print(f.read())
     else:
         # Normal operation, via LD_PRELOAD or equivalent:
         environ["LD_PRELOAD"] = library_path("_filpreload")
         environ["DYLD_INSERT_LIBRARIES"] = library_path("_filpreload")
-        executable = sys.executable
-        prefix = [sys.executable]
-
-    if sys.argv[1] == "python":
-        environ["FIL_PYTHON"] = "1"
-        # Start the normal Python interpreter, with Fil available but inactive.
-        execv(executable, prefix + sys.argv[2:])
-    else:
-        execv(
-            executable, prefix + ["-m", "filprofiler._script"] + sys.argv[1:],
-        )
+        execv(sys.executable, [sys.executable] + args)
 
 
 PARSER = ArgumentParser(
@@ -111,7 +115,10 @@ PARSER = ArgumentParser(
 )
 PARSER.add_argument("--version", action="version", version=__version__)
 PARSER.add_argument(
-    "--license", action="store_true", default=False, help="Print licensing information",
+    "--license",
+    action="store_true",
+    default=False,
+    help="Print licensing information",
 )
 PARSER.add_argument(
     "-o",
@@ -122,7 +129,10 @@ PARSER.add_argument(
 )
 subparsers = PARSER.add_subparsers(help="sub-command help")
 parser_run = subparsers.add_parser(
-    "run", help="Run a Python script or package", prefix_chars=[""], add_help=False,
+    "run",
+    help="Run a Python script or package",
+    prefix_chars=[""],
+    add_help=False,
 )
 parser_run.set_defaults(command="run")
 parser_run.add_argument("rest", nargs=REMAINDER)
