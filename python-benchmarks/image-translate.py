@@ -1,4 +1,5 @@
 import time
+import sys
 
 import numpy as np
 
@@ -10,7 +11,12 @@ from skimage.transform import rescale
 
 start = time.time()
 image = data.camera()
-image = rescale(image, 4, anti_aliasing=True)
+
+if len(sys.argv) > 1:
+    scale = int(sys.argv[1])
+else:
+    scale = 4
+image = rescale(image, scale, anti_aliasing=True)
 
 shift = (-22.4, 13.32)
 # The shift corresponds to the pixel offset relative to the reference image

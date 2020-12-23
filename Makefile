@@ -74,3 +74,21 @@ licenses:
 data_kernelspec/kernel.json: generate-kernelspec.py
 	rm -rf data_kernelspec
 	python generate-kernelspec.py
+
+.PHONY: benchmark
+benchmark: build venv/bin/_fil-python benchmark-results/*.json
+	python setup.py --version > benchmark-results/version.txt
+	git diff benchmark-results/
+
+.PHONY: benchmark-results/pystone.json
+benchmark-results/pystone.json:
+	FIL_NO_REPORT=1 FIL_BENCHMARK=benchmark-results/pystone.json fil-profile run python-benchmarks/pystone.py
+
+.PHONY: benchmark-results/image-translate.json
+benchmark-results/image-translate.json:
+	pip install scikit-image==0.16.2
+	FIL_NO_REPORT=1 FIL_BENCHMARK=benchmark-results/image-translate.json fil-profile run python-benchmarks/image-translate.py 2
+
+.PHONY: benchmark-results/multithreading-1.json
+benchmark-results/multithreading-1.json:
+	FIL_NO_REPORT=1 FIL_BENCHMARK=benchmark-results/multithreading-1.json fil-profile run python-benchmarks/multithreading.py 1
