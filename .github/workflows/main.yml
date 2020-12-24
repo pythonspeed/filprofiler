@@ -44,7 +44,7 @@ jobs:
           set -euo pipefail
           brew install gcc@9 || true
           gfortran --version || sudo ln -s /usr/local/bin/gfortran-9 /usr/local/bin/gfortran
-          gfortran
+          gfortran --version
       - name: "Install dependencies and code"
         run: |
           set -euo pipefail
