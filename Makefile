@@ -13,7 +13,7 @@ build: target/release/libpymemprofile_api.a
 
 # Only necessary for benchmarks, only works with Python 3.8 for now.
 venv/bin/_fil-python: filprofiler/*.c target/release/libpymemprofile_api.a
-	gcc -std=c11 $(shell python3.8-config --cflags --ldflags) -O3 -lpython3.8 -export-dynamic -flto -o $@ $^ ./target/release/libpymemprofile_api.a
+	gcc -std=c11 $(shell python3.8-config --cflags) -export-dynamic -flto -o $@ $^ -lpython3.8 $(shell python3.8-config --ldflags)
 
 target/release/libpymemprofile_api.a: Cargo.lock memapi/Cargo.toml memapi/src/*.rs
 	cargo build --release
