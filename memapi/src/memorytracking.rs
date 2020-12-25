@@ -521,6 +521,20 @@ impl<'a> AllocationTracker {
             libc::_exit(5);
         }
     }
+
+    /// Reset internal state in way that doesn't invalidate e.g. thread-local
+    /// caching of callstack ID.
+    fn reset(&mut self, default_path: String) {
+        self.current_allocations.clear();
+        self.current_anon_mmaps = RangeMap::new();
+        for i in self.current_memory_usage.iter_mut() {
+            *i = 0;
+        }
+        self.peak_memory_usage = ImVector::new();
+        self.current_allocated_bytes = 0;
+        self.peak_allocated_bytes = 0;
+        self.default_path = default_path;
+    }
 }
 
 lazy_static! {
@@ -603,7 +617,8 @@ pub fn free_anon_mmap(address: usize, length: libc::size_t) {
 
 /// Reset internal state.
 pub fn reset(default_path: String) {
-    *ALLOCATIONS.lock() = AllocationTracker::new(default_path);
+    let mut allocations = ALLOCATIONS.lock();
+    allocations.reset(default_path);
 }
 
 /// Dump all callstacks in peak memory usage to format used by flamegraph.
