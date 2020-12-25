@@ -393,6 +393,9 @@ impl<'a> AllocationTracker {
         // First, make sure peaks are correct:
         self.check_if_new_peak();
 
+        // Validate data is consistent.
+        self.validate();
+
         // We get a LOT of tiny allocations. To reduce overhead of creating
         // flamegraph (which currently loads EVERYTHING into memory), just do
         // the top 99% of allocations.
@@ -522,6 +525,23 @@ impl<'a> AllocationTracker {
         }
     }
 
+    /// Validate internal state is in a good state. This won't pass until
+    /// check_if_new_peak() is called.
+    fn validate(&self) {
+        assert!(self.peak_allocated_bytes >= self.current_allocated_bytes);
+        assert!(
+            self.current_anon_mmaps.size()
+                + self
+                    .current_allocations
+                    .iter()
+                    .map(|(_, alloc)| alloc.size())
+                    .sum::<usize>()
+                == self.current_allocated_bytes
+        );
+        assert!(self.current_memory_usage.iter().sum::<usize>() == self.current_allocated_bytes);
+        assert!(self.peak_memory_usage.iter().sum::<usize>() == self.peak_allocated_bytes);
+    }
+
     /// Reset internal state in way that doesn't invalidate e.g. thread-local
     /// caching of callstack ID.
     fn reset(&mut self, default_path: String) {
@@ -534,6 +554,7 @@ impl<'a> AllocationTracker {
         self.current_allocated_bytes = 0;
         self.peak_allocated_bytes = 0;
         self.default_path = default_path;
+        self.validate();
     }
 }
 
