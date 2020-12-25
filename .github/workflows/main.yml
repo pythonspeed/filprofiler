@@ -40,7 +40,11 @@ jobs:
             sudo apt-get install -y gfortran
       - name: Install gfortran 2
         if: contains(matrix.os, 'macos')
-        run: "brew install gcc || true"
+        run: |
+          set -euo pipefail
+          brew install gcc@9 || true
+          gfortran --version || sudo ln -s /usr/local/bin/gfortran-9 /usr/local/bin/gfortran
+          gfortran --version
       - name: "Install dependencies and code"
         run: |
           set -euo pipefail
