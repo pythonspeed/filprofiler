@@ -29,7 +29,7 @@ test-rust:
 .PHONY: test-python
 test-python: build
 	make test-python-no-deps
-	env RUST_BACKTRACE=1 py.test filprofiler/tests/
+	env RUST_BACKTRACE=1 py.test filprofiler/tests/ -k test_interpreter_with_fil
 
 .PHONY: test-python-no-deps
 test-python-no-deps:
