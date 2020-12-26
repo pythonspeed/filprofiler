@@ -380,6 +380,7 @@ impl<'a> AllocationTracker {
                 "{}",
                 self.interner.get_callstack(callstack_id).as_string(false)
             );
+            panic!("Goodbye!");
         }
         self.add_memory_usage(callstack_id, compressed_size as usize);
     }
