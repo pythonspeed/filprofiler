@@ -352,7 +352,13 @@ impl<'a> AllocationTracker {
     fn add_allocation(&mut self, address: usize, size: libc::size_t, callstack_id: CallstackId) {
         let alloc = Allocation::new(callstack_id, size);
         let compressed_size = alloc.size();
-        self.current_allocations.insert(address, alloc);
+        // TODO what if you have two allocations at same address?
+        if let Some(previous) = self.current_allocations.insert(address, alloc) {
+            println!(
+                "Previously address {} had {:?}, now it has {:?}???",
+                address, previous, alloc
+            );
+        }
         self.add_memory_usage(callstack_id, compressed_size as usize);
     }
 
