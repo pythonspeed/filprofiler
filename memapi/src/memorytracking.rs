@@ -360,6 +360,12 @@ impl<'a> AllocationTracker {
 
     /// Add a new allocation based off the current callstack.
     fn add_allocation(&mut self, address: usize, size: libc::size_t, callstack_id: CallstackId) {
+        println!(
+            "Adding allocation at address {} with size {} from thread {:?}",
+            address,
+            size,
+            std::thread::current().id()
+        );
         let alloc = Allocation::new(callstack_id, size);
         let compressed_size = alloc.size();
         // TODO what if you have two allocations at same address?
