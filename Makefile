@@ -29,7 +29,7 @@ test-rust:
 .PHONY: test-python
 test-python: build
 	make test-python-no-deps
-	env RUST_BACKTRACE=1 py.test filprofiler/tests/ -k test_interpreter_with_fil
+	env RUST_BACKTRACE=1 py.test filprofiler/tests/
 
 .PHONY: test-python-no-deps
 test-python-no-deps:
@@ -37,7 +37,7 @@ test-python-no-deps:
 	c++ -shared -fPIC -lpthread python-benchmarks/cpp.cpp -o python-benchmarks/cpp.so
 	cc -shared -fPIC -lpthread python-benchmarks/malloc_on_thread_exit.c -o python-benchmarks/malloc_on_thread_exit.so
 	cd python-benchmarks && python -m numpy.f2py -c fortran.f90 -m fortran
-	env RUST_BACKTRACE=1 py.test tests/
+	env RUST_BACKTRACE=1 py.test tests/ -k test_interpreter_with_fil
 
 .PHONY: docker-image
 docker-image:
