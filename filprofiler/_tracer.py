@@ -47,9 +47,9 @@ def stop_tracing(output_path: str) -> str:
     threading.setprofile(None)
     preload.fil_shutting_down()
     result = create_report(output_path)
-    # Clear allocaitons; we don't need them anymore, and they're just wasting
+    # Clear allocations; we don't need them anymore, and they're just wasting
     # memory:
-    # preload.fil_reset("/tmp")
+    preload.fil_reset("/tmp")
     return result
 
 
