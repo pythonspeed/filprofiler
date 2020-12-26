@@ -529,14 +529,17 @@ impl<'a> AllocationTracker {
     /// check_if_new_peak() is called.
     fn validate(&self) {
         assert!(self.peak_allocated_bytes >= self.current_allocated_bytes);
+        let current_allocations = self.current_anon_mmaps.size()
+            + self
+                .current_allocations
+                .iter()
+                .map(|(_, alloc)| alloc.size())
+                .sum::<usize>();
         assert!(
-            self.current_anon_mmaps.size()
-                + self
-                    .current_allocations
-                    .iter()
-                    .map(|(_, alloc)| alloc.size())
-                    .sum::<usize>()
-                == self.current_allocated_bytes
+            current_allocations == self.current_allocated_bytes,
+            "{} != {}",
+            current_allocations,
+            self.current_allocated_bytes
         );
         assert!(self.current_memory_usage.iter().sum::<usize>() == self.current_allocated_bytes);
         assert!(self.peak_memory_usage.iter().sum::<usize>() == self.peak_allocated_bytes);
