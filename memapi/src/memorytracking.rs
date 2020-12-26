@@ -203,7 +203,17 @@ impl<'a> CallstackInterner {
         }
     }
 
-    /// Get map from IDs to Functions.
+    /// Get callstack for an ID.
+    fn get_callstack(&self, id: CallstackId) -> &Callstack {
+        for (call_site, csid) in self.callstack_to_id.iter() {
+            if *csid == id {
+                return call_site;
+            }
+        }
+        panic!("Where's my callstack?!");
+    }
+
+    /// Get map from IDs to Callstacks.
     fn get_reverse_map(&self) -> HashMap<CallstackId, &Callstack> {
         let mut result = HashMap::default();
         for (call_site, csid) in self.callstack_to_id.iter() {
@@ -357,6 +367,18 @@ impl<'a> AllocationTracker {
             println!(
                 "Previously address {} had {:?}, now it has {:?}???",
                 address, previous, alloc
+            );
+            println!("==== Old callstack ====");
+            println!(
+                "{}",
+                self.interner
+                    .get_callstack(previous.callstack_id)
+                    .as_string(false)
+            );
+            println!("==== New calltack ====");
+            println!(
+                "{}",
+                self.interner.get_callstack(callstack_id).as_string(false)
             );
         }
         self.add_memory_usage(callstack_id, compressed_size as usize);
