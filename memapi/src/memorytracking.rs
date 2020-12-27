@@ -360,33 +360,19 @@ impl<'a> AllocationTracker {
 
     /// Add a new allocation based off the current callstack.
     fn add_allocation(&mut self, address: usize, size: libc::size_t, callstack_id: CallstackId) {
-        /*println!(
-            "Adding allocation at address {} with size {} from thread {:?}",
-            address,
-            size,
-            std::thread::current().id()
-        );*/
         let alloc = Allocation::new(callstack_id, size);
         let compressed_size = alloc.size();
-        // TODO what if you have two allocations at same address?
         if let Some(previous) = self.current_allocations.insert(address, alloc) {
-            /*println!(
-                "Previously address {} had {:?}, now it has {:?}???",
-                address, previous, alloc
+            // I've seen this happen on macOS only in some threaded code
+            // (malloc_on_thread_exit test). Not sure why, but difference was
+            // only 16 bytes, which shouldn't have real impact on profiling
+            // outcomes.
+            eprintln!(
+                "=fil-profile= WARNING: Somehow an allocation of size {} disappeared. This can happen if e.g. a library frees memory with private OS APIs. If this happens only a few times with small allocations, it doesn't really matter. If you see this happening a lot, or with large allocations, please file a bug.",
+                previous.size()
             );
-            println!("==== Old callstack ====");
-            println!(
-                "{}",
-                self.interner
-                    .get_callstack(previous.callstack_id)
-                    .as_string(false)
-            );
-            println!("==== New calltack ====");
-            println!(
-                "{}",
-                self.interner.get_callstack(callstack_id).as_string(false)
-            );
-            panic!("Goodbye!");*/
+            // Cleanup the previous allocation, since we never saw its free():
+            self.remove_memory_usage(previous.callstack_id, previous.size());
         }
         self.add_memory_usage(callstack_id, compressed_size as usize);
     }
