@@ -203,16 +203,6 @@ impl<'a> CallstackInterner {
         }
     }
 
-    /// Get callstack for an ID.
-    fn get_callstack(&self, id: CallstackId) -> &Callstack {
-        for (call_site, csid) in self.callstack_to_id.iter() {
-            if *csid == id {
-                return call_site;
-            }
-        }
-        panic!("Where's my callstack?!");
-    }
-
     /// Get map from IDs to Callstacks.
     fn get_reverse_map(&self) -> HashMap<CallstackId, &Callstack> {
         let mut result = HashMap::default();
@@ -781,6 +771,8 @@ mod tests {
             tracker.free_anon_mmap(1, size * 2);
             // Once we've freed everything, it should be _exactly_ 0.
             prop_assert_eq!(&im::vector![0], &tracker.current_memory_usage);
+            tracker.check_if_new_peak();
+            tracker.validate();
         }
 
         #[test]
@@ -811,6 +803,8 @@ mod tests {
                 prop_assert_eq!(&tracker.current_memory_usage, &expected_memory_usage);
             }
             prop_assert_eq!(tracker.peak_allocated_bytes, expected_peak);
+            tracker.check_if_new_peak();
+            tracker.validate();
         }
 
         #[test]
@@ -843,6 +837,8 @@ mod tests {
                 prop_assert_eq!(&tracker.current_memory_usage, &expected_memory_usage);
             }
             prop_assert_eq!(tracker.peak_allocated_bytes, expected_peak);
+            tracker.check_if_new_peak();
+            tracker.validate();
         }
 
         #[test]
@@ -1084,6 +1080,8 @@ mod tests {
         assert_eq!(tracker.current_allocated_bytes, 1123);
         assert_eq!(tracker.peak_allocated_bytes, 3123);
         assert_eq!(tracker.current_anon_mmaps.size(), 1000);
+        tracker.check_if_new_peak();
+        tracker.validate();
     }
 
     #[test]
