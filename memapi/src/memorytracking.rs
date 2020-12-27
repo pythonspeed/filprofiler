@@ -414,8 +414,14 @@ impl<'a> AllocationTracker {
         // First, make sure peaks are correct:
         self.check_if_new_peak();
 
-        // Validate data is consistent.
-        self.validate();
+        // Would be nice to validate if data is consistent. However, there are
+        // edge cases that make it slightly inconsistent (e.g. see the
+        // unexpected code path in add_allocation() above), and blowing up
+        // without giving the user their data just because of a small
+        // inconsistency doesn't seem ideal. Perhaps if validate() merely
+        // reported problems, or maybe validate() should only be enabled in
+        // development mode.
+        //self.validate();
 
         // We get a LOT of tiny allocations. To reduce overhead of creating
         // flamegraph (which currently loads EVERYTHING into memory), just do
