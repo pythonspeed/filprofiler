@@ -360,17 +360,11 @@ impl<'a> AllocationTracker {
 
     /// Add a new allocation based off the current callstack.
     fn add_allocation(&mut self, address: usize, size: libc::size_t, callstack_id: CallstackId) {
-        /*println!(
-            "Adding allocation at address {} with size {} from thread {:?}",
-            address,
-            size,
-            std::thread::current().id()
-        );*/
         let alloc = Allocation::new(callstack_id, size);
         let compressed_size = alloc.size();
         // TODO what if you have two allocations at same address?
         if let Some(previous) = self.current_allocations.insert(address, alloc) {
-            println!(
+            /*            println!(
                 "Previously address {} had {:?}, now it has {:?}???",
                 address, previous, alloc
             );
@@ -386,7 +380,7 @@ impl<'a> AllocationTracker {
                 "{}",
                 self.interner.get_callstack(callstack_id).as_string(false)
             );
-            panic!("Goodbye!");
+            panic!("Goodbye!");*/
         }
         self.add_memory_usage(callstack_id, compressed_size as usize);
     }
