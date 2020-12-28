@@ -95,9 +95,22 @@ jobs:
             twine upload --repository pypi dist/*.whl
       - name: Benchmark
         if: (matrix.python-version == '3.8') && startsWith(matrix.os, 'ubuntu')
+        env:
+          URL: ${{ github.event.issue.comments_url }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           sudo apt-get install -y valgrind
           . venv/bin/activate
           make venv/bin/_fil-python
           make -j4 benchmark
+          echo "## Benchmark results" > benchmark.diff
+          echo "```diff" >> benchmark.diff
+          git diff --word-diff benchmark-results/ >> benchmark.diff
+          echo "```" >> benchmark.diff
+          curl \
+            -X POST \
+            $URL \
+            -H "Content-Type: application/json" \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            --data '{ "body": $(jq -R -s benchmark.diff) }'
