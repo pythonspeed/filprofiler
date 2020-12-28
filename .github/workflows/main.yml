@@ -101,8 +101,6 @@ jobs:
           . venv/bin/activate
           make venv/bin/_fil-python
           make -j4 benchmark
-          head -5 cachegrind.out.*
-          tail -n 1 cachegrind.out.*
           echo "## Benchmark results" > benchmark.diff
           echo '```diff' >> benchmark.diff
           git diff --word-diff benchmark-results/ >> benchmark.diff
