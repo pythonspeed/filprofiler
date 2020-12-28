@@ -38,13 +38,13 @@ jobs:
           echo '# " alalal'  >> benchmark.diff
           echo '```diff' >> benchmark.diff
           echo '```' >> benchmark.diff
-          echo $(set -e && jq -R -s benchmark.diff)
+          echo $(set -euo pipefail && cat benchmark.diff | jq -R -s)
           curl \
             -X POST \
             $URL \
             -H "Content-Type: application/json" \
             -H "Authorization: token $GITHUB_TOKEN" \
-            --data '{ "body": $(set -e && jq -R -s benchmark.diff) }'
+            --data '{ "body": $(set -euo pipefail && cat benchmark.diff | jq -R -s) }'
 
       - uses: "actions/setup-python@v2"
         with:
