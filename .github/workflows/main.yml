@@ -29,9 +29,6 @@ jobs:
           fetch-depth: 0
       - name: Benchmark-test
         if: (matrix.python-version == '3.8') && startsWith(matrix.os, 'ubuntu')
-        env:
-          URL: ${{ github.event.pull_request.comments_url }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           echo "## Benchmark results" > benchmark.diff
@@ -41,9 +38,9 @@ jobs:
           echo $(set -euo pipefail && cat benchmark.diff | jq -R -s)
           curl \
             -X POST \
-            $URL \
+            ${{ github.event.pull_request.comments_url }} \
             -H "Content-Type: application/json" \
-            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             --data '{ "body": $(set -euo pipefail && cat benchmark.diff | jq -R -s) }'
 
       - uses: "actions/setup-python@v2"
