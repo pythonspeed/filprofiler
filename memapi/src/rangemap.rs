@@ -1,5 +1,6 @@
 use libc;
 use std::cmp::{max, min};
+#[cfg(test)]
 use std::collections::HashMap;
 
 /// Open-ended range in memory, [A...B).
@@ -117,11 +118,11 @@ impl<V: Clone> RangeMap<V> {
         removed
     }
 
-    #[cfg(test)]
     pub fn size(&self) -> usize {
         self.ranges.iter().map(|(r, _)| r.size()).sum()
     }
 
+    #[cfg(test)]
     pub fn as_hashmap(&self) -> HashMap<usize, (usize, &V)> {
         self.ranges
             .iter()
