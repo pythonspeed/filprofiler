@@ -203,7 +203,7 @@ impl<'a> CallstackInterner {
         }
     }
 
-    /// Get map from IDs to Functions.
+    /// Get map from IDs to Callstacks.
     fn get_reverse_map(&self) -> HashMap<CallstackId, &Callstack> {
         let mut result = HashMap::default();
         for (call_site, csid) in self.callstack_to_id.iter() {
@@ -352,7 +352,18 @@ impl<'a> AllocationTracker {
     fn add_allocation(&mut self, address: usize, size: libc::size_t, callstack_id: CallstackId) {
         let alloc = Allocation::new(callstack_id, size);
         let compressed_size = alloc.size();
-        self.current_allocations.insert(address, alloc);
+        if let Some(previous) = self.current_allocations.insert(address, alloc) {
+            // I've seen this happen on macOS only in some threaded code
+            // (malloc_on_thread_exit test). Not sure why, but difference was
+            // only 16 bytes, which shouldn't have real impact on profiling
+            // outcomes.
+            eprintln!(
+                "=fil-profile= WARNING: Somehow an allocation of size {} disappeared. This can happen if e.g. a library frees memory with private OS APIs. If this happens only a few times with small allocations, it doesn't really matter. If you see this happening a lot, or with large allocations, please file a bug.",
+                previous.size()
+            );
+            // Cleanup the previous allocation, since we never saw its free():
+            self.remove_memory_usage(previous.callstack_id, previous.size());
+        }
         self.add_memory_usage(callstack_id, compressed_size as usize);
     }
 
@@ -392,6 +403,15 @@ impl<'a> AllocationTracker {
     ) -> HashMap<CallstackId, usize> {
         // First, make sure peaks are correct:
         self.check_if_new_peak();
+
+        // Would be nice to validate if data is consistent. However, there are
+        // edge cases that make it slightly inconsistent (e.g. see the
+        // unexpected code path in add_allocation() above), and blowing up
+        // without giving the user their data just because of a small
+        // inconsistency doesn't seem ideal. Perhaps if validate() merely
+        // reported problems, or maybe validate() should only be enabled in
+        // development mode.
+        //self.validate();
 
         // We get a LOT of tiny allocations. To reduce overhead of creating
         // flamegraph (which currently loads EVERYTHING into memory), just do
@@ -521,6 +541,41 @@ impl<'a> AllocationTracker {
             libc::_exit(5);
         }
     }
+
+    /// Validate internal state is in a good state. This won't pass until
+    /// check_if_new_peak() is called.
+    fn validate(&self) {
+        assert!(self.peak_allocated_bytes >= self.current_allocated_bytes);
+        let current_allocations = self.current_anon_mmaps.size()
+            + self
+                .current_allocations
+                .iter()
+                .map(|(_, alloc)| alloc.size())
+                .sum::<usize>();
+        assert!(
+            current_allocations == self.current_allocated_bytes,
+            "{} != {}",
+            current_allocations,
+            self.current_allocated_bytes
+        );
+        assert!(self.current_memory_usage.iter().sum::<usize>() == self.current_allocated_bytes);
+        assert!(self.peak_memory_usage.iter().sum::<usize>() == self.peak_allocated_bytes);
+    }
+
+    /// Reset internal state in way that doesn't invalidate e.g. thread-local
+    /// caching of callstack ID.
+    fn reset(&mut self, default_path: String) {
+        self.current_allocations.clear();
+        self.current_anon_mmaps = RangeMap::new();
+        for i in self.current_memory_usage.iter_mut() {
+            *i = 0;
+        }
+        self.peak_memory_usage = ImVector::new();
+        self.current_allocated_bytes = 0;
+        self.peak_allocated_bytes = 0;
+        self.default_path = default_path;
+        self.validate();
+    }
 }
 
 lazy_static! {
@@ -603,7 +658,8 @@ pub fn free_anon_mmap(address: usize, length: libc::size_t) {
 
 /// Reset internal state.
 pub fn reset(default_path: String) {
-    *ALLOCATIONS.lock() = AllocationTracker::new(default_path);
+    let mut allocations = ALLOCATIONS.lock();
+    allocations.reset(default_path);
 }
 
 /// Dump all callstacks in peak memory usage to format used by flamegraph.
@@ -715,6 +771,8 @@ mod tests {
             tracker.free_anon_mmap(1, size * 2);
             // Once we've freed everything, it should be _exactly_ 0.
             prop_assert_eq!(&im::vector![0], &tracker.current_memory_usage);
+            tracker.check_if_new_peak();
+            tracker.validate();
         }
 
         #[test]
@@ -745,6 +803,8 @@ mod tests {
                 prop_assert_eq!(&tracker.current_memory_usage, &expected_memory_usage);
             }
             prop_assert_eq!(tracker.peak_allocated_bytes, expected_peak);
+            tracker.check_if_new_peak();
+            tracker.validate();
         }
 
         #[test]
@@ -777,6 +837,8 @@ mod tests {
                 prop_assert_eq!(&tracker.current_memory_usage, &expected_memory_usage);
             }
             prop_assert_eq!(tracker.peak_allocated_bytes, expected_peak);
+            tracker.check_if_new_peak();
+            tracker.validate();
         }
 
         #[test]
@@ -1018,6 +1080,8 @@ mod tests {
         assert_eq!(tracker.current_allocated_bytes, 1123);
         assert_eq!(tracker.peak_allocated_bytes, 3123);
         assert_eq!(tracker.current_anon_mmaps.size(), 1000);
+        tracker.check_if_new_peak();
+        tracker.validate();
     }
 
     #[test]

@@ -25,6 +25,7 @@ def start_tracing(output_path: str):
     """Start tracing allocations."""
     path = os.path.join(output_path, timestamp_now()).encode("utf-8")
     preload.fil_reset(path)
+    preload.fil_start_tracing()
     threading.setprofile(_start_thread_trace)
     preload.register_fil_tracer()
 
@@ -50,7 +51,11 @@ def stop_tracing(output_path: str) -> str:
     sys.setprofile(None)
     threading.setprofile(None)
     preload.fil_shutting_down()
-    return create_report(output_path)
+    result = create_report(output_path)
+    # Clear allocations; we don't need them anymore, and they're just wasting
+    # memory:
+    preload.fil_reset("/tmp")
+    return result
 
 
 def create_report(output_path: str) -> str:
