@@ -74,19 +74,19 @@ data_kernelspec/kernel.json: generate-kernelspec.py
 	python generate-kernelspec.py
 
 .PHONY: benchmark
-benchmark: build venv/bin/_fil-python benchmark-results/*.json
+benchmark: benchmark-results/*.json
 	python setup.py --version > benchmark-results/version.txt
 	git diff benchmark-results/
 
 .PHONY: benchmark-results/pystone.json
-benchmark-results/pystone.json:
+benchmark-results/pystone.json: build venv/bin/_fil-python
 	FIL_NO_REPORT=1 FIL_BENCHMARK=benchmark-results/pystone.json fil-profile run python-benchmarks/pystone.py
 
 .PHONY: benchmark-results/image-translate.json
-benchmark-results/image-translate.json:
+benchmark-results/image-translate.json: build venv/bin/_fil-python
 	pip install scikit-image==0.16.2
 	FIL_NO_REPORT=1 FIL_BENCHMARK=benchmark-results/image-translate.json fil-profile run python-benchmarks/image-translate.py 2
 
 .PHONY: benchmark-results/multithreading-1.json
-benchmark-results/multithreading-1.json:
+benchmark-results/multithreading-1.json: build venv/bin/_fil-python
 	FIL_NO_REPORT=1 FIL_BENCHMARK=benchmark-results/multithreading-1.json fil-profile run python-benchmarks/multithreading.py 1
