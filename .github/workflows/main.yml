@@ -27,6 +27,27 @@ jobs:
         with:
           # We need tags to get the correct code version:
           fetch-depth: 0
+      - name: Benchmark-test
+        if: (matrix.python-version == '3.8') && startsWith(matrix.os, 'ubuntu')
+        env:
+          URL: ${{ github.event.pull_request.comments_url }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y valgrind
+          . venv/bin/activate
+          echo "## Benchmark results" > benchmark.diff
+          echo '# " alalal'  >> benchmark.diff
+          echo '```diff' >> benchmark.diff
+          echo '```' >> benchmark.diff
+          echo $(set -e && jq -R -s benchmark.diff)
+          curl \
+            -X POST \
+            $URL \
+            -H "Content-Type: application/json" \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            --data '{ "body": $(set -e && jq -R -s benchmark.diff) }'
+
       - uses: "actions/setup-python@v2"
         with:
           python-version: "${{ matrix.python-version }}"
