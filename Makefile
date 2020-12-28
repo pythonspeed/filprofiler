@@ -76,7 +76,7 @@ data_kernelspec/kernel.json: generate-kernelspec.py
 .PHONY: benchmark
 benchmark: benchmark-results/*.json
 	python setup.py --version > benchmark-results/version.txt
-	git diff benchmark-results/
+	git diff --word-diff benchmark-results/
 
 .PHONY: benchmark-results/pystone.json
 benchmark-results/pystone.json: build venv/bin/_fil-python
