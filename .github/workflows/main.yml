@@ -105,9 +105,9 @@ jobs:
           make venv/bin/_fil-python
           make -j4 benchmark
           echo "## Benchmark results" > benchmark.diff
-          echo "```diff" >> benchmark.diff
+          echo '```diff' >> benchmark.diff
           git diff --word-diff benchmark-results/ >> benchmark.diff
-          echo "```" >> benchmark.diff
+          echo '```' >> benchmark.diff
           curl \
             -X POST \
             $URL \
