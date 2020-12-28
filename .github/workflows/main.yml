@@ -34,8 +34,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          sudo apt-get install -y valgrind
-          . venv/bin/activate
           echo "## Benchmark results" > benchmark.diff
           echo '# " alalal'  >> benchmark.diff
           echo '```diff' >> benchmark.diff
