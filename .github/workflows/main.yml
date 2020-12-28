@@ -27,25 +27,6 @@ jobs:
         with:
           # We need tags to get the correct code version:
           fetch-depth: 0
-      - name: Benchmark-test
-        if: (matrix.python-version == '3.8') && startsWith(matrix.os, 'ubuntu')
-        run: |
-          set -euo pipefail
-          echo "## Benchmark results" > benchmark.diff
-          echo '# " alalal'  >> benchmark.diff
-          echo '```diff' >> benchmark.diff
-          echo '```' >> benchmark.diff
-          printf '{ "body": ' > benchmark.json
-          cat benchmark.diff | jq -R -s >> benchmark.json
-          printf '}' >> benchmark.json
-          cat benchmark.json
-          curl \
-            -X POST \
-            ${{ github.event.pull_request.comments_url }} \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            --data @benchmark.json
-
       - uses: "actions/setup-python@v2"
         with:
           python-version: "${{ matrix.python-version }}"
@@ -114,9 +95,6 @@ jobs:
             twine upload --repository pypi dist/*.whl
       - name: Benchmark
         if: (matrix.python-version == '3.8') && startsWith(matrix.os, 'ubuntu')
-        env:
-          URL: ${{ github.event.pull_request.comments_url }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           sudo apt-get install -y valgrind
@@ -127,9 +105,13 @@ jobs:
           echo '```diff' >> benchmark.diff
           git diff --word-diff benchmark-results/ >> benchmark.diff
           echo '```' >> benchmark.diff
+          printf '{ "body": ' > benchmark.json
+          cat benchmark.diff | jq -R -s >> benchmark.json
+          printf '}' >> benchmark.json
+          cat benchmark.json
           curl \
             -X POST \
-            $URL \
+            ${{ github.event.pull_request.comments_url }} \
             -H "Content-Type: application/json" \
-            -H "Authorization: token $GITHUB_TOKEN" \
-            --data '{ "body": $(jq -R -s benchmark.diff) }'
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            --data @benchmark.json
