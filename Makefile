@@ -84,7 +84,7 @@ benchmark-results/pystone.json: build venv/bin/_fil-python
 
 .PHONY: benchmark-results/image-translate.json
 benchmark-results/image-translate.json: build venv/bin/_fil-python
-	pip install scikit-image==0.16.2
+	pip install --upgrade scikit-image==0.16.2 PyWavelets==1.1.1 scipy==1.4.1 numpy==1.18.0 imageio==2.6.1
 	FIL_NO_REPORT=1 FIL_BENCHMARK=benchmark-results/image-translate.json fil-profile run python-benchmarks/image-translate.py 2
 
 .PHONY: benchmark-results/multithreading-1.json
