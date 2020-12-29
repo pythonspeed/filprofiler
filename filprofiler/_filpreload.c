@@ -400,6 +400,8 @@ SYMBOL_PREFIX(munmap)(void *addr, size_t length) {
   return result;
 }
 
+// Old glibc that conda uses doesn't support ALIGNED_ALLOC
+#ifndef FIL_SKIP_ALIGNED_ALLOC
 __attribute__((visibility("default"))) void *
 SYMBOL_PREFIX(aligned_alloc)(size_t alignment, size_t size) {
   void *result = REAL_IMPL(aligned_alloc)(alignment, size);
@@ -412,6 +414,7 @@ SYMBOL_PREFIX(aligned_alloc)(size_t alignment, size_t size) {
   }
   return result;
 }
+#endif
 
 #ifdef __linux__
 // Make sure we expose jemalloc variant of malloc_usable_size(), in case someone

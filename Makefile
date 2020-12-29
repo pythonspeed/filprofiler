@@ -12,8 +12,9 @@ build: target/release/libpymemprofile_api.a
 	python setup.py install_data
 
 # Only necessary for benchmarks, only works with Python 3.8 for now.
-venv/bin/_fil-python: filprofiler/*.c target/release/libpymemprofile_api.a
-	gcc -std=c11 $(shell python3.8-config --cflags) -export-dynamic -flto -o $@ $^ -lpython3.8 $(shell python3.8-config --ldflags)
+.PHONY: _fil-python
+_fil-python: filprofiler/*.c target/release/libpymemprofile_api.a
+	gcc -std=c11 $(shell python3.8-config --cflags) -DFIL_SKIP_ALIGNED_ALLOC=1 -export-dynamic -flto -o ${CONDA_PREFIX}/bin/_fil-python $^ -lpython3.8 $(shell python3.8-config --ldflags)
 
 target/release/libpymemprofile_api.a: Cargo.lock memapi/Cargo.toml memapi/src/*.rs
 	cargo build --release
@@ -74,19 +75,20 @@ data_kernelspec/kernel.json: generate-kernelspec.py
 	python generate-kernelspec.py
 
 .PHONY: benchmark
-benchmark: benchmarks/results/*.json
+benchmark: _fil-python
+	make -j2 benchmarks/results/*.json
 	python setup.py --version > benchmarks/results/version.txt
 	git diff --word-diff benchmarks/results/
 
 .PHONY: benchmarks/results/pystone.json
-benchmarks/results/pystone.json: venv/bin/_fil-python
+benchmarks/results/pystone.json:
 	FIL_NO_REPORT=1 FIL_BENCHMARK=benchmarks/results/pystone.json fil-profile run benchmarks/pystone.py
 
 .PHONY: benchmarks/results/lots-of-peaks.json
-benchmarks/results/lots-of-peaks.json: venv/bin/_fil-python
+benchmarks/results/lots-of-peaks.json:
 	FIL_NO_REPORT=1 FIL_BENCHMARK=benchmarks/results/lots-of-peaks.json fil-profile run benchmarks/lots-of-peaks.py
 
 .PHONY: benchmarks/results/multithreading-1.json
-benchmarks/results/multithreading-1.json: venv/bin/_fil-python
+benchmarks/results/multithreading-1.json:
 	cythonize -3 -i benchmarks/pymalloc.pyx
 	FIL_NO_REPORT=1 FIL_BENCHMARK=benchmarks/results/multithreading-1.json fil-profile run benchmarks/multithreading.py 1
