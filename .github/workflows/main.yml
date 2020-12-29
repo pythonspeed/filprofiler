@@ -115,7 +115,7 @@ jobs:
         with:
           auto-update-conda: false
           activate-environment: benchmark
-          environment-file: benchmarks/conda-lock-64.lock
+          environment-file: benchmarks/conda-linux-64.lock
 
       - name: Benchmark
         run: |
