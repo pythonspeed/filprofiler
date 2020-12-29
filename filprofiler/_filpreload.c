@@ -400,7 +400,7 @@ SYMBOL_PREFIX(munmap)(void *addr, size_t length) {
   return result;
 }
 
-// Old glibc that conda uses doesn't support ALIGNED_ALLOC
+// Old glibc that conda uses doesn't support aligned_alloc()
 #ifndef FIL_SKIP_ALIGNED_ALLOC
 __attribute__((visibility("default"))) void *
 SYMBOL_PREFIX(aligned_alloc)(size_t alignment, size_t size) {
@@ -486,7 +486,10 @@ DYLD_INTERPOSE(SYMBOL_PREFIX(realloc), realloc)
 DYLD_INTERPOSE(SYMBOL_PREFIX(free), free)
 DYLD_INTERPOSE(SYMBOL_PREFIX(mmap), mmap)
 DYLD_INTERPOSE(SYMBOL_PREFIX(munmap), munmap)
+// Old macOS ABI that Conda uses doesn't support aligned_alloc().
+#  ifndef FIL_SKIP_ALIGNED_ALLOC
 DYLD_INTERPOSE(SYMBOL_PREFIX(aligned_alloc), aligned_alloc)
+#  endif
 DYLD_INTERPOSE(SYMBOL_PREFIX(posix_memalign), posix_memalign)
 DYLD_INTERPOSE(SYMBOL_PREFIX(pthread_create), pthread_create)
 #endif
