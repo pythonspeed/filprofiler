@@ -121,7 +121,8 @@ jobs:
         run: |
           set -euo pipefail
           ln -s $CONDA_PREFIX venv
-          make venv/bin/_fil-python
+          make
+          make _fil-python
           make benchmark
           echo "## Benchmark results" > benchmark.diff
           echo '```diff' >> benchmark.diff
