@@ -11,6 +11,11 @@ build: target/release/libpymemprofile_api.a
 	python setup.py build_ext --inplace
 	python setup.py install_data
 
+# Only necessary for benchmarks, only works with Python 3.8 for now.
+.PHONY: _fil-python
+_fil-python: filprofiler/*.c target/release/libpymemprofile_api.a
+	gcc -std=c11 $(shell python3.8-config --cflags) -DFIL_SKIP_ALIGNED_ALLOC=1 -export-dynamic -flto -o ${CONDA_PREFIX}/bin/_fil-python $^ -lpython3.8 $(shell python3.8-config --ldflags)
+
 target/release/libpymemprofile_api.a: Cargo.lock memapi/Cargo.toml memapi/src/*.rs
 	cargo build --release
 
@@ -33,10 +38,10 @@ test-python: build
 
 .PHONY: test-python-no-deps
 test-python-no-deps:
-	cythonize -3 -i python-benchmarks/pymalloc.pyx
-	c++ -shared -fPIC -lpthread python-benchmarks/cpp.cpp -o python-benchmarks/cpp.so
-	cc -shared -fPIC -lpthread python-benchmarks/malloc_on_thread_exit.c -o python-benchmarks/malloc_on_thread_exit.so
-	cd python-benchmarks && python -m numpy.f2py -c fortran.f90 -m fortran
+	cythonize -3 -i tests/test-scripts/pymalloc.pyx
+	c++ -shared -fPIC -lpthread tests/test-scripts/cpp.cpp -o tests/test-scripts/cpp.so
+	cc -shared -fPIC -lpthread tests/test-scripts/malloc_on_thread_exit.c -o tests/test-scripts/malloc_on_thread_exit.so
+	cd tests/test-scripts && python -m numpy.f2py -c fortran.f90 -m fortran
 	env RUST_BACKTRACE=1 py.test tests/
 
 .PHONY: docker-image
@@ -53,7 +58,7 @@ manylinux-wheel:
 
 .PHONY: clean
 clean:
-	rm -f filprofiler/fil-python
+	rm -f filprofiler/_fil-python
 	rm -rf target
 	rm -rf filprofiler/*.so
 	rm -rf filprofiler/*.dylib
@@ -68,3 +73,24 @@ licenses:
 data_kernelspec/kernel.json: generate-kernelspec.py
 	rm -rf data_kernelspec
 	python generate-kernelspec.py
+
+.PHONY: benchmark
+benchmark: _fil-python
+# Possibly some cache warming is still necessary :(
+	make benchmarks/results/*.json
+	make benchmarks/results/*.json
+	python setup.py --version > benchmarks/results/version.txt
+	git diff --word-diff benchmarks/results/
+
+.PHONY: benchmarks/results/pystone.json
+benchmarks/results/pystone.json:
+	_RJEM_MALLOC_CONF=dirty_decay_ms:-1,muzzy_decay_ms:-1,abort_conf:true FIL_NO_REPORT=1 FIL_BENCHMARK=benchmarks/results/pystone.json fil-profile run benchmarks/pystone.py
+
+.PHONY: benchmarks/results/lots-of-peaks.json
+benchmarks/results/lots-of-peaks.json:
+	_RJEM_MALLOC_CONF=dirty_decay_ms:-1,muzzy_decay_ms:-1,abort_conf:true FIL_NO_REPORT=1 FIL_BENCHMARK=benchmarks/results/lots-of-peaks.json fil-profile run benchmarks/lots-of-peaks.py
+
+.PHONY: benchmarks/results/multithreading-1.json
+benchmarks/results/multithreading-1.json:
+	cythonize -3 -i benchmarks/pymalloc.pyx
+	_RJEM_MALLOC_CONF=dirty_decay_ms:-1,muzzy_decay_ms:-1,abort_conf:true FIL_NO_REPORT=1 FIL_BENCHMARK=benchmarks/results/multithreading-1.json fil-profile run benchmarks/multithreading.py 1

@@ -2,7 +2,7 @@
 
 To run:
 
-$ fil-profile python -m pytest python-benchmarks/fil-interpreter.py
+$ fil-profile python -m pytest tests/test-scripts/fil-interpreter.py
 """
 
 import sys

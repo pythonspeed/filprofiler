@@ -1,3 +1,4 @@
+from os import environ
 from os.path import join
 from glob import glob
 from setuptools import setup, Extension
@@ -16,6 +17,11 @@ def read(path):
         return f.read()
 
 
+extra_compile_args = ["-fno-omit-frame-pointer"]
+if environ.get("CONDA_PREFIX"):
+    extra_compile_args.append("-DFIL_SKIP_ALIGNED_ALLOC=1")
+
+
 setup(
     name="filprofiler",
     packages=["filprofiler"],
@@ -25,7 +31,7 @@ setup(
             name="filprofiler._filpreload",
             sources=[join("filprofiler", "_filpreload.c")],
             extra_objects=[join("target", "release", "libpymemprofile_api.a")],
-            extra_compile_args=["-fno-omit-frame-pointer"],
+            extra_compile_args=extra_compile_args,
             extra_link_args=["-export-dynamic"],
         )
     ],
@@ -34,7 +40,7 @@ setup(
         (
             join("share", "jupyter", "kernels", "filprofile"),
             glob(join("data_kernelspec", "*")),
-        )
+        ),
     ],
     use_scm_version=True,
     install_requires=["threadpoolctl"],

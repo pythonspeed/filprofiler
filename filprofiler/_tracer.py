@@ -12,7 +12,12 @@ from contextlib import contextmanager
 from ._utils import timestamp_now, library_path
 from ._report import render_report
 
-preload = PyDLL(library_path("_filpreload"))
+if os.environ.get("FIL_BENCHMARK"):
+    # We're using Valgrind + executable:
+    preload = PyDLL(None)
+else:
+    # We're using preloaded library:
+    preload = PyDLL(library_path("_filpreload"))
 preload.fil_initialize_from_python()
 
 
@@ -67,6 +72,12 @@ def trace_until_exit(code, globals_, output_path: str):
     """
 
     def shutdown():
+        if os.environ.get("FIL_NO_REPORT"):
+            print(
+                "=fil-profile= FIL_NO_REPORT env variable is set, skipping report.",
+                file=sys.stderr,
+            )
+            return
         index_path = stop_tracing(output_path)
         print("=fil-profile= Wrote HTML report to " + index_path, file=sys.stderr)
         try:

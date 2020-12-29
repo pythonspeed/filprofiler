@@ -1,11 +1,12 @@
 use super::rangemap::RangeMap;
-use ahash::AHashMap as HashMap;
+use ahash::RandomState as ARandomState;
 use im::Vector as ImVector;
 use inferno::flamegraph;
 use itertools::Itertools;
 use libc;
 use parking_lot::Mutex;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
@@ -171,17 +172,30 @@ thread_local!(static THREAD_CALLSTACK: RefCell<Callstack> = RefCell::new(Callsta
 
 type CallstackId = u32;
 
+/// Create a new hashmap with an optional fixed seed. We use PYTHONHASHSEED on
+/// the theory that if it's set, we want these hashes to be consistent too.
+fn new_hashmap<K, V>() -> HashMap<K, V, ARandomState> {
+    match std::env::var("PYTHONHASHSEED") {
+        Ok(value) => {
+            let seed = value.parse::<i64>().unwrap();
+            let seed = seed as u64;
+            HashMap::with_hasher(ARandomState::with_seeds(seed, seed + 1, seed + 2, seed + 3))
+        }
+        _ => HashMap::default(),
+    }
+}
+
 /// Maps Functions to integer identifiers used in CallStacks.
 struct CallstackInterner {
     max_id: CallstackId,
-    callstack_to_id: HashMap<Callstack, u32>,
+    callstack_to_id: HashMap<Callstack, u32, ARandomState>,
 }
 
 impl<'a> CallstackInterner {
     fn new() -> Self {
         CallstackInterner {
             max_id: 0,
-            callstack_to_id: HashMap::default(),
+            callstack_to_id: new_hashmap(),
         }
     }
 
@@ -204,8 +218,8 @@ impl<'a> CallstackInterner {
     }
 
     /// Get map from IDs to Callstacks.
-    fn get_reverse_map(&self) -> HashMap<CallstackId, &Callstack> {
-        let mut result = HashMap::default();
+    fn get_reverse_map(&self) -> HashMap<CallstackId, &Callstack, ARandomState> {
+        let mut result = new_hashmap();
         for (call_site, csid) in self.callstack_to_id.iter() {
             result.insert(*csid, call_site);
         }
@@ -257,7 +271,9 @@ impl Allocation {
 // 2. Top 99% of allocations, starting with largest, are kept.
 // 3. If that's less than 100 allocations, thrown in up to 100, main goal is
 //    just to not have a vast number of useless tiny allocations.
-fn filter_to_useful_callstacks(allocations: &ImVector<usize>) -> HashMap<CallstackId, usize> {
+fn filter_to_useful_callstacks(
+    allocations: &ImVector<usize>,
+) -> HashMap<CallstackId, usize, ARandomState> {
     let total_allocated: usize = allocations.iter().sum();
     let mut stored = 0.0;
     allocations
@@ -289,7 +305,7 @@ fn filter_to_useful_callstacks(allocations: &ImVector<usize>) -> HashMap<Callsta
 /// The main data structure tracking everything.
 struct AllocationTracker {
     // malloc()/calloc():
-    current_allocations: HashMap<usize, Allocation>,
+    current_allocations: HashMap<usize, Allocation, ARandomState>,
     // anonymous mmap(), i.e. not file backed:
     current_anon_mmaps: RangeMap<CallstackId>,
 
@@ -309,7 +325,7 @@ struct AllocationTracker {
 impl<'a> AllocationTracker {
     fn new(default_path: String) -> AllocationTracker {
         AllocationTracker {
-            current_allocations: HashMap::default(),
+            current_allocations: new_hashmap(),
             current_anon_mmaps: RangeMap::new(),
             interner: CallstackInterner::new(),
             current_memory_usage: ImVector::new(),
@@ -400,7 +416,7 @@ impl<'a> AllocationTracker {
         &mut self,
         // If false, will do the current allocations:
         peak: bool,
-    ) -> HashMap<CallstackId, usize> {
+    ) -> HashMap<CallstackId, usize, ARandomState> {
         // First, make sure peaks are correct:
         self.check_if_new_peak();
 
@@ -729,9 +745,10 @@ mod tests {
         filter_to_useful_callstacks, Allocation, AllocationTracker, CallSiteId, Callstack,
         CallstackInterner, FunctionId, FunctionLocation, HIGH_32BIT, MIB,
     };
-    use ahash::AHashMap as HashMap;
+    use ahash::RandomState as ARandomState;
     use im;
     use proptest::prelude::*;
+    use std::collections::HashMap;
 
     proptest! {
         // Allocation sizes smaller than 2 ** 31 are round-tripped.
