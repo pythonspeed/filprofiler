@@ -82,13 +82,13 @@ benchmark: _fil-python
 
 .PHONY: benchmarks/results/pystone.json
 benchmarks/results/pystone.json:
-	FIL_NO_REPORT=1 FIL_BENCHMARK=benchmarks/results/pystone.json fil-profile run benchmarks/pystone.py
+	_RJEM_MALLOC_CONF=dirty_decay_ms:-1,muzzy_decay_ms:-1,abort_conf:true FIL_NO_REPORT=1 FIL_BENCHMARK=benchmarks/results/pystone.json fil-profile run benchmarks/pystone.py
 
 .PHONY: benchmarks/results/lots-of-peaks.json
 benchmarks/results/lots-of-peaks.json:
-	FIL_NO_REPORT=1 FIL_BENCHMARK=benchmarks/results/lots-of-peaks.json fil-profile run benchmarks/lots-of-peaks.py
+	_RJEM_MALLOC_CONF=dirty_decay_ms:-1,muzzy_decay_ms:-1,abort_conf:true FIL_NO_REPORT=1 FIL_BENCHMARK=benchmarks/results/lots-of-peaks.json fil-profile run benchmarks/lots-of-peaks.py
 
 .PHONY: benchmarks/results/multithreading-1.json
 benchmarks/results/multithreading-1.json:
 	cythonize -3 -i benchmarks/pymalloc.pyx
-	FIL_NO_REPORT=1 FIL_BENCHMARK=benchmarks/results/multithreading-1.json fil-profile run benchmarks/multithreading.py 1
+	_RJEM_MALLOC_CONF=dirty_decay_ms:-1,muzzy_decay_ms:-1,abort_conf:true FIL_NO_REPORT=1 FIL_BENCHMARK=benchmarks/results/multithreading-1.json fil-profile run benchmarks/multithreading.py 1

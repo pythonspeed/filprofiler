@@ -76,9 +76,10 @@ def stage_1():
     # Route all allocations from Python through malloc() directly:
     environ["PYTHONMALLOC"] = "malloc"
     # Tell jemalloc code (if used) to clean up faster:
-    environ[
-        "_RJEM_MALLOC_CONF"
-    ] = "dirty_decay_ms:100,muzzy_decay_ms:1000,abort_conf:true"
+    if environ.get("_RJEM_MALLOC_CONF") is None:
+        environ[
+            "_RJEM_MALLOC_CONF"
+        ] = "dirty_decay_ms:100,muzzy_decay_ms:1000,abort_conf:true"
 
     if sys.argv[1] == "python":
         environ["FIL_PYTHON"] = "1"
