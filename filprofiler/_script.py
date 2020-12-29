@@ -91,14 +91,27 @@ def stage_1():
         destination = environ["FIL_BENCHMARK"]
         # Set fixed hash, in order to get repeatable results:
         environ["PYTHONHASHSEED"] = "12345"
-        # Run using Valgrind + executable (Valgrind doesn't work well with
+
+        # We run the script twice, once with just normal Python, once with Fil,
+        # and report the difference. That way we're measuring overhead, and not
+        # counting time that's just Python doing its normal thing.
+        # 1. Run with just Python:
+        if sys.argv[1] == "python":
+            pyargs = sys.argv[2:]
+        else:
+            arguments = PARSER.parse_args()
+            pyargs = arguments.rest
+        python_result = benchmark([sys.executable] + pyargs)
+        # 2. Run using Valgrind + executable (Valgrind doesn't work well with
         # LD_PRELOAD).
-        result = benchmark([which("_fil-python")] + args)
+        fil_result = benchmark([which("_fil-python")] + args)
+        # 3. Store the difference.
+        result = {k: (fil_result[k] - python_result[k]) for k in fil_result}
         with open(destination, "w+") as f:
             json.dump(result, f, sort_keys=True, indent=4)
             f.flush()
             f.seek(0, 0)
-            print("Wrote performance to performance.json:")
+            print("Wrote performance to {}:".format(destination))
             print(f.read())
     else:
         # Normal operation, via LD_PRELOAD or equivalent:
@@ -115,10 +128,7 @@ PARSER = ArgumentParser(
 )
 PARSER.add_argument("--version", action="version", version=__version__)
 PARSER.add_argument(
-    "--license",
-    action="store_true",
-    default=False,
-    help="Print licensing information",
+    "--license", action="store_true", default=False, help="Print licensing information",
 )
 PARSER.add_argument(
     "-o",
@@ -129,10 +139,7 @@ PARSER.add_argument(
 )
 subparsers = PARSER.add_subparsers(help="sub-command help")
 parser_run = subparsers.add_parser(
-    "run",
-    help="Run a Python script or package",
-    prefix_chars=[""],
-    add_help=False,
+    "run", help="Run a Python script or package", prefix_chars=[""], add_help=False,
 )
 parser_run.set_defaults(command="run")
 parser_run.add_argument("rest", nargs=REMAINDER)
