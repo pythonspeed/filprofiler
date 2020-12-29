@@ -17,6 +17,9 @@ import pytest
 from filprofiler._testing import get_allocations, big, as_mb
 
 
+TEST_SCRIPTS = Path("tests") / "test-scripts"
+
+
 def profile(*arguments: Union[str, Path], expect_exit_code=0, **kwargs) -> Path:
     """Run fil-profile on given script, return path to output directory."""
     output = Path(mkdtemp())
@@ -39,7 +42,7 @@ def test_threaded_allocation_tracking():
     1. The main thread gets profiled.
     2. Other threads get profiled.
     """
-    script = Path("python-benchmarks") / "threaded.py"
+    script = TEST_SCRIPTS / "threaded.py"
     output_dir = profile(script)
     allocations = get_allocations(output_dir)
 
@@ -72,7 +75,7 @@ def test_thread_allocates_after_main_thread_is_done():
     fil-profile tracks thread allocations that happen after the main thread
     exits.
     """
-    script = Path("python-benchmarks") / "threaded_aftermain.py"
+    script = TEST_SCRIPTS / "threaded_aftermain.py"
     output_dir = profile(script)
     allocations = get_allocations(output_dir)
 
@@ -91,7 +94,7 @@ def test_c_thread():
     Allocations in C-only threads are considered allocations by the Python code
     that launched the thread.
     """
-    script = Path("python-benchmarks") / "c-thread.py"
+    script = TEST_SCRIPTS / "c-thread.py"
     output_dir = profile(script)
     allocations = get_allocations(output_dir)
 
@@ -105,7 +108,7 @@ def test_malloc_in_c_extension():
     """
     Various malloc() and friends variants in C extension gets captured.
     """
-    script = Path("python-benchmarks") / "malloc.py"
+    script = TEST_SCRIPTS / "malloc.py"
     output_dir = profile(script, "--size", "70")
     allocations = get_allocations(output_dir)
 
@@ -140,7 +143,7 @@ def test_anonymous_mmap():
 
     (NumPy uses Python memory APIs, so is not sufficient to test this.)
     """
-    script = Path("python-benchmarks") / "mmaper.py"
+    script = TEST_SCRIPTS / "mmaper.py"
     output_dir = profile(script)
     allocations = get_allocations(output_dir)
 
@@ -156,7 +159,7 @@ def test_python_objects():
 
     (NumPy uses Python memory APIs, so is not sufficient to test this.)
     """
-    script = Path("python-benchmarks") / "pyobject.py"
+    script = TEST_SCRIPTS / "pyobject.py"
     output_dir = profile(script)
     allocations = get_allocations(output_dir)
 
@@ -172,7 +175,7 @@ def test_minus_m():
     """
     `fil-profile -m package` runs the package.
     """
-    dir = Path("python-benchmarks")
+    dir = TEST_SCRIPTS
     script = (dir / "malloc.py").absolute()
     output_dir = profile("-m", "malloc", "--size", "50", cwd=dir)
     allocations = get_allocations(output_dir)
@@ -189,7 +192,7 @@ def test_minus_m_minus_m():
     """
     `python -m filprofiler -m package` runs the package.
     """
-    dir = Path("python-benchmarks")
+    dir = TEST_SCRIPTS
     script = (dir / "malloc.py").absolute()
     output_dir = Path(mkdtemp())
     check_call(
@@ -242,7 +245,7 @@ def test_out_of_memory():
     If an allocation is run that runs out of memory, current allocations are
     written out.
     """
-    script = Path("python-benchmarks") / "oom.py"
+    script = TEST_SCRIPTS / "oom.py"
     output_dir = profile(script, expect_exit_code=5)
     time.sleep(10)  # wait for child process to finish
     allocations = get_allocations(
@@ -270,13 +273,11 @@ def test_external_behavior():
     2. Fil only adds stderr lines prefixed with =fil-profile=
     3. A browser is launched with file:// URL pointing to an HTML file.
     """
-    script = Path("python-benchmarks") / "printer.py"
+    script = TEST_SCRIPTS / "printer.py"
     env = os.environ.copy()
     f = NamedTemporaryFile("r+")
     # A custom "browser" that just writes the URL to a file:
-    env["BROWSER"] = "{} %s {}".format(
-        Path("python-benchmarks") / "write-to-file.py", f.name
-    )
+    env["BROWSER"] = "{} %s {}".format(TEST_SCRIPTS / "write-to-file.py", f.name)
     output_dir = Path(mkdtemp())
     result = run(
         ["fil-profile", "-o", str(output_dir), "run", str(script)],
@@ -315,7 +316,7 @@ def test_fortran():
     """
     Fil can capture Fortran allocations.
     """
-    script = Path("python-benchmarks") / "fortranallocate.py"
+    script = TEST_SCRIPTS / "fortranallocate.py"
     output_dir = profile(script)
     allocations = get_allocations(output_dir)
 
@@ -327,7 +328,7 @@ def test_fortran():
 
 def test_free():
     """free() frees allocations as far as Fil is concerned."""
-    script = Path("python-benchmarks") / "ldpreload.py"
+    script = TEST_SCRIPTS / "ldpreload.py"
     profile(script)
 
 
@@ -339,15 +340,14 @@ def test_interpreter_with_fil():
             "python",
             "-m",
             "pytest",
-            str(Path("python-benchmarks") / "fil-interpreter.py"),
+            str(TEST_SCRIPTS / "fil-interpreter.py"),
         ]
     )
 
 
 def test_jupyter(tmpdir):
     """Jupyter magic can run Fil."""
-    tests_dir = Path(__file__).resolve().parent.parent / "python-benchmarks"
-    shutil.copyfile(tests_dir / "jupyter.ipynb", tmpdir / "jupyter.ipynb")
+    shutil.copyfile(TEST_SCRIPTS / "jupyter.ipynb", tmpdir / "jupyter.ipynb")
     check_call(
         ["jupyter", "nbconvert", "--execute", "jupyter.ipynb", "--to", "html",],
         cwd=tmpdir,
@@ -376,7 +376,7 @@ def test_jupyter(tmpdir):
 def test_no_threadpools_filprofile_run():
     """`fil-profile run` disables thread pools it knows about."""
     check_call(
-        ["fil-profile", "run", str(Path("python-benchmarks") / "threadpools.py"),]
+        ["fil-profile", "run", str(TEST_SCRIPTS / "threadpools.py"),]
     )
 
 
@@ -386,5 +386,5 @@ def test_malloc_on_thread_exit():
     Reproducer for https://github.com/pythonspeed/filprofiler/issues/99
     """
     check_call(
-        ["fil-profile", "run", str(Path("python-benchmarks") / "thread_exit.py"),]
+        ["fil-profile", "run", str(TEST_SCRIPTS / "thread_exit.py"),]
     )

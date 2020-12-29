@@ -103,7 +103,7 @@ jobs:
           make -j4 benchmark
           echo "## Benchmark results" > benchmark.diff
           echo '```diff' >> benchmark.diff
-          git diff --word-diff benchmark-results/ >> benchmark.diff
+          git diff --word-diff benchmarks/results/ >> benchmark.diff
           echo '```' >> benchmark.diff
           printf '{ "body": ' > benchmark.json
           cat benchmark.diff | jq -R -s >> benchmark.json

@@ -37,10 +37,10 @@ test-python: build
 
 .PHONY: test-python-no-deps
 test-python-no-deps:
-	cythonize -3 -i python-benchmarks/pymalloc.pyx
-	c++ -shared -fPIC -lpthread python-benchmarks/cpp.cpp -o python-benchmarks/cpp.so
-	cc -shared -fPIC -lpthread python-benchmarks/malloc_on_thread_exit.c -o python-benchmarks/malloc_on_thread_exit.so
-	cd python-benchmarks && python -m numpy.f2py -c fortran.f90 -m fortran
+	cythonize -3 -i tests/test-scripts/pymalloc.pyx
+	c++ -shared -fPIC -lpthread tests/test-scripts/cpp.cpp -o tests/test-scripts/cpp.so
+	cc -shared -fPIC -lpthread tests/test-scripts/malloc_on_thread_exit.c -o tests/test-scripts/malloc_on_thread_exit.so
+	cd tests/test-scripts && python -m numpy.f2py -c fortran.f90 -m fortran
 	env RUST_BACKTRACE=1 py.test tests/
 
 .PHONY: docker-image
@@ -74,19 +74,20 @@ data_kernelspec/kernel.json: generate-kernelspec.py
 	python generate-kernelspec.py
 
 .PHONY: benchmark
-benchmark: benchmark-results/*.json
-	python setup.py --version > benchmark-results/version.txt
-	git diff --word-diff benchmark-results/
+benchmark: benchmarks/results/*.json
+	python setup.py --version > benchmarks/results/version.txt
+	git diff --word-diff benchmarks/results/
 
-.PHONY: benchmark-results/pystone.json
-benchmark-results/pystone.json: build venv/bin/_fil-python
-	FIL_NO_REPORT=1 FIL_BENCHMARK=benchmark-results/pystone.json fil-profile run python-benchmarks/pystone.py
+.PHONY: benchmarks/results/pystone.json
+benchmarks/results/pystone.json: build venv/bin/_fil-python
+	FIL_NO_REPORT=1 FIL_BENCHMARK=benchmarks/results/pystone.json fil-profile run benchmarks/pystone.py
 
-.PHONY: benchmark-results/image-translate.json
-benchmark-results/image-translate.json: build venv/bin/_fil-python
+.PHONY: benchmarks/results/image-translate.json
+benchmarks/results/image-translate.json: build venv/bin/_fil-python
 	pip install --upgrade scikit-image==0.16.2 PyWavelets==1.1.1 scipy==1.4.1 numpy==1.18.0 imageio==2.6.1
-	FIL_NO_REPORT=1 FIL_BENCHMARK=benchmark-results/image-translate.json fil-profile run python-benchmarks/image-translate.py 2
+	FIL_NO_REPORT=1 FIL_BENCHMARK=benchmarks/results/image-translate.json fil-profile run benchmarks/image-translate.py 2
 
-.PHONY: benchmark-results/multithreading-1.json
-benchmark-results/multithreading-1.json: build venv/bin/_fil-python
-	FIL_NO_REPORT=1 FIL_BENCHMARK=benchmark-results/multithreading-1.json fil-profile run python-benchmarks/multithreading.py 1
+.PHONY: benchmarks/results/multithreading-1.json
+benchmarks/results/multithreading-1.json: build venv/bin/_fil-python
+	cythonize -3 -i benchmarks/pymalloc.pyx
+	FIL_NO_REPORT=1 FIL_BENCHMARK=benchmarks/results/multithreading-1.json fil-profile run benchmarks/multithreading.py 1
