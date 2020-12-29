@@ -79,15 +79,14 @@ benchmark: benchmarks/results/*.json
 	git diff --word-diff benchmarks/results/
 
 .PHONY: benchmarks/results/pystone.json
-benchmarks/results/pystone.json: build venv/bin/_fil-python
+benchmarks/results/pystone.json: venv/bin/_fil-python
 	FIL_NO_REPORT=1 FIL_BENCHMARK=benchmarks/results/pystone.json fil-profile run benchmarks/pystone.py
 
-.PHONY: benchmarks/results/image-translate.json
-benchmarks/results/image-translate.json: build venv/bin/_fil-python
-	pip install --upgrade scikit-image==0.16.2 PyWavelets==1.1.1 scipy==1.4.1 numpy==1.18.0 imageio==2.6.1
-	FIL_NO_REPORT=1 FIL_BENCHMARK=benchmarks/results/image-translate.json fil-profile run benchmarks/image-translate.py 2
+.PHONY: benchmarks/results/lots-of-peaks.json
+benchmarks/results/lots-of-peaks.json: venv/bin/_fil-python
+	FIL_NO_REPORT=1 FIL_BENCHMARK=benchmarks/results/lots-of-peaks.json fil-profile run benchmarks/lots-of-peaks.py
 
 .PHONY: benchmarks/results/multithreading-1.json
-benchmarks/results/multithreading-1.json: build venv/bin/_fil-python
+benchmarks/results/multithreading-1.json: venv/bin/_fil-python
 	cythonize -3 -i benchmarks/pymalloc.pyx
 	FIL_NO_REPORT=1 FIL_BENCHMARK=benchmarks/results/multithreading-1.json fil-profile run benchmarks/multithreading.py 1
