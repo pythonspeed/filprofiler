@@ -148,7 +148,8 @@ extern void pymemprofile_start_call(uint16_t parent_line_number,
                                     uint16_t line_number);
 extern void pymemprofile_finish_call();
 extern void pymemprofile_new_line_number(uint16_t line_number);
-extern void pymemprofile_start_tracking(const char *path);
+extern void pymemprofile_reset(const char *path);
+extern void pymemprofile_start_tracking();
 extern void pymemprofile_stop_tracking();
 extern void pymemprofile_dump_peak_to_flamegraph(const char *path);
 extern void pymemprofile_add_allocation(size_t address, size_t length,
@@ -239,11 +240,20 @@ __attribute__((visibility("default"))) void fil_initialize_from_python() {
 
 /// Start memory tracing.
 __attribute__((visibility("default"))) void
-fil_start_tracking(const char *default_path) {
+fil_start_tracking() {
   set_will_i_be_reentrant(1);
-  pymemprofile_start_tracking(default_path);
+  pymemprofile_start_tracking();
   set_will_i_be_reentrant(0);
 }
+
+/// Clear previous allocations;
+__attribute__((visibility("default"))) void
+fil_reset(const char *default_path) {
+  set_will_i_be_reentrant(1);
+  pymemprofile_reset(default_path);
+  set_will_i_be_reentrant(0);
+}
+
 
 /// End memory tracing.
 __attribute__((visibility("default"))) void fil_stop_tracking() {
@@ -392,6 +402,8 @@ SYMBOL_PREFIX(munmap)(void *addr, size_t length) {
   return result;
 }
 
+// Old glibc that conda uses doesn't support aligned_alloc()
+#ifndef FIL_SKIP_ALIGNED_ALLOC
 __attribute__((visibility("default"))) void *
 SYMBOL_PREFIX(aligned_alloc)(size_t alignment, size_t size) {
   void *result = REAL_IMPL(aligned_alloc)(alignment, size);
@@ -404,6 +416,7 @@ SYMBOL_PREFIX(aligned_alloc)(size_t alignment, size_t size) {
   }
   return result;
 }
+#endif
 
 #ifdef __linux__
 // Make sure we expose jemalloc variant of malloc_usable_size(), in case someone
@@ -475,7 +488,10 @@ DYLD_INTERPOSE(SYMBOL_PREFIX(realloc), realloc)
 DYLD_INTERPOSE(SYMBOL_PREFIX(free), free)
 DYLD_INTERPOSE(SYMBOL_PREFIX(mmap), mmap)
 DYLD_INTERPOSE(SYMBOL_PREFIX(munmap), munmap)
+// Old macOS ABI that Conda uses doesn't support aligned_alloc().
+#  ifndef FIL_SKIP_ALIGNED_ALLOC
 DYLD_INTERPOSE(SYMBOL_PREFIX(aligned_alloc), aligned_alloc)
+#  endif
 DYLD_INTERPOSE(SYMBOL_PREFIX(posix_memalign), posix_memalign)
 DYLD_INTERPOSE(SYMBOL_PREFIX(pthread_create), pthread_create)
 #endif

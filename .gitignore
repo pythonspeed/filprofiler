@@ -7,7 +7,9 @@ build/
 dist/
 fil-result/
 .eggs/
-python-benchmarks/pymalloc.c
+benchmarks/pymalloc.c
+tests/test-scripts/pymalloc.c
 filprofiler/_version.py
 .ipynb_checkpoints
 pip-wheel-metadata
+filprofiler/_fil-python

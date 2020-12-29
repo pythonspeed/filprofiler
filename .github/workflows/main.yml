@@ -40,7 +40,11 @@ jobs:
             sudo apt-get install -y gfortran
       - name: Install gfortran 2
         if: contains(matrix.os, 'macos')
-        run: "brew install gcc || true"
+        run: |
+          set -euo pipefail
+          brew install gcc@9 || true
+          gfortran --version || sudo ln -s /usr/local/bin/gfortran-9 /usr/local/bin/gfortran
+          gfortran --version
       - name: "Install dependencies and code"
         run: |
           set -euo pipefail
@@ -89,3 +93,48 @@ jobs:
             . venv/bin/activate
             twine check dist/*.whl
             twine upload --repository pypi dist/*.whl
+
+  benchmarks:
+    name: "Benchmarks"
+    runs-on: "ubuntu-latest"
+
+    defaults:
+      run:
+        shell: bash -l {0}
+  
+    env:
+      PYTHONFAULTHANDLER: "true"
+
+    steps:
+      - uses: "actions/checkout@v2"
+        with:
+          # We need tags to get the correct code version:
+          fetch-depth: 0
+  
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          auto-update-conda: false
+          activate-environment: benchmark
+          environment-file: benchmarks/conda-linux-64.lock
+
+      - name: Benchmark
+        run: |
+          set -euo pipefail
+          ln -s $CONDA_PREFIX venv
+          make
+          make _fil-python
+          make benchmark
+          echo "## Benchmark results" > benchmark.diff
+          echo '```diff' >> benchmark.diff
+          git diff --word-diff benchmarks/results/ >> benchmark.diff
+          echo '```' >> benchmark.diff
+          printf '{ "body": ' > benchmark.json
+          cat benchmark.diff | jq -R -s >> benchmark.json
+          printf '}' >> benchmark.json
+          cat benchmark.json
+          curl \
+            -X POST \
+            ${{ github.event.pull_request.comments_url }} \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            --data @benchmark.json
