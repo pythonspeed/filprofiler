@@ -142,26 +142,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "darwin-libproc"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fb90051930c9a0f09e585762152048e23ac74d20c10590ef7cf01c0343c3046"
-dependencies = [
- "darwin-libproc-sys",
- "libc",
- "memchr",
-]
-
-[[package]]
-name = "darwin-libproc-sys"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57cebb5bde66eecdd30ddc4b9cd208238b15db4982ccc72db59d699ea10867c1"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "derivative"
 version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -461,7 +441,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7cdb732329774b8765346796abd1e896e9b3c86aae7f135bb1dda98c2c460f55"
 dependencies = [
  "cfg-if 0.1.10",
- "darwin-libproc",
  "mach",
  "nix",
  "once_cell",
@@ -483,7 +462,6 @@ dependencies = [
  "parking_lot",
  "proptest",
  "psutil",
- "rlimit",
  "rustc-hash",
 ]
 
@@ -702,15 +680,6 @@ name = "rgb"
 version = "0.8.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5ec4ab2cf0b27e111e266e161cf7f9efd20125a161190da1c0945c4a4408fef3"
-
-[[package]]
-name = "rlimit"
-version = "0.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e7148757b4951f04391d2b301b2e3597d504c4d2434212d542b73c1a6b3f847"
-dependencies = [
- "libc",
-]
 
 [[package]]
 name = "rustc-hash"

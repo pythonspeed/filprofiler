@@ -16,7 +16,6 @@ rustc-hash = "1.0.1"
 ahash = "0.5.6"
 parking_lot = "0.11.0"
 derivative = "2.1.1"
-rlimit = "0.5.3"
 
 [target.'cfg(target_os = "linux")'.dependencies.jemallocator]
 version = "0.3.2"
@@ -28,7 +27,7 @@ default-features = false
 [dependencies.psutil]
 version = "3.2.0"
 default-features = false
-features = ["process", "memory"]
+features = ["memory"]
 
 [dev-dependencies]
 proptest = "0.9.5"
