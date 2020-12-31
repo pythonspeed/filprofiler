@@ -72,11 +72,22 @@ impl OutOfMemoryEstimator {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn get_cgroup_available_memory() -> usize {
+    std::usize::MAX
+}
+
+#[cfg(target_os = "darwin")]
+fn get_cgroup_available_memory() -> usize {
+    std::usize::MAX
+}
+
 /// Return how much free memory we have, as bytes.
 pub fn get_available_memory() -> usize {
     // TODO cgroups
     // This will include memory that can become available by syncing
     // filesystem buffers to disk, which is probably what we want.
     let available = psutil::memory::virtual_memory().unwrap().available() as usize;
-    available
+    let cgroup_available = get_cgroup_available_memory();
+    std::cmp::min(available, cgroup_available)
 }

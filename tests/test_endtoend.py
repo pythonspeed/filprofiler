@@ -14,6 +14,7 @@ import resource
 import numpy.core.numeric
 from pampy import match, _ as ANY
 import pytest
+import psutil
 
 from filprofiler._testing import get_allocations, big, as_mb
 
@@ -21,12 +22,17 @@ from filprofiler._testing import get_allocations, big, as_mb
 TEST_SCRIPTS = Path("tests") / "test-scripts"
 
 
-def profile(*arguments: Union[str, Path], expect_exit_code=0, **kwargs) -> Path:
+def profile(
+    *arguments: Union[str, Path], expect_exit_code=0, argv_prefix=(), **kwargs
+) -> Path:
     """Run fil-profile on given script, return path to output directory."""
     output = Path(mkdtemp())
     try:
         check_call(
-            ["fil-profile", "-o", str(output), "run"] + list(arguments), **kwargs
+            list(argv_prefix)
+            + ["fil-profile", "-o", str(output), "run"]
+            + list(arguments),
+            **kwargs,
         )
         exit_code = 0
     except CalledProcessError as e:
@@ -275,6 +281,40 @@ def test_out_of_memory_slow_leak():
     """
     script = TEST_SCRIPTS / "oom-slow.py"
     output_dir = profile(script, expect_exit_code=53)
+    time.sleep(10)  # wait for child process to finish
+    allocations = get_allocations(
+        output_dir,
+        ["out-of-memory.svg", "out-of-memory-reversed.svg", "out-of-memory.prof",],
+        "out-of-memory.prof",
+    )
+
+    expected_alloc = ((str(script), "<module>", 3),)
+
+    # Should've allocated at least a little before running out, unless testing
+    # environment is _really_ restricted, in which case other tests would've
+    # failed.
+    assert match(allocations, {expected_alloc: big}, as_mb) > 100
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="cgroups are a Linux feature")
+def test_out_of_memory_slow_leak_cgroups():
+    """
+    If an allocation is run that runs out of memory slowly, hitting a cgroup
+    limit that's lower than system memory, current allocations are written out.
+    """
+    available_memory = psutil.virtual_memory().available
+    script = TEST_SCRIPTS / "oom-slow.py"
+    output_dir = profile(
+        script,
+        expect_exit_code=53,
+        argv_prefix=[
+            "systemd-run",
+            "--scope",
+            "--user",
+            "-p",
+            f"MemoryLimit={available_memory / 2}B",
+        ],
+    )
     time.sleep(10)  # wait for child process to finish
     allocations = get_allocations(
         output_dir,
