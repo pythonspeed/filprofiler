@@ -136,7 +136,7 @@ fn get_cgroup_available_memory() -> usize {
     result
 }
 
-#[cfg(target_os = "darwin")]
+#[cfg(target_os = "macos")]
 fn get_cgroup_available_memory() -> usize {
     std::usize::MAX
 }
