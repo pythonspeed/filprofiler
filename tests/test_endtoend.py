@@ -9,6 +9,7 @@ import sys
 from typing import Union
 import re
 import shutil
+import resource
 
 import numpy.core.numeric
 from pampy import match, _ as ANY
@@ -267,7 +268,7 @@ def test_out_of_memory():
     )
 
 
-def test_out_of_memory_2():
+def test_out_of_memory_slow_leak():
     """
     If an allocation is run that runs out of memory slowly, current allocations are
     written out.
@@ -281,12 +282,36 @@ def test_out_of_memory_2():
         "out-of-memory.prof",
     )
 
-    expected_alloc = ((str(script), "<module>", 4),)
+    expected_alloc = ((str(script), "<module>", 10),)
 
     # Should've allocated at least a little before running out, unless testing
     # environment is _really_ restricted, in which case other tests would've
     # failed.
     assert match(allocations, {expected_alloc: big}, as_mb) > 10
+
+
+@pytest.mark.parametrize("tolimit", ("RLIMIT_DATA", "RLIMIT_AS"))
+def test_out_of_memory_slow_leak_rlimit(tolimit):
+    """
+    If an allocation is run that runs out of memory slowly, current allocations are
+    written out.
+    """
+    script = TEST_SCRIPTS / "oom-slow.py"
+    output_dir = profile(script, tolimit, "100", expect_exit_code=53)
+    time.sleep(10)  # wait for child process to finish
+    allocations = get_allocations(
+        output_dir,
+        ["out-of-memory.svg", "out-of-memory-reversed.svg", "out-of-memory.prof",],
+        "out-of-memory.prof",
+    )
+
+    expected_alloc = ((str(script), "<module>", 10),)
+
+    # We limited process size to 200MB, so we expect OOM to be hit at ~100MB
+    # usage.
+    allocated = match(allocations, {expected_alloc: big}, as_mb)
+    assert allocated > 50
+    assert allocated < 100
 
 
 def test_external_behavior():

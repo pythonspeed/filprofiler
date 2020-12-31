@@ -5,6 +5,8 @@ use inferno::flamegraph;
 use itertools::Itertools;
 use libc;
 use parking_lot::Mutex;
+use psutil;
+use rlimit;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs;
@@ -12,7 +14,6 @@ use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::slice;
-use sysinfo::SystemExt;
 
 /// A function location provided by the C code. Matches struct in _filpreload.c.
 #[repr(C)]
@@ -680,12 +681,31 @@ struct TrackerState {
 
 /// Return how much free memory we have, as bytes.
 fn get_available_memory() -> usize {
-    // TODO cgroups, rusage
-    let mut system = sysinfo::System::new_with_specifics(sysinfo::RefreshKind::new().with_memory());
-    system.refresh_memory();
-    // TODO this should include memory that can become available by syncing
-    // filesystem buffers to disk, which is... probably what we want.
-    (system.get_available_memory() * 1024) as usize
+    // TODO cgroups
+    // This will include memory that can become available by syncing
+    // filesystem buffers to disk, which is probably what we want.
+    let mut available = psutil::memory::virtual_memory().unwrap().available() as usize;
+    println!("Available on machine: {}", available);
+    let process = psutil::process::Process::current()
+        .unwrap()
+        .memory_info()
+        .unwrap();
+    let process_vms = process.vms();
+    println!("process vms is {}", process_vms);
+    for resource in [rlimit::Resource::DATA, rlimit::Resource::AS].iter() {
+        let (soft_limit, hard_limit) = rlimit::getrlimit(*resource).unwrap();
+        println!("soft limit for {:?} is {}", resource, soft_limit);
+        println!("hard limit for {:?} is {}", resource, hard_limit);
+        if soft_limit != rlimit::Rlim::INFINITY {
+            let process_available = soft_limit.as_usize() - process_vms as usize;
+            println!(
+                "process available per {:?} is {}",
+                resource, process_available
+            );
+            available = std::cmp::min(available, process_available);
+        }
+    }
+    available
 }
 
 lazy_static! {
@@ -883,7 +903,6 @@ mod tests {
         filter_to_useful_callstacks, Allocation, AllocationTracker, CallSiteId, Callstack,
         CallstackInterner, FunctionId, FunctionLocation, HIGH_32BIT, MIB,
     };
-    use ahash::RandomState as ARandomState;
     use im;
     use proptest::prelude::*;
     use std::collections::HashMap;
