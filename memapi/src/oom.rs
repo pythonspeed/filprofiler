@@ -1,5 +1,4 @@
 use std::fs::read_to_string;
-use std::path::PathBuf;
 
 /// Logic for handling out-of-memory situations.
 
@@ -75,26 +74,15 @@ impl OutOfMemoryEstimator {
     }
 }
 
-fn get_cgroups(proc_cgroups: String) -> Vec<PathBuf> {
+fn get_cgroup_paths<'a>(proc_cgroups: &'a str) -> Vec<&'a str> {
     let mut result = vec![];
-    let base_path = PathBuf::from("/sys/fs/cgroup");
-    if !base_path.is_dir() {
-        eprintln!("=fil-profile= Couldn't find cgroups at /sys/fs/cgroup?!");
-        return result;
-    }
     for line in proc_cgroups.lines() {
         // TODO better error handling?
-        let cgroup_name = line
-            .splitn(3, ":")
-            .nth(2)
-            .unwrap()
-            .strip_prefix("/")
-            .unwrap();
-        let cgroup_path = base_path.join(cgroup_name);
-        if cgroup_path.is_dir() {
+        let mut parts = line.splitn(3, ":");
+        let subsystems = parts.nth(1).unwrap();
+        if (subsystems == "") || subsystems.split(",").any(|s| s == "memory") {
+            let cgroup_path = parts.nth(0).unwrap().strip_prefix("/").unwrap();
             result.push(cgroup_path);
-        } else {
-            eprintln!("=fil-profile= Couldn't find cgroup {:?}?!", cgroup_path);
         }
     }
     result
@@ -102,36 +90,24 @@ fn get_cgroups(proc_cgroups: String) -> Vec<PathBuf> {
 
 #[cfg(target_os = "linux")]
 fn get_cgroup_available_memory() -> usize {
-    let cgroup_paths = match read_to_string("/proc/self/cgroup") {
-        Ok(contents) => get_cgroups(contents),
+    let contents = match read_to_string("/proc/self/cgroup") {
+        Ok(contents) => contents,
         Err(err) => {
             eprintln!("=fil-profile= Couldn't read /proc/self/cgroup ({:})", err);
             return std::usize::MAX;
         }
     };
+    let cgroup_paths = get_cgroup_paths(&contents);
     let mut result = std::usize::MAX;
-    for cgroup in cgroup_paths {
-        // First check cgroups v2 style.
-        let mut memory_current = cgroup.join("memory.current");
-        let mut memory_max = cgroup.join("memory.max");
-        if !memory_current.is_file() || !memory_max.is_file() {
-            // Might be cgroups v1
-            memory_current = cgroup.join("memory.limit_in_bytes");
-            memory_max = cgroup.join("memory.usage_in_bytes");
-            if !memory_current.is_file() || !memory_max.is_file() {
-                eprintln!(
-                    "=fil-profile= Couldn't find memory info in cgroup {:?}?!",
-                    cgroup
-                );
-                return result;
-            }
-        }
-        // TODO error handling.
-        let memory_current = read_to_string(memory_current).unwrap();
-        let memory_max = read_to_string(memory_max).unwrap();
-        let memory_current = memory_current.trim().parse::<usize>().unwrap();
-        let memory_max = memory_max.trim().parse::<usize>().unwrap();
-        result = std::cmp::min(result, memory_max - memory_current);
+    for path in cgroup_paths {
+        let h = cgroups_rs::hierarchies::auto();
+        let cgroup = cgroups_rs::Cgroup::load(h, path);
+        let mem: &cgroups_rs::memory::MemController = cgroup.controller_of().unwrap();
+        let mem = mem.memory_stat();
+        result = std::cmp::min(
+            result,
+            (mem.limit_in_bytes - mem.usage_in_bytes as i64) as usize,
+        );
     }
     result
 }
