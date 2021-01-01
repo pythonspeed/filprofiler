@@ -74,6 +74,7 @@ impl OutOfMemoryEstimator {
     }
 }
 
+#[cfg(target_os = "linux")]
 fn get_cgroup_paths<'a>(proc_cgroups: &'a str) -> Vec<&'a str> {
     let mut result = vec![];
     for line in proc_cgroups.lines() {
