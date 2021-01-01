@@ -305,7 +305,6 @@ def get_systemd_run_args(available_memory):
     """
     args = [
         "systemd-run",
-        "--scope",
         "--uid",
         str(os.geteuid()),
         "--gid",
@@ -315,9 +314,10 @@ def get_systemd_run_args(available_memory):
     ]
     try:
         check_call(args + ["--user", "printf", "hello"])
-        args.append("--user")
+        args += ["--user", "--scope"]
     except CalledProcessError:
-        args = ["sudo", "-E"] + args
+        # cgroups v1 doesn't do --user :(
+        args = ["sudo", "--preserve-env=PATH"] + args + ["-t"]
     return args
 
 
