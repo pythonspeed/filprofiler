@@ -19,7 +19,9 @@ derivative = "2.1.1"
 
 [target.'cfg(target_os = "linux")'.dependencies.jemallocator]
 version = "0.3.2"
-cgroups-rs = "0.2.0"
+
+[target.'cfg(target_os = "linux")'.dependencies.cgroups-rs]
+version = "0.2.0"
 
 [dependencies.inferno]
 version = "0.9.9"
