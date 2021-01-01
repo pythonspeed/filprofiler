@@ -317,7 +317,7 @@ def get_systemd_run_args(available_memory):
         check_call(args + ["--user", "printf", "hello"])
         args.append("--user")
     except CalledProcessError:
-        args = ["sudo"] + args
+        args = ["sudo", "-E"] + args
     return args
 
 
