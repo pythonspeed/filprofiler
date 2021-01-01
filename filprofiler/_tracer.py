@@ -50,6 +50,7 @@ def stop_tracing(output_path: str) -> str:
     """
     sys.setprofile(None)
     threading.setprofile(None)
+    preload.fil_stop_tracking()
     result = create_report(output_path)
     # Clear allocations; we don't need them anymore, and they're just wasting
     # memory:
