@@ -317,7 +317,7 @@ def get_systemd_run_args(available_memory):
         args += ["--user", "--scope"]
     except CalledProcessError:
         # cgroups v1 doesn't do --user :(
-        args = ["sudo", "--preserve-env=PATH"] + args + ["-t"]
+        args = ["sudo", "--preserve-env=PATH", "--same-dir"] + args + ["-t"]
     return args
 
 
