@@ -1,7 +1,8 @@
-use psutil;
-use sysinfo::{ProcessExt, SystemExt};
+//use psutil;
+//use sysinfo::{ProcessExt, SystemExt};
 
 fn main() {
+    /*
     let mut system = sysinfo::System::new_with_specifics(sysinfo::RefreshKind::everything());
     system.refresh_memory();
     let pid = sysinfo::get_current_pid().unwrap();
@@ -31,5 +32,6 @@ fn main() {
         memory.rss(),
         memory.vms()
     );
+    */
     std::thread::sleep_ms(1000 * 1000);
 }
