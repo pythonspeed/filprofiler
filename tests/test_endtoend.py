@@ -296,6 +296,31 @@ def test_out_of_memory_slow_leak():
     assert match(allocations, {expected_alloc: big}, as_mb) > 100
 
 
+def get_systemd_run_args(available_memory):
+    """
+    Figure out if we're on system with cgroups v2, or not, and return
+    appropriate systemd-run args.
+
+    If we don't have v2, we'll need to be root, unfortunately.
+    """
+    args = [
+        "systemd-run",
+        "--scope",
+        "--uid",
+        str(os.geteuid()),
+        "--gid",
+        str(os.getegid()),
+        "-p",
+        f"MemoryLimit={available_memory // 2}B",
+    ]
+    try:
+        check_call(args + ["--user", "printf", "hello"])
+        args.append("--user")
+    except CalledProcessError:
+        args = ["sudo"] + args
+    return args
+
+
 @pytest.mark.skipif(sys.platform != "linux", reason="cgroups are a Linux feature")
 def test_out_of_memory_slow_leak_cgroups():
     """
@@ -305,15 +330,7 @@ def test_out_of_memory_slow_leak_cgroups():
     available_memory = psutil.virtual_memory().available
     script = TEST_SCRIPTS / "oom-slow.py"
     output_dir = profile(
-        script,
-        expect_exit_code=53,
-        argv_prefix=[
-            "systemd-run",
-            "--scope",
-            "--user",
-            "-p",
-            f"MemoryLimit={available_memory / 2}B",
-        ],
+        script, expect_exit_code=53, argv_prefix=get_systemd_run_args(available_memory),
     )
     time.sleep(10)  # wait for child process to finish
     allocations = get_allocations(
