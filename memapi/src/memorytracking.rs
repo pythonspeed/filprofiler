@@ -176,13 +176,11 @@ type CallstackId = u32;
 /// Create a new hashmap with an optional fixed seed. We use PYTHONHASHSEED on
 /// the theory that if it's set, we want these hashes to be consistent too.
 fn new_hashmap<K, V>() -> HashMap<K, V, ARandomState> {
-    match std::env::var("PYTHONHASHSEED") {
-        Ok(value) => {
-            let seed = value.parse::<i64>().unwrap();
-            let seed = seed as u64;
+    match *HASH_SEED {
+        Some(seed) => {
             HashMap::with_hasher(ARandomState::with_seeds(seed, seed + 1, seed + 2, seed + 3))
         }
-        _ => HashMap::default(),
+        None => HashMap::default(),
     }
 }
 
@@ -608,6 +606,17 @@ struct TrackerState {
 }
 
 lazy_static! {
+    static ref HASH_SEED: Option<u64> = match std::env::var("PYTHONHASHSEED") {
+        Ok(value) => {
+            if value == "random" {
+                None
+            } else {
+                let seed = value.parse::<i64>().unwrap();
+                Some(seed as u64)
+            }
+        }
+        _ => None,
+    };
     static ref TRACKER_STATE: Mutex<TrackerState> = Mutex::new(TrackerState {
         currently_tracking: false,
         allocations: AllocationTracker::new("/tmp".to_string()),
