@@ -103,6 +103,26 @@ struct FunctionLocation {
   Py_ssize_t function_name_length;
 };
 
+// Implemented in the Rust library:
+extern void pymemprofile_start_call(uint16_t parent_line_number,
+                                    struct FunctionLocation *loc,
+                                    uint16_t line_number);
+extern void pymemprofile_finish_call();
+extern void pymemprofile_new_line_number(uint16_t line_number);
+extern void pymemprofile_reset(const char *path);
+extern void pymemprofile_start_tracking();
+extern void pymemprofile_stop_tracking();
+extern void pymemprofile_dump_peak_to_flamegraph(const char *path);
+extern void pymemprofile_add_allocation(size_t address, size_t length,
+                                        uint16_t line_number);
+extern void pymemprofile_free_allocation(size_t address);
+extern void pymemprofile_add_anon_mmap(size_t address, size_t length,
+                                       uint16_t line_number);
+extern void pymemprofile_free_anon_mmap(size_t address, size_t length);
+extern void *pymemprofile_get_current_callstack();
+extern void pymemprofile_set_current_callstack(void *callstack);
+extern void pymemprofile_clear_current_callstack();
+
 static void __attribute__((constructor)) constructor() {
   if (initialized) {
     return;
@@ -136,31 +156,16 @@ static void __attribute__((constructor)) constructor() {
     exit(1);
   }
 
-  initialized = 1;
   unsetenv("LD_PRELOAD");
   // This seems to break things... revisit at some point.
   // unsetenv("DYLD_INSERT_LIBRARIES");
-}
 
-// Implemented in the Rust library:
-extern void pymemprofile_start_call(uint16_t parent_line_number,
-                                    struct FunctionLocation *loc,
-                                    uint16_t line_number);
-extern void pymemprofile_finish_call();
-extern void pymemprofile_new_line_number(uint16_t line_number);
-extern void pymemprofile_reset(const char *path);
-extern void pymemprofile_start_tracking();
-extern void pymemprofile_stop_tracking();
-extern void pymemprofile_dump_peak_to_flamegraph(const char *path);
-extern void pymemprofile_add_allocation(size_t address, size_t length,
-                                        uint16_t line_number);
-extern void pymemprofile_free_allocation(size_t address);
-extern void pymemprofile_add_anon_mmap(size_t address, size_t length,
-                                       uint16_t line_number);
-extern void pymemprofile_free_anon_mmap(size_t address, size_t length);
-extern void *pymemprofile_get_current_callstack();
-extern void pymemprofile_set_current_callstack(void *callstack);
-extern void pymemprofile_clear_current_callstack();
+  // Initialize Rust static state before we start doing any calls via malloc(),
+  // to ensure we don't get unpleasant reentrancy issues.
+  pymemprofile_reset("/tmp");
+
+  initialized = 1;
+}
 
 static void start_call(struct FunctionLocation *loc, uint16_t line_number) {
   if (should_track_memory()) {
