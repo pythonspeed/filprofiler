@@ -49,6 +49,11 @@ extern int _rjem_posix_memalign(void **memptr, size_t alignment, size_t size);
 // Note whether we've been initialized yet or not:
 static int initialized = 0;
 
+// Note whether we're currently tracking allocations. Jupyter users might turn
+// this on and then off, for example, whereas full process profiling will have
+// this on from start until finish.
+static int tracking_allocations = 0;
+
 // ID of Python code object extra data:
 static Py_ssize_t extra_code_index = -1;
 
@@ -82,14 +87,12 @@ static inline void set_will_i_be_reentrant(int i) { will_i_be_reentrant = i; }
 // Will be true if all conditions are true:
 //
 // 1. The shared library constructor is initialized; always true after that.
-// 2. This isn't a reentrant call: we don't want to track memory allocations
+// 2. Allocations are being tracked.
+// 3. This isn't a reentrant call: we don't want to track memory allocations
 //    triggered by the Rust tracking code, as that will result in infinite
 //    recursion.
-//
-// The Rust code will do an additional check to see if allocations are being
-// tracked.
 static inline int should_track_memory() {
-  return (likely(initialized) && !am_i_reentrant());
+  return (likely(initialized) && tracking_allocations && !am_i_reentrant());
 }
 
 // Current thread's Python state:
@@ -246,9 +249,7 @@ __attribute__((visibility("default"))) void fil_initialize_from_python() {
 /// Start memory tracing.
 __attribute__((visibility("default"))) void
 fil_start_tracking() {
-  set_will_i_be_reentrant(1);
-  pymemprofile_start_tracking();
-  set_will_i_be_reentrant(0);
+  tracking_allocations = 1;
 }
 
 /// Clear previous allocations;
@@ -259,10 +260,9 @@ fil_reset(const char *default_path) {
   set_will_i_be_reentrant(0);
 }
 
-
 /// End memory tracing.
 __attribute__((visibility("default"))) void fil_stop_tracking() {
-  pymemprofile_stop_tracking();
+  tracking_allocations = 0;
 }
 
 /// Register the C level Python tracer for the current thread.

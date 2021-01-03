@@ -68,26 +68,12 @@ pub extern "C" fn pymemprofile_finish_call() {
 /// # Safety
 /// Intended for use from C.
 #[no_mangle]
-pub unsafe extern "C" fn pymemprofile_start_tracking() {
-    memorytracking::start_tracking();
-}
-
-/// # Safety
-/// Intended for use from C.
-#[no_mangle]
 pub unsafe extern "C" fn pymemprofile_reset(default_path: *const c_char) {
     let path = CStr::from_ptr(default_path)
         .to_str()
         .expect("Path wasn't UTF-8")
         .to_string();
     memorytracking::reset(path);
-}
-
-/// # Safety
-/// Intended for use from C.
-#[no_mangle]
-pub unsafe extern "C" fn pymemprofile_stop_tracking() {
-    memorytracking::stop_tracking();
 }
 
 /// # Safety

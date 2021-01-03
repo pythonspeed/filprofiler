@@ -600,7 +600,6 @@ impl<'a> AllocationTracker {
 }
 
 struct TrackerState {
-    currently_tracking: bool,
     oom: OutOfMemoryEstimator,
     allocations: AllocationTracker,
 }
@@ -618,7 +617,6 @@ lazy_static! {
         _ => None,
     };
     static ref TRACKER_STATE: Mutex<TrackerState> = Mutex::new(TrackerState {
-        currently_tracking: false,
         allocations: AllocationTracker::new("/tmp".to_string()),
         oom: OutOfMemoryEstimator::new(get_available_memory),
     });
@@ -658,11 +656,6 @@ pub fn set_current_callstack(callstack: &Callstack) {
 pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_mmap: bool) {
     let mut tracker_state = TRACKER_STATE.lock();
 
-    // If we're not tracking allocations, just do nothing.
-    if !tracker_state.currently_tracking {
-        return;
-    }
-
     // Check if we're out of memory:
     let oom = address == 0 || tracker_state.oom.too_big_allocation(size);
 
@@ -698,9 +691,6 @@ pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_m
 pub fn free_allocation(address: usize) {
     let mut tracker_state = TRACKER_STATE.lock();
 
-    if !tracker_state.currently_tracking {
-        return;
-    }
     let allocations = &mut tracker_state.allocations;
     allocations.free_allocation(address);
 }
@@ -720,9 +710,6 @@ pub fn get_allocation_size(address: usize) -> libc::size_t {
 pub fn free_anon_mmap(address: usize, length: libc::size_t) {
     let mut tracker_state = TRACKER_STATE.lock();
 
-    if !tracker_state.currently_tracking {
-        return;
-    }
     let allocations = &mut tracker_state.allocations;
     allocations.free_anon_mmap(address, length);
 }
@@ -731,16 +718,6 @@ pub fn free_anon_mmap(address: usize, length: libc::size_t) {
 pub fn reset(default_path: String) {
     let mut tracker_state = TRACKER_STATE.lock();
     tracker_state.allocations.reset(default_path);
-}
-
-pub fn start_tracking() {
-    let mut tracker_state = TRACKER_STATE.lock();
-    tracker_state.currently_tracking = true;
-}
-
-pub fn stop_tracking() {
-    let mut tracker_state = TRACKER_STATE.lock();
-    tracker_state.currently_tracking = false;
 }
 
 /// Dump all callstacks in peak memory usage to format used by flamegraph.
