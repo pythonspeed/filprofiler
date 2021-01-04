@@ -1199,9 +1199,5 @@ mod tests {
         assert_eq!(expected2, result2);
     }
 
-    fn oomestimator() {
-        let mut available_memory = 300 * 1024 * 1024;
-    }
-
     // TODO test to_lines(false)
 }
