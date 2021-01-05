@@ -127,3 +127,78 @@ pub fn get_available_memory() -> usize {
     let cgroup_available = get_cgroup_available_memory();
     std::cmp::min(available, cgroup_available)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::OutOfMemoryEstimator;
+    use std::sync::{Arc, Mutex};
+
+    struct FakeMemory {
+        available_memory: usize,
+        checks: Vec<usize>,
+    }
+
+    impl FakeMemory {
+        fn new() -> Self {
+            FakeMemory {
+                available_memory: 1_000_000_000,
+                checks: vec![],
+            }
+        }
+
+        fn get_available_memory(&mut self) -> usize {
+            self.checks.push(self.available_memory);
+            self.available_memory
+        }
+
+        fn allocate(&mut self, size: usize) {
+            self.available_memory -= size;
+        }
+
+        fn get_checks(&self) -> &[usize] {
+            &self.checks
+        }
+    }
+
+    // The intervals between checking if out-of-memory shrink as we get closer
+    // to running out of memory
+    #[test]
+    fn oom_estimator_shrinking_intervals() {
+        let fake_memory = Arc::new(Mutex::new(FakeMemory::new()));
+        let get_memory = {
+            let fake_memory = fake_memory.clone();
+            move || -> usize {
+                let mut memory = fake_memory.lock().unwrap();
+                memory.get_available_memory()
+            }
+        };
+        let mut estimator = OutOfMemoryEstimator::new(get_memory);
+
+        loop {
+            {
+                let mut memory = fake_memory.lock().unwrap();
+                memory.allocate(10_000);
+            }
+            if estimator.too_big_allocation(10_000) {
+                break;
+            }
+            // by 100MB we should have detected OOM.
+            assert!(fake_memory.lock().unwrap().available_memory >= 99_000_000);
+        }
+        let fake_memory = fake_memory.lock().unwrap();
+        let checks = fake_memory.get_checks();
+        // Each check should come closer than the next:
+        for pair in checks.windows(2) {
+            assert!(pair[0] >= pair[1], "{} vs {}", pair[0], pair[1]);
+        }
+        // In the beginning we check very infrequently:
+        assert!((checks[0] - checks[1]) > 900_000);
+        // By the end we should be checking every allocation:
+        let final_difference = checks[checks.len() - 2] - checks[checks.len() - 1];
+        assert_eq!(
+            final_difference, 10_000,
+            "final difference: {}",
+            final_difference,
+        );
+    }
+}
