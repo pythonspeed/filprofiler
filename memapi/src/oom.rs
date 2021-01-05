@@ -2,6 +2,10 @@ use std::fs::read_to_string;
 
 /// Logic for handling out-of-memory situations.
 
+// Anything less than this is too dangerous, and we should dump and
+// exit. TODO is this actually enough?
+const MINIMAL_FREE: usize = 100 * 1024 * 1024;
+
 /// Estimate whether we're about to run out of memory.
 ///
 /// First, we need to define what "running out of memory" means. As a first
@@ -41,10 +45,6 @@ impl OutOfMemoryEstimator {
 
     /// Check if we're (close to being) out of memory.
     pub fn are_we_oom(&mut self) -> bool {
-        // Anything less than this is too dangerous, and we should dump and
-        // exit. TODO is this actually enough?
-        const MINIMAL_FREE: usize = 100 * 1024 * 1024;
-
         // Figure out how much is free, reset the threshold accordingly.
         let available_bytes = (self.get_available_bytes)();
 
@@ -160,10 +160,7 @@ mod tests {
         }
     }
 
-    // The intervals between checking if out-of-memory shrink as we get closer
-    // to running out of memory
-    #[test]
-    fn oom_estimator_shrinking_intervals() {
+    fn setup_estimator() -> (Arc<Mutex<FakeMemory>>, OutOfMemoryEstimator) {
         let fake_memory = Arc::new(Mutex::new(FakeMemory::new()));
         let get_memory = {
             let fake_memory = fake_memory.clone();
@@ -172,8 +169,35 @@ mod tests {
                 memory.get_available_memory()
             }
         };
-        let mut estimator = OutOfMemoryEstimator::new(get_memory);
+        let estimator = OutOfMemoryEstimator::new(get_memory);
+        (fake_memory, estimator)
+    }
 
+    // We're out of memory if we're below the threshold.
+    #[test]
+    fn oom_threshold() {
+        let (fake_memory, mut estimator) = setup_estimator();
+        let allocate = |amount| {
+            let mut memory = fake_memory.lock().unwrap();
+            memory.allocate(amount);
+        };
+        assert!(!estimator.are_we_oom());
+        allocate(500_000_000);
+        assert!(!estimator.are_we_oom());
+        allocate(350_000_000);
+        assert!(!estimator.are_we_oom());
+        allocate(50_000_000);
+        // Now that we're below the maximum, we've gone too far:
+        assert!(estimator.are_we_oom());
+        allocate(40_000_000);
+        assert!(estimator.are_we_oom());
+    }
+
+    // The intervals between checking if out-of-memory shrink as we get closer
+    // to running out of memory
+    #[test]
+    fn oom_estimator_shrinking_intervals() {
+        let (fake_memory, mut estimator) = setup_estimator();
         loop {
             {
                 let mut memory = fake_memory.lock().unwrap();
