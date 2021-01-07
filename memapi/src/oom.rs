@@ -120,7 +120,6 @@ fn get_cgroup_available_memory() -> usize {
 
 /// Return how much free memory we have, as bytes.
 pub fn get_available_memory() -> usize {
-    // TODO cgroups
     // This will include memory that can become available by syncing
     // filesystem buffers to disk, which is probably what we want.
     let available = psutil::memory::virtual_memory().unwrap().available() as usize;
