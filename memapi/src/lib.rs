@@ -15,7 +15,7 @@ use jemallocator::Jemalloc;
 static GLOBAL: Jemalloc = Jemalloc;
 
 mod memorytracking;
-mod oom;
+pub mod oom;
 mod rangemap;
 
 #[no_mangle]

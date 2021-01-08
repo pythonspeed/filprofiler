@@ -92,7 +92,7 @@ fn get_cgroup_paths<'a>(proc_cgroups: &'a str) -> Vec<&'a str> {
 }
 
 #[cfg(target_os = "linux")]
-fn get_cgroup_available_memory() -> usize {
+pub fn get_cgroup_available_memory() -> usize {
     let contents = match read_to_string("/proc/self/cgroup") {
         Ok(contents) => contents,
         Err(err) => {
@@ -116,7 +116,7 @@ fn get_cgroup_available_memory() -> usize {
 }
 
 #[cfg(target_os = "macos")]
-fn get_cgroup_available_memory() -> usize {
+pub fn get_cgroup_available_memory() -> usize {
     std::usize::MAX
 }
 
