@@ -660,11 +660,17 @@ pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_m
 
     // If we're out-of-memory, we're not going to exit this function or ever
     // free() anything ever again, so we should clear some memory in order to
-    // reduce chances of running out as part of OOM reporting.
+    // reduce chances of running out as part of OOM reporting. We can also free
+    // the allocation that just happened, cause it's never going to be used.
     if oom {
-        // TODO free the allocation! we're not going to ever return to the
-        // calling code, so no one is going to use it, and if it's big
-        // enough it's going to overrun our safety buffer.
+        unsafe {
+            let address = address as *mut libc::c_void;
+            if is_mmap {
+                libc::munmap(address, size);
+            } else {
+                libc::free(address);
+            }
+        }
         tracker_state.allocations.oom_break_glass();
         eprintln!("=fil-profile= Uh oh, almost out of memory, exiting soon.");
     }
