@@ -53,8 +53,16 @@ impl OutOfMemoryEstimator {
             return true;
         }
 
-        // Still have enough, so threshold to 1% of distance to danger zone.
-        self.check_threshold_bytes = (available_bytes - MINIMAL_FREE) / 100;
+        // Still have enough, so threshold to 1% to running out altogether. If
+        // we're at 101MB free, this will check basically at the boundary.
+        // Anything higher and we'll check even farther away, so it's still
+        // safe, and this prevents us from checking too often when we're close,
+        // as in an earlier iteration of this check.
+        //
+        // What if someone allocations 80MB when we're 120MB from running out?
+        // See add_allocation() in memorytracking.rs, which will just immediatly
+        // free that memory again since we're going to exit anyway.
+        self.check_threshold_bytes = available_bytes / 100;
 
         // We're not OOM:
         false
@@ -214,12 +222,12 @@ mod tests {
         for pair in checks.windows(2) {
             assert!(pair[0] >= pair[1], "{} vs {}", pair[0], pair[1]);
         }
-        // In the beginning we check very infrequently:
-        assert!((checks[0] - checks[1]) > 900_000);
-        // By the end we should be checking every allocation:
+        // In the beginning we check infrequently:
+        assert!((checks[0] - checks[1]) > 9_000_000);
+        // By the end we should be checking more frequently:
         let final_difference = checks[checks.len() - 2] - checks[checks.len() - 1];
-        assert_eq!(
-            final_difference, 10_000,
+        assert!(
+            final_difference < 1_100_000,
             "final difference: {}",
             final_difference,
         );
