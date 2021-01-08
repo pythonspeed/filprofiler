@@ -38,4 +38,4 @@ proptest = "0.9.5"
 
 [lib]
 name = "pymemprofile_api"
-crate_type = ["rlib", "staticlib"]
+crate_type = ["staticlib"]
