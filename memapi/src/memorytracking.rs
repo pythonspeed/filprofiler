@@ -652,7 +652,6 @@ pub fn set_current_callstack(callstack: &Callstack) {
 }
 
 /// Add a new allocation based off the current callstack.
-/// TODO do we want this called _before_ the allocation, to make OOM-catching more reliable?
 pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_mmap: bool) {
     let mut tracker_state = TRACKER_STATE.lock();
 
@@ -663,6 +662,9 @@ pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_m
     // free() anything ever again, so we should clear some memory in order to
     // reduce chances of running out as part of OOM reporting.
     if oom {
+        // TODO free the allocation! we're not going to ever return to the
+        // calling code, so no one is going to use it, and if it's big
+        // enough it's going to overrun our safety buffer.
         tracker_state.allocations.oom_break_glass();
         eprintln!("=fil-profile= Uh oh, almost out of memory, exiting soon.");
     }
