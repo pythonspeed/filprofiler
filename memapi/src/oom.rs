@@ -3,7 +3,7 @@ use std::fs::read_to_string;
 /// Logic for handling out-of-memory situations.
 
 // Anything less than this is too dangerous, and we should dump and
-// exit. TODO is this actually enough?
+// exit.
 const MINIMAL_FREE: usize = 100 * 1024 * 1024;
 
 /// Estimate whether we're about to run out of memory.
