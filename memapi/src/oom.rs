@@ -1,3 +1,5 @@
+use once_cell::sync::Lazy;
+use parking_lot::Mutex;
 use std::fs::read_to_string;
 
 /// Logic for handling out-of-memory situations.
@@ -93,18 +95,24 @@ fn get_cgroup_paths<'a>(proc_cgroups: &'a str) -> Vec<&'a str> {
 
 #[cfg(target_os = "linux")]
 pub fn get_cgroup_available_memory() -> usize {
-    let contents = match read_to_string("/proc/self/cgroup") {
-        Ok(contents) => contents,
-        Err(err) => {
-            eprintln!("=fil-profile= Couldn't read /proc/self/cgroup ({:})", err);
-            return std::usize::MAX;
+    static MAYBE_CGROUP: Lazy<Option<Mutex<cgroups_rs::Cgroup>>> = Lazy::new(|| {
+        let contents = match read_to_string("/proc/self/cgroup") {
+            Ok(contents) => contents,
+            Err(err) => {
+                eprintln!("=fil-profile= Couldn't read /proc/self/cgroup ({:})", err);
+                return None;
+            }
+        };
+        let cgroup_paths = get_cgroup_paths(&contents);
+        for path in cgroup_paths {
+            let h = cgroups_rs::hierarchies::auto();
+            return Some(Mutex::new(cgroups_rs::Cgroup::load(h, path)));
         }
-    };
-    let cgroup_paths = get_cgroup_paths(&contents);
+        None
+    });
     let mut result = std::usize::MAX;
-    for path in cgroup_paths {
-        let h = cgroups_rs::hierarchies::auto();
-        let cgroup = cgroups_rs::Cgroup::load(h, path);
+    if let Some(cgroup) = &*MAYBE_CGROUP {
+        let cgroup = cgroup.lock();
         let mem: &cgroups_rs::memory::MemController = cgroup.controller_of().unwrap();
         let mem = mem.memory_stat();
         result = std::cmp::min(

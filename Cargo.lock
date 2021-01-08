@@ -512,6 +512,7 @@ dependencies = [
  "jemallocator",
  "lazy_static",
  "libc",
+ "once_cell",
  "parking_lot",
  "proptest",
  "psutil",
