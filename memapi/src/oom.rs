@@ -19,12 +19,6 @@ const MINIMAL_FREE: usize = 100 * 1024 * 1024;
 /// Second, we probably don't want to check every time, that's expensive. So
 /// check every 1% of allocations remaining until we hit the danger zone (we
 /// don't even check for free()s, which just means more frequent checks).
-///
-/// If current process is only one allocating, that is fine, it'll catch the
-/// situation. But there might be multiple processes allocating. So separately
-/// we'll also check every millisecond in a thread. That way if we're running
-/// out of memory due to something else, we'll still dump and not lose the info.
-/// That's implemented elsewhere. TODO
 pub struct OutOfMemoryEstimator {
     // How many bytes it takes until we check again: initially, 1% of distance
     // between danger zone and free memory as of last check.
