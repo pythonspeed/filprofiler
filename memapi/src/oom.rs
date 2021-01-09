@@ -8,6 +8,13 @@ use std::fs::read_to_string;
 // exit.
 const MINIMAL_FREE: usize = 100 * 1024 * 1024;
 
+pub trait MemoryInfo {
+    /// Return how much memory we have, as bytes.
+    fn get_available_memory(&self) -> usize;
+    /// Return how much process memory is resident, as bytes.
+    fn get_resident_process_memory(&self) -> usize;
+}
+
 /// Estimate whether we're about to run out of memory.
 ///
 /// First, we need to define what "running out of memory" means. As a first
@@ -21,28 +28,28 @@ const MINIMAL_FREE: usize = 100 * 1024 * 1024;
 /// Second, we probably don't want to check every time, that's expensive. So
 /// check every 1% of allocations remaining until we hit the danger zone (we
 /// don't even check for free()s, which just means more frequent checks).
-pub struct OutOfMemoryEstimator {
+pub struct OutOfMemoryEstimator<M: MemoryInfo> {
     // How many bytes it takes until we check again: initially, 1% of distance
     // between danger zone and free memory as of last check.
     check_threshold_bytes: usize,
     // Callable that returns currently free bytes in RAM (w/o swap). In practice
     // this may take into account things like rusage and cgroups limits, which
     // may be lower than actual free RAM.
-    get_available_bytes: Box<dyn Fn() -> usize + Send + 'static>,
+    memory_info: M,
 }
 
-impl OutOfMemoryEstimator {
-    pub fn new<F: Fn() -> usize + Send + 'static>(get_available_bytes: F) -> Self {
+impl<M: MemoryInfo> OutOfMemoryEstimator<M> {
+    pub fn new(memory_info: M) -> Self {
         Self {
             check_threshold_bytes: 0,
-            get_available_bytes: Box::new(get_available_bytes),
+            memory_info,
         }
     }
 
     /// Check if we're (close to being) out of memory.
     pub fn are_we_oom(&mut self) -> bool {
         // Figure out how much is free, reset the threshold accordingly.
-        let available_bytes = (self.get_available_bytes)();
+        let available_bytes = self.memory_info.get_available_memory();
 
         // Check if we're out of memory:
         if available_bytes < MINIMAL_FREE {
@@ -128,14 +135,29 @@ pub fn get_cgroup_available_memory() -> usize {
     std::usize::MAX
 }
 
-/// Return how much free memory we have, as bytes.
-pub fn get_available_memory() -> usize {
-    // This will include memory that can become available by syncing
-    // filesystem buffers to disk, which is probably what we want.
-    let available = psutil::memory::virtual_memory().unwrap().available() as usize;
-    let cgroup_available = get_cgroup_available_memory();
-    std::cmp::min(available, cgroup_available)
+/// Real system information.
+pub struct RealMemoryInfo {}
+
+impl MemoryInfo for RealMemoryInfo {
+    /// Return how much free memory we have, as bytes.
+    fn get_available_memory(&self) -> usize {
+        // This will include memory that can become available by syncing
+        // filesystem buffers to disk, which is probably what we want.
+        let available = psutil::memory::virtual_memory().unwrap().available() as usize;
+        let cgroup_available = get_cgroup_available_memory();
+        std::cmp::min(available, cgroup_available)
+    }
+
+    fn get_resident_process_memory(&self) -> usize {
+        psutil::process::Process::current()
+            .unwrap()
+            .memory_info()
+            .unwrap()
+            .rss() as usize
+    }
 }
+
+unsafe impl Send for RealMemoryInfo {}
 
 #[cfg(test)]
 mod tests {

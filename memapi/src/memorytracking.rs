@@ -1,4 +1,4 @@
-use super::oom::{get_available_memory, OutOfMemoryEstimator};
+use super::oom::{OutOfMemoryEstimator, RealMemoryInfo};
 use super::rangemap::RangeMap;
 use ahash::RandomState as ARandomState;
 use im::Vector as ImVector;
@@ -600,7 +600,7 @@ impl<'a> AllocationTracker {
 }
 
 struct TrackerState {
-    oom: OutOfMemoryEstimator,
+    oom: OutOfMemoryEstimator<RealMemoryInfo>,
     allocations: AllocationTracker,
 }
 
@@ -618,7 +618,7 @@ lazy_static! {
     };
     static ref TRACKER_STATE: Mutex<TrackerState> = Mutex::new(TrackerState {
         allocations: AllocationTracker::new("/tmp".to_string()),
-        oom: OutOfMemoryEstimator::new(get_available_memory),
+        oom: OutOfMemoryEstimator::new(RealMemoryInfo {}),
     });
 }
 
