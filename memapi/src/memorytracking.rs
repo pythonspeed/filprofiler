@@ -654,9 +654,13 @@ pub fn set_current_callstack(callstack: &Callstack) {
 /// Add a new allocation based off the current callstack.
 pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_mmap: bool) {
     let mut tracker_state = TRACKER_STATE.lock();
+    let current_allocated_bytes = tracker_state.allocations.current_allocated_bytes;
 
     // Check if we're out of memory:
-    let oom = address == 0 || tracker_state.oom.too_big_allocation(size);
+    let oom = (address == 0)
+        || tracker_state
+            .oom
+            .too_big_allocation(size, current_allocated_bytes);
 
     // If we're out-of-memory, we're not going to exit this function or ever
     // free() anything ever again, so we should clear some memory in order to

@@ -47,12 +47,25 @@ impl<M: MemoryInfo> OutOfMemoryEstimator<M> {
     }
 
     /// Check if we're (close to being) out of memory.
-    pub fn are_we_oom(&mut self) -> bool {
+    pub fn are_we_oom(&mut self, total_allocated_bytes: usize) -> bool {
         // Figure out how much is free, reset the threshold accordingly.
         let available_bytes = self.memory_info.get_available_memory();
 
         // Check if we're out of memory:
         if available_bytes < MINIMAL_FREE {
+            return true;
+        }
+
+        // Check if we're swapping. On macOS in particular there is a strong
+        // tendency to go to swap (coupled with difficulty getting swap numbers
+        // for a process). So if swap is bigger than available bytes, we'll
+        // assume we're effectively OOM on theory that extensive swapping is
+        // highly undesirable. We calculate relevant swap by subtracting
+        // resident memory from the memory we know we've allocated.
+        let rss = self.memory_info.get_resident_process_memory();
+        // Because we don't track all allocations, technically resident memory
+        // might be larger than what we think we allocated!
+        if rss < total_allocated_bytes && (total_allocated_bytes - rss) > available_bytes {
             return true;
         }
 
@@ -71,14 +84,19 @@ impl<M: MemoryInfo> OutOfMemoryEstimator<M> {
         false
     }
 
-    /// Given new allocation size, return whether we're out-of-memory. May or
-    /// may not actually check current free memory, as an optimization.
-    pub fn too_big_allocation(&mut self, allocated_bytes: usize) -> bool {
+    /// Given new allocation size and total allocated bytes for the process,
+    /// return whether we're out-of-memory. May or may not actually check
+    /// current free memory, as an optimization.
+    pub fn too_big_allocation(
+        &mut self,
+        allocated_bytes: usize,
+        total_allocated_bytes: usize,
+    ) -> bool {
         let current_threshold = self.check_threshold_bytes;
         if allocated_bytes > current_threshold {
             // We've allocated enough that it's time to check for potential OOM
             // condition.
-            return self.are_we_oom();
+            return self.are_we_oom(total_allocated_bytes);
         }
         self.check_threshold_bytes = current_threshold - allocated_bytes;
         return false;
