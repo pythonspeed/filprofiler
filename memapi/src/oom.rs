@@ -177,7 +177,7 @@ impl MemoryInfo for RealMemoryInfo {
 
 unsafe impl Send for RealMemoryInfo {}
 
-#[cfg(test)]
+/*
 mod tests {
     use super::OutOfMemoryEstimator;
     use std::sync::{Arc, Mutex};
@@ -275,3 +275,4 @@ mod tests {
         );
     }
 }
+*/
