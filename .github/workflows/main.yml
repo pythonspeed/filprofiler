@@ -62,6 +62,8 @@ jobs:
         run: |
           set -euo pipefail
           sudo mount -t cgroup2 none /sys/fs/cgroup
+          . venv/bin/activate
+          cat /proc/self/cgroup
           py.test tests -k oom
       - name: "Build wheel"
         if: startsWith(matrix.os, 'mac')
