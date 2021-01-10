@@ -32,6 +32,6 @@ fn main() {
         memory.rss(),
         memory.vms()
     );
-    */
     std::thread::sleep_ms(1000 * 1000);
+     */
 }

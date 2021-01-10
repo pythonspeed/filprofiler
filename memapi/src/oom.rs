@@ -177,88 +177,109 @@ impl MemoryInfo for RealMemoryInfo {
 
 unsafe impl Send for RealMemoryInfo {}
 
-/*
 mod tests {
-    use super::OutOfMemoryEstimator;
-    use std::sync::{Arc, Mutex};
+    use super::{MemoryInfo, OutOfMemoryEstimator};
+    use std::cell::Ref;
+    use std::cell::RefCell;
 
     struct FakeMemory {
-        available_memory: usize,
-        checks: Vec<usize>,
+        available_memory: RefCell<usize>,
+        swap: RefCell<usize>,
+        checks: RefCell<Vec<usize>>,
     }
 
     impl FakeMemory {
         fn new() -> Self {
             FakeMemory {
-                available_memory: 1_000_000_000,
-                checks: vec![],
+                available_memory: RefCell::new(1_000_000_000),
+                checks: RefCell::new(vec![]),
+                swap: RefCell::new(0),
             }
         }
 
-        fn get_available_memory(&mut self) -> usize {
-            self.checks.push(self.available_memory);
-            self.available_memory
+        fn allocate(&self, size: usize) {
+            let mut mem = self.available_memory.borrow_mut();
+            *mem -= size;
         }
 
-        fn allocate(&mut self, size: usize) {
-            self.available_memory -= size;
+        fn add_swap(&self, size: usize) {
+            *self.swap.borrow_mut() += size;
         }
 
-        fn get_checks(&self) -> &[usize] {
-            &self.checks
+        fn get_checks(&self) -> Ref<Vec<usize>> {
+            self.checks.borrow()
+        }
+
+        fn get_allocated(&self) -> usize {
+            1_000_000_000 - *self.available_memory.borrow()
         }
     }
 
-    fn setup_estimator() -> (Arc<Mutex<FakeMemory>>, OutOfMemoryEstimator) {
-        let fake_memory = Arc::new(Mutex::new(FakeMemory::new()));
-        let get_memory = {
-            let fake_memory = fake_memory.clone();
-            move || -> usize {
-                let mut memory = fake_memory.lock().unwrap();
-                memory.get_available_memory()
-            }
-        };
-        let estimator = OutOfMemoryEstimator::new(get_memory);
-        (fake_memory, estimator)
+    impl MemoryInfo for FakeMemory {
+        fn get_available_memory(&self) -> usize {
+            self.checks
+                .borrow_mut()
+                .push(*self.available_memory.borrow());
+            *self.available_memory.borrow()
+        }
+
+        fn get_resident_process_memory(&self) -> usize {
+            self.get_allocated() - *self.swap.borrow()
+        }
+    }
+
+    fn setup_estimator() -> OutOfMemoryEstimator<FakeMemory> {
+        let fake_memory = FakeMemory::new();
+        OutOfMemoryEstimator::new(fake_memory)
     }
 
     // We're out of memory if we're below the threshold.
     #[test]
     fn oom_threshold() {
-        let (fake_memory, mut estimator) = setup_estimator();
-        let allocate = |amount| {
-            let mut memory = fake_memory.lock().unwrap();
-            memory.allocate(amount);
-        };
-        assert!(!estimator.are_we_oom());
-        allocate(500_000_000);
-        assert!(!estimator.are_we_oom());
-        allocate(350_000_000);
-        assert!(!estimator.are_we_oom());
-        allocate(50_000_000);
+        let mut estimator = setup_estimator();
+        assert!(!estimator.are_we_oom(estimator.memory_info.get_allocated()));
+        estimator.memory_info.allocate(500_000_000);
+        assert!(!estimator.are_we_oom(estimator.memory_info.get_allocated()));
+        estimator.memory_info.allocate(350_000_000);
+        assert!(!estimator.are_we_oom(estimator.memory_info.get_allocated()));
+        estimator.memory_info.allocate(50_000_000);
         // Now that we're below the maximum, we've gone too far:
-        assert!(estimator.are_we_oom());
-        allocate(40_000_000);
-        assert!(estimator.are_we_oom());
+        assert!(estimator.are_we_oom(estimator.memory_info.get_allocated()));
+        estimator.memory_info.allocate(40_000_000);
+        assert!(estimator.are_we_oom(estimator.memory_info.get_allocated()));
+    }
+
+    // We're out of memory if swap > available.
+    #[test]
+    fn oom_swap() {
+        let mut estimator = setup_estimator();
+        estimator.memory_info.allocate(500_000_001);
+        assert!(!estimator.are_we_oom(estimator.memory_info.get_allocated()));
+
+        estimator.memory_info.add_swap(499_999_999);
+        assert!(!estimator.are_we_oom(estimator.memory_info.get_allocated()));
+
+        estimator.memory_info.add_swap(2);
+        assert!(estimator.are_we_oom(estimator.memory_info.get_allocated()));
     }
 
     // The intervals between checking if out-of-memory shrink as we get closer
     // to running out of memory
     #[test]
     fn oom_estimator_shrinking_intervals() {
-        let (fake_memory, mut estimator) = setup_estimator();
+        let mut estimator = setup_estimator();
         loop {
             {
-                let mut memory = fake_memory.lock().unwrap();
+                let memory = &mut estimator.memory_info;
                 memory.allocate(10_000);
             }
-            if estimator.too_big_allocation(10_000) {
+            if estimator.too_big_allocation(10_000, estimator.memory_info.get_allocated()) {
                 break;
             }
             // by 100MB we should have detected OOM.
-            assert!(fake_memory.lock().unwrap().available_memory >= 99_000_000);
+            assert!(*(&estimator.memory_info).available_memory.borrow() >= 99_000_000);
         }
-        let fake_memory = fake_memory.lock().unwrap();
+        let fake_memory = estimator.memory_info;
         let checks = fake_memory.get_checks();
         // Each check should come closer than the next:
         for pair in checks.windows(2) {
@@ -275,4 +296,3 @@ mod tests {
         );
     }
 }
-*/
