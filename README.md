@@ -126,17 +126,7 @@ $ python -m filprofiler run yourscript.py --input-file=yourfile
 
 ### <a name="oom">Debugging out-of-memory crashes</a>
 
-First, run `free` to figure out how much memory is available—in this case about 6.3GB—and then set a corresponding limit on virtual memory with `ulimit`:
-
-```console
-$ free -h
-       total   used   free  shared  buff/cache  available
-Mem:   7.7Gi  1.1Gi  6.3Gi    50Mi       334Mi      6.3Gi
-Swap:  3.9Gi  3.0Gi  871Mi
-$ ulimit -Sv 6300000
-```
-
-Then, run your program under Fil, and it will generate a SVG at the point in time when memory runs out:
+**New in v0.14 and later:** Just run your program under Fil, and it will generate a SVG at the point in time when memory runs out:
 
 ```console
 $ fil-profile run oom.py 
