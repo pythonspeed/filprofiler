@@ -618,7 +618,7 @@ lazy_static! {
     };
     static ref TRACKER_STATE: Mutex<TrackerState> = Mutex::new(TrackerState {
         allocations: AllocationTracker::new("/tmp".to_string()),
-        oom: OutOfMemoryEstimator::new(RealMemoryInfo {}),
+        oom: OutOfMemoryEstimator::new(RealMemoryInfo::new()),
     });
 }
 

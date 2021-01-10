@@ -1,5 +1,3 @@
-use once_cell::sync::Lazy;
-use parking_lot::Mutex;
 use std::fs::read_to_string;
 
 /// Logic for handling out-of-memory situations.
@@ -118,43 +116,59 @@ fn get_cgroup_paths<'a>(proc_cgroups: &'a str) -> Vec<&'a str> {
     result
 }
 
-#[cfg(target_os = "linux")]
-pub fn get_cgroup_available_memory() -> usize {
-    static MAYBE_CGROUP: Lazy<Option<Mutex<cgroups_rs::Cgroup>>> = Lazy::new(|| {
-        let contents = match read_to_string("/proc/self/cgroup") {
-            Ok(contents) => contents,
-            Err(err) => {
-                eprintln!("=fil-profile= Couldn't read /proc/self/cgroup ({:})", err);
-                return None;
-            }
-        };
-        let cgroup_paths = get_cgroup_paths(&contents);
-        for path in cgroup_paths {
-            let h = cgroups_rs::hierarchies::auto();
-            return Some(Mutex::new(cgroups_rs::Cgroup::load(h, path)));
-        }
-        None
-    });
-    let mut result = std::usize::MAX;
-    if let Some(cgroup) = &*MAYBE_CGROUP {
-        let cgroup = cgroup.lock();
-        let mem: &cgroups_rs::memory::MemController = cgroup.controller_of().unwrap();
-        let mem = mem.memory_stat();
-        result = std::cmp::min(
-            result,
-            (mem.limit_in_bytes - mem.usage_in_bytes as i64) as usize,
-        );
-    }
-    result
-}
-
-#[cfg(target_os = "macos")]
-pub fn get_cgroup_available_memory() -> usize {
-    std::usize::MAX
-}
-
 /// Real system information.
-pub struct RealMemoryInfo {}
+pub struct RealMemoryInfo {
+    #[cfg(target_os = "linux")]
+    cgroup: Option<cgroups_rs::Cgroup>,
+}
+
+impl RealMemoryInfo {
+    #[cfg(target_os = "linux")]
+    pub fn new() -> Self {
+        let get_cgroup = || {
+            let contents = match read_to_string("/proc/self/cgroup") {
+                Ok(contents) => contents,
+                Err(err) => {
+                    eprintln!("=fil-profile= Couldn't read /proc/self/cgroup ({:})", err);
+                    return None;
+                }
+            };
+            let cgroup_paths = get_cgroup_paths(&contents);
+            for path in cgroup_paths {
+                let h = cgroups_rs::hierarchies::auto();
+                return Some(cgroups_rs::Cgroup::load(h, path));
+            }
+            None
+        };
+        return Self {
+            cgroup: get_cgroup(),
+        };
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn get_cgroup_available_memory(&self) -> usize {
+        let mut result = std::usize::MAX;
+        if let Some(cgroup) = &self.cgroup {
+            let mem: &cgroups_rs::memory::MemController = cgroup.controller_of().unwrap();
+            let mem = mem.memory_stat();
+            result = std::cmp::min(
+                result,
+                (mem.limit_in_bytes - mem.usage_in_bytes as i64) as usize,
+            );
+        }
+        result
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn get_cgroup_available_memory(&self) -> usize {
+        std::usize::MAX
+    }
+}
 
 impl MemoryInfo for RealMemoryInfo {
     /// Return how much free memory we have, as bytes.
@@ -162,7 +176,7 @@ impl MemoryInfo for RealMemoryInfo {
         // This will include memory that can become available by syncing
         // filesystem buffers to disk, which is probably what we want.
         let available = psutil::memory::virtual_memory().unwrap().available() as usize;
-        let cgroup_available = get_cgroup_available_memory();
+        let cgroup_available = self.get_cgroup_available_memory();
         std::cmp::min(available, cgroup_available)
     }
 
@@ -175,8 +189,7 @@ impl MemoryInfo for RealMemoryInfo {
     }
 }
 
-unsafe impl Send for RealMemoryInfo {}
-
+#[cfg(test)]
 mod tests {
     use super::{MemoryInfo, OutOfMemoryEstimator};
     use std::cell::Ref;
