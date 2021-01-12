@@ -1,3 +1,4 @@
+use super::oom::{OutOfMemoryEstimator, RealMemoryInfo};
 use super::rangemap::RangeMap;
 use ahash::RandomState as ARandomState;
 use im::Vector as ImVector;
@@ -172,16 +173,13 @@ thread_local!(static THREAD_CALLSTACK: RefCell<Callstack> = RefCell::new(Callsta
 
 type CallstackId = u32;
 
-/// Create a new hashmap with an optional fixed seed. We use PYTHONHASHSEED on
-/// the theory that if it's set, we want these hashes to be consistent too.
+/// Create a new hashmap with an optional fixed seed.
 fn new_hashmap<K, V>() -> HashMap<K, V, ARandomState> {
-    match std::env::var("PYTHONHASHSEED") {
-        Ok(value) => {
-            let seed = value.parse::<i64>().unwrap();
-            let seed = seed as u64;
+    match *HASH_SEED {
+        Some(seed) => {
             HashMap::with_hasher(ARandomState::with_seeds(seed, seed + 1, seed + 2, seed + 3))
         }
-        _ => HashMap::default(),
+        None => HashMap::default(),
     }
 }
 
@@ -539,9 +537,15 @@ impl<'a> AllocationTracker {
         }
     }
 
+    /// Clear memory we won't be needing anymore, since we're going to exit out.
+    fn oom_break_glass(&mut self) {
+        self.current_allocations.clear();
+        self.current_allocations.shrink_to_fit();
+        self.peak_memory_usage.clear();
+    }
+
     /// Dump information about where we are.
     fn oom_dump(&mut self) {
-        eprintln!("=fil-profile= Uh oh, out of memory!");
         eprintln!(
             "=fil-profile= We'll try to dump out SVGs. Note that no HTML file will be written."
         );
@@ -554,7 +558,7 @@ impl<'a> AllocationTracker {
             false,
         );
         unsafe {
-            libc::_exit(5);
+            libc::_exit(53);
         }
     }
 
@@ -594,9 +598,29 @@ impl<'a> AllocationTracker {
     }
 }
 
+struct TrackerState {
+    oom: OutOfMemoryEstimator<RealMemoryInfo>,
+    allocations: AllocationTracker,
+}
+
 lazy_static! {
-    static ref ALLOCATIONS: Mutex<AllocationTracker> =
-        Mutex::new(AllocationTracker::new("/tmp".to_string()));
+    // If the PYTHONHASHSEED environment variable is set, we will use it as seed
+    // for Rust hashmaps as well, to reduce randomness when benchmarking.
+    static ref HASH_SEED: Option<u64> = match std::env::var("PYTHONHASHSEED") {
+        Ok(value) => {
+            if value == "random" {
+                None
+            } else {
+                let seed = value.parse::<i64>().unwrap();
+                Some(seed as u64)
+            }
+        }
+        _ => None,
+    };
+    static ref TRACKER_STATE: Mutex<TrackerState> = Mutex::new(TrackerState {
+        allocations: AllocationTracker::new("/tmp".to_string()),
+        oom: OutOfMemoryEstimator::new(RealMemoryInfo::new()),
+    });
 }
 
 /// Add to per-thread function stack:
@@ -630,7 +654,33 @@ pub fn set_current_callstack(callstack: &Callstack) {
 
 /// Add a new allocation based off the current callstack.
 pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_mmap: bool) {
-    let mut allocations = ALLOCATIONS.lock();
+    let mut tracker_state = TRACKER_STATE.lock();
+    let current_allocated_bytes = tracker_state.allocations.current_allocated_bytes;
+
+    // Check if we're out of memory:
+    let oom = (address == 0)
+        || tracker_state
+            .oom
+            .too_big_allocation(size, current_allocated_bytes);
+
+    // If we're out-of-memory, we're not going to exit this function or ever
+    // free() anything ever again, so we should clear some memory in order to
+    // reduce chances of running out as part of OOM reporting. We can also free
+    // the allocation that just happened, cause it's never going to be used.
+    if oom {
+        unsafe {
+            let address = address as *mut libc::c_void;
+            if is_mmap {
+                libc::munmap(address, size);
+            } else {
+                libc::free(address);
+            }
+        }
+        tracker_state.allocations.oom_break_glass();
+        eprintln!("=fil-profile= Uh oh, almost out of memory, exiting soon.");
+    }
+
+    let allocations = &mut tracker_state.allocations;
     let callstack_id = THREAD_CALLSTACK.with(|tcs| {
         let mut callstack = tcs.borrow_mut();
         callstack.id_for_new_allocation(line_number, |callstack| {
@@ -644,7 +694,7 @@ pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_m
         allocations.add_allocation(address, size, callstack_id);
     }
 
-    if address == 0 {
+    if oom {
         // Uh-oh, we're out of memory.
         allocations.oom_dump();
     }
@@ -652,13 +702,16 @@ pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_m
 
 /// Free an existing allocation.
 pub fn free_allocation(address: usize) {
-    let mut allocations = ALLOCATIONS.lock();
+    let mut tracker_state = TRACKER_STATE.lock();
+
+    let allocations = &mut tracker_state.allocations;
     allocations.free_allocation(address);
 }
 
 /// Get the size of an allocation, or 0 if it's not tracked.
 pub fn get_allocation_size(address: usize) -> libc::size_t {
-    let allocations = ALLOCATIONS.lock();
+    let tracker_state = TRACKER_STATE.lock();
+    let allocations = &tracker_state.allocations;
     if let Some(allocation) = allocations.current_allocations.get(&address) {
         allocation.size()
     } else {
@@ -668,19 +721,22 @@ pub fn get_allocation_size(address: usize) -> libc::size_t {
 
 /// Free an anonymous mmap().
 pub fn free_anon_mmap(address: usize, length: libc::size_t) {
-    let mut allocations = ALLOCATIONS.lock();
+    let mut tracker_state = TRACKER_STATE.lock();
+
+    let allocations = &mut tracker_state.allocations;
     allocations.free_anon_mmap(address, length);
 }
 
 /// Reset internal state.
 pub fn reset(default_path: String) {
-    let mut allocations = ALLOCATIONS.lock();
-    allocations.reset(default_path);
+    let mut tracker_state = TRACKER_STATE.lock();
+    tracker_state.allocations.reset(default_path);
 }
 
 /// Dump all callstacks in peak memory usage to format used by flamegraph.
 pub fn dump_peak_to_flamegraph(path: &str) {
-    let mut allocations = ALLOCATIONS.lock();
+    let mut tracker_state = TRACKER_STATE.lock();
+    let allocations = &mut tracker_state.allocations;
     allocations.dump_peak_to_flamegraph(path);
 }
 
@@ -745,7 +801,6 @@ mod tests {
         filter_to_useful_callstacks, Allocation, AllocationTracker, CallSiteId, Callstack,
         CallstackInterner, FunctionId, FunctionLocation, HIGH_32BIT, MIB,
     };
-    use ahash::RandomState as ARandomState;
     use im;
     use proptest::prelude::*;
     use std::collections::HashMap;

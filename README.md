@@ -126,17 +126,7 @@ $ python -m filprofiler run yourscript.py --input-file=yourfile
 
 ### <a name="oom">Debugging out-of-memory crashes</a>
 
-First, run `free` to figure out how much memory is available—in this case about 6.3GB—and then set a corresponding limit on virtual memory with `ulimit`:
-
-```console
-$ free -h
-       total   used   free  shared  buff/cache  available
-Mem:   7.7Gi  1.1Gi  6.3Gi    50Mi       334Mi      6.3Gi
-Swap:  3.9Gi  3.0Gi  871Mi
-$ ulimit -Sv 6300000
-```
-
-Then, run your program under Fil, and it will generate a SVG at the point in time when memory runs out:
+**New in v0.14 and later:** Just run your program under Fil, and it will generate a SVG at the point in time when memory runs out, and then exit with exit code 53:
 
 ```console
 $ fil-profile run oom.py 
@@ -144,6 +134,13 @@ $ fil-profile run oom.py
 =fil-profile= Wrote memory usage flamegraph to fil-result/2020-06-15T12:37:13.033/out-of-memory.svg
 ```
 
+Fil uses three heuristics to determine if the process is close to running out of memory:
+
+* A failed allocation, indicating insufficient memory is available.
+* The operating system or memory-limited cgroup (e.g. a Docker container) only has 100MB of RAM available.
+* The process swap is larger than available memory, indicating heavy swapping by the process.
+  In general you want to avoid swapping, and e.g. [explicitly use `mmap()`](https://pythonspeed.com/articles/mmap-vs-zarr-hdf5/) if you expect to be using disk as a backfill for memory.
+  
 ## <a name="reducing-memory-usage">Reducing memory usage in your code</a>
 
 You've found where memory usage is coming from—now what?
