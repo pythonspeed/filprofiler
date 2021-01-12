@@ -264,7 +264,7 @@ def test_out_of_memory():
     ones = (numpy.core.numeric.__file__, "ones", ANY)
     script = str(script)
     expected_small_alloc = ((script, "<module>", 9), ones)
-    toobig_alloc = ((script, "<module>", 14), ones)
+    toobig_alloc = ((script, "<module>", 12), ones)
 
     assert match(allocations, {expected_small_alloc: big}, as_mb) == pytest.approx(
         100, 0.1
