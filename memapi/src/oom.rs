@@ -17,22 +17,24 @@ pub trait MemoryInfo {
 ///
 /// First, we need to define what "running out of memory" means. As a first
 /// pass, 100MB or less of non-swap memory availability, minimum of OS in
-/// general, current cgroup, and rusage limit. Don't count swap because goal is
+/// general and current cgroup. Don't count swap because goal is
 /// to avoid slowness, if someone wants to fallback to disk they should use
 /// mmap().
 ///
 /// This will break on over-committing, but... we can live with that.
 ///
+/// macOS is very aggressive about swapping, so we add second heuristic: swap
+/// for the process is bigger than available memory. This suggests large
+/// pressure to swap, since the process wouldn't fit in memory on its own.
+///
 /// Second, we probably don't want to check every time, that's expensive. So
-/// check every 1% of allocations remaining until we hit the danger zone (we
-/// don't even check for free()s, which just means more frequent checks).
+/// check every 1% of allocations remaining until we run out of available memory
+/// (we don't even check for free()s, which just means more frequent checks).
 pub struct OutOfMemoryEstimator<M: MemoryInfo> {
-    // How many bytes it takes until we check again: initially, 1% of distance
-    // between danger zone and free memory as of last check.
+    // How many bytes it takes until we check again: whenever it's reset, it
+    // starts as 1% of available memory.
     check_threshold_bytes: usize,
-    // Callable that returns currently free bytes in RAM (w/o swap). In practice
-    // this may take into account things like rusage and cgroups limits, which
-    // may be lower than actual free RAM.
+    // Pluggable way to get memory usage of the system and process.
     memory_info: M,
 }
 
@@ -46,19 +48,18 @@ impl<M: MemoryInfo> OutOfMemoryEstimator<M> {
 
     /// Check if we're (close to being) out of memory.
     pub fn are_we_oom(&mut self, total_allocated_bytes: usize) -> bool {
-        // Figure out how much is free, reset the threshold accordingly.
         let available_bytes = self.memory_info.get_available_memory();
 
-        // Check if we're out of memory:
+        // Check if we're in danger zone, with very low available memory:
         if available_bytes < MINIMAL_FREE {
             return true;
         }
 
-        // Check if we're swapping. On macOS in particular there is a strong
-        // tendency to go to swap (coupled with difficulty getting swap numbers
-        // for a process). So if swap is bigger than available bytes, we'll
-        // assume we're effectively OOM on theory that extensive swapping is
-        // highly undesirable. We calculate relevant swap by subtracting
+        // Check if we're excessively swapping. On macOS in particular there is
+        // a strong tendency to go to swap (coupled with difficulty getting swap
+        // numbers for a process). So if swap is bigger than available bytes,
+        // we'll assume we're effectively OOM on theory that extensive swapping
+        // is highly undesirable. We calculate relevant swap by subtracting
         // resident memory from the memory we know we've allocated.
         let rss = self.memory_info.get_resident_process_memory();
         // Because we don't track all allocations, technically resident memory
@@ -83,8 +84,8 @@ impl<M: MemoryInfo> OutOfMemoryEstimator<M> {
     }
 
     /// Given new allocation size and total allocated bytes for the process,
-    /// return whether we're out-of-memory. May or may not actually check
-    /// current free memory, as an optimization.
+    /// return whether we're out-of-memory. Only checks actual memory
+    /// availability intermittently, as an optimization.
     pub fn too_big_allocation(
         &mut self,
         allocated_bytes: usize,

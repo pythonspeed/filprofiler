@@ -173,8 +173,7 @@ thread_local!(static THREAD_CALLSTACK: RefCell<Callstack> = RefCell::new(Callsta
 
 type CallstackId = u32;
 
-/// Create a new hashmap with an optional fixed seed. We use PYTHONHASHSEED on
-/// the theory that if it's set, we want these hashes to be consistent too.
+/// Create a new hashmap with an optional fixed seed.
 fn new_hashmap<K, V>() -> HashMap<K, V, ARandomState> {
     match *HASH_SEED {
         Some(seed) => {
@@ -605,6 +604,8 @@ struct TrackerState {
 }
 
 lazy_static! {
+    // If the PYTHONHASHSEED environment variable is set, we will use it as seed
+    // for Rust hashmaps as well, to reduce randomness when benchmarking.
     static ref HASH_SEED: Option<u64> = match std::env::var("PYTHONHASHSEED") {
         Ok(value) => {
             if value == "random" {
