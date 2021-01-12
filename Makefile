@@ -21,7 +21,7 @@ target/release/libpymemprofile_api.a: Cargo.lock memapi/Cargo.toml memapi/src/*.
 
 venv:
 	python3 -m venv venv/
-	venv/bin/pip install --upgrade pip
+	venv/bin/pip install --upgrade pip setuptools
 
 .PHONY: test
 test:
