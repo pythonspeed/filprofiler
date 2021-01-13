@@ -1,1 +1,0 @@
-Out-of-memory detection should work in many more cases than before.

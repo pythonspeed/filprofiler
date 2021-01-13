@@ -1,3 +1,11 @@
+# Fil 0.14.0 (2021-01-13)
+
+
+### Features
+
+- Out-of-memory detection should work in many more cases than before. ([#96](https://github.com/pythonspeed/filprofiler/issues/96))
+
+
 # Fil 0.13.1 (2020-11-30)
 
 
