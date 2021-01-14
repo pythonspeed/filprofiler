@@ -677,7 +677,14 @@ pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_m
             }
         }
         tracker_state.allocations.oom_break_glass();
-        eprintln!("=fil-profile= Uh oh, almost out of memory, exiting soon.");
+        eprintln!("=fil-profile= WARNING: detected out-of-memory condition, exiting soon.");
+        if address == 0 {
+            eprintln!(
+                "=fil-profile= Final allocation of size {} failed (mmap()? {})",
+                size, is_mmap
+            );
+        }
+        tracker_state.oom.memory_info.print_info();
     }
 
     let allocations = &mut tracker_state.allocations;
