@@ -18,6 +18,10 @@ def read(path):
 
 
 extra_compile_args = ["-fno-omit-frame-pointer"]
+extra_link_args = [
+    "-Wl,--version-script=versionscript.txt",
+    "-export-dynamic",
+]
 if environ.get("CONDA_PREFIX"):
     extra_compile_args.append("-DFIL_SKIP_ALIGNED_ALLOC=1")
 
@@ -32,7 +36,7 @@ setup(
             sources=[join("filprofiler", "_filpreload.c")],
             extra_objects=[join("target", "release", "libpymemprofile_api.a")],
             extra_compile_args=extra_compile_args,
-            extra_link_args=["-export-dynamic"],
+            extra_link_args=extra_link_args,
         )
     ],
     package_data={"filprofiler": ["licenses.txt"],},
