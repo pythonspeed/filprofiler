@@ -1,4 +1,4 @@
-use pymemprofile_api::oom::{MemoryInfo, RealMemoryInfo};
+/*use pymemprofile_api::oom::{MemoryInfo, RealMemoryInfo};
 
 fn main() {
     let rm = RealMemoryInfo::new();
@@ -7,4 +7,6 @@ fn main() {
         rm.get_available_memory(),
         rm.get_resident_process_memory()
     );
-}
+}*/
+
+fn main() {}
