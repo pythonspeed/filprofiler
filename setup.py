@@ -6,18 +6,24 @@ from distutils import sysconfig
 import sys
 
 
-if sys.platform == "darwin":
-    # Want a dynamiclib so that it can inserted with DYLD_INSERT_LIBRARIES:
-    config_vars = sysconfig.get_config_vars()
-    config_vars["LDSHARED"] = config_vars["LDSHARED"].replace("-bundle", "-dynamiclib")
-
-
 def read(path):
     with open(path) as f:
         return f.read()
 
 
 extra_compile_args = ["-fno-omit-frame-pointer"]
+extra_link_args = [
+    "-export-dynamic",
+]
+if sys.platform == "darwin":
+    # Want a dynamiclib so that it can inserted with DYLD_INSERT_LIBRARIES:
+    config_vars = sysconfig.get_config_vars()
+    config_vars["LDSHARED"] = config_vars["LDSHARED"].replace("-bundle", "-dynamiclib")
+else:
+    # macOS lld doesn't support version scripts.
+    extra_link_args.append("-Wl,--version-script=versionscript.txt")
+
+
 if environ.get("CONDA_PREFIX"):
     extra_compile_args.append("-DFIL_SKIP_ALIGNED_ALLOC=1")
 
@@ -32,7 +38,7 @@ setup(
             sources=[join("filprofiler", "_filpreload.c")],
             extra_objects=[join("target", "release", "libpymemprofile_api.a")],
             extra_compile_args=extra_compile_args,
-            extra_link_args=["-export-dynamic"],
+            extra_link_args=extra_link_args,
         )
     ],
     package_data={"filprofiler": ["licenses.txt"],},

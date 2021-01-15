@@ -1,0 +1,18 @@
+{
+  global:
+    pymemprofile_*;
+    fil_*;
+    register_fil_tracer;
+    calloc;
+    realloc;
+    malloc;
+    free;
+    mmap;
+    mmap64;
+    munmap;
+    posix_memalign;
+    aligned_alloc;
+    malloc_usable_size;
+    pthread_create;
+  local: *;
+};

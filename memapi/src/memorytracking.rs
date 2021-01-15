@@ -668,16 +668,24 @@ pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_m
     // reduce chances of running out as part of OOM reporting. We can also free
     // the allocation that just happened, cause it's never going to be used.
     if oom {
-        unsafe {
-            let address = address as *mut libc::c_void;
-            if is_mmap {
-                libc::munmap(address, size);
-            } else {
-                libc::free(address);
+        if address == 0 {
+            eprintln!(
+                "=fil-profile= WARNING: Allocation of size {} failed (mmap()? {})",
+                size, is_mmap
+            );
+        } else {
+            unsafe {
+                let address = address as *mut libc::c_void;
+                if is_mmap {
+                    libc::munmap(address, size);
+                } else {
+                    libc::free(address);
+                }
             }
         }
         tracker_state.allocations.oom_break_glass();
-        eprintln!("=fil-profile= Uh oh, almost out of memory, exiting soon.");
+        eprintln!("=fil-profile= WARNING: Detected out-of-memory condition, exiting soon.");
+        tracker_state.oom.memory_info.print_info();
     }
 
     let allocations = &mut tracker_state.allocations;

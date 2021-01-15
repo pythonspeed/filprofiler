@@ -14,7 +14,7 @@ build: target/release/libpymemprofile_api.a
 # Only necessary for benchmarks, only works with Python 3.8 for now.
 .PHONY: _fil-python
 _fil-python: filprofiler/*.c target/release/libpymemprofile_api.a
-	gcc -std=c11 $(shell python3.8-config --cflags) -DFIL_SKIP_ALIGNED_ALLOC=1 -export-dynamic -flto -o ${CONDA_PREFIX}/bin/_fil-python $^ -lpython3.8 $(shell python3.8-config --ldflags)
+	gcc -std=c11 $(shell python3.8-config --cflags) -DFIL_SKIP_ALIGNED_ALLOC=1 -DCONDA_EXECUTABLE_FOR_BENCHMARKS=1 -export-dynamic -flto -o ${CONDA_PREFIX}/bin/_fil-python $^ -lpython3.8 $(shell python3.8-config --ldflags)
 
 target/release/libpymemprofile_api.a: Cargo.lock memapi/Cargo.toml memapi/src/*.rs
 	cargo build --release

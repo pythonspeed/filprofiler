@@ -35,7 +35,7 @@ pub struct OutOfMemoryEstimator<M: MemoryInfo> {
     // starts as 1% of available memory.
     check_threshold_bytes: usize,
     // Pluggable way to get memory usage of the system and process.
-    memory_info: M,
+    pub memory_info: M,
 }
 
 impl<M: MemoryInfo> OutOfMemoryEstimator<M> {
@@ -52,6 +52,10 @@ impl<M: MemoryInfo> OutOfMemoryEstimator<M> {
 
         // Check if we're in danger zone, with very low available memory:
         if available_bytes < MINIMAL_FREE {
+            eprintln!(
+                "=fil-profile= WARNING: Available bytes {} less than minimal required {}",
+                available_bytes, MINIMAL_FREE
+            );
             return true;
         }
 
@@ -65,6 +69,17 @@ impl<M: MemoryInfo> OutOfMemoryEstimator<M> {
         // Because we don't track all allocations, technically resident memory
         // might be larger than what we think we allocated!
         if rss < total_allocated_bytes && (total_allocated_bytes - rss) > available_bytes {
+            eprintln!(
+                concat!(
+                    "=fil-profile= WARNING: Excessive swapping. Program itself ",
+                    "allocated {} bytes, {} are resident, the difference (presumably swap) is {}, ",
+                    "which is more than available system bytes {}"
+                ),
+                total_allocated_bytes,
+                rss,
+                total_allocated_bytes - rss,
+                available_bytes
+            );
             return true;
         }
 
@@ -164,6 +179,12 @@ impl RealMemoryInfo {
         if let Some(cgroup) = &self.cgroup {
             let mem: &cgroups_rs::memory::MemController = cgroup.controller_of().unwrap();
             let mem = mem.memory_stat();
+            if mem.limit_in_bytes == 0 {
+                // A limit of 0 is nonsensical. Seen on Docker with cgroups v1
+                // with no limit set, and the usage was also 0. So just assume
+                // there is no limit.
+                return result;
+            }
             result = std::cmp::min(
                 result,
                 (mem.limit_in_bytes - mem.usage_in_bytes as i64) as usize,
@@ -175,6 +196,29 @@ impl RealMemoryInfo {
     #[cfg(target_os = "macos")]
     pub fn get_cgroup_available_memory(&self) -> usize {
         std::usize::MAX
+    }
+
+    /// Print debugging info to stderr.
+    pub fn print_info(&self) {
+        eprintln!(
+            "=fil-profile= Host memory info: {:?} {:?}",
+            psutil::memory::virtual_memory(),
+            psutil::memory::swap_memory()
+        );
+        #[cfg(target_os = "linux")]
+        eprintln!(
+            "=fil-profile= cgroup (e.g. container) memory info: {:?}",
+            if let Some(cgroup) = &self.cgroup {
+                let mem: &cgroups_rs::memory::MemController = cgroup.controller_of().unwrap();
+                Some(mem.memory_stat())
+            } else {
+                None
+            }
+        );
+        eprintln!(
+            "=fil-profile= Process memory info: {:?}",
+            self.process.memory_info()
+        );
     }
 }
 
