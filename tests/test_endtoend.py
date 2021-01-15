@@ -9,7 +9,6 @@ import sys
 from typing import Union
 import re
 import shutil
-import resource
 
 import numpy.core.numeric
 from pampy import match, _ as ANY
@@ -321,7 +320,7 @@ def get_systemd_run_args(available_memory):
     return args
 
 
-@pytest.mark.skipif(sys.platform != "linux", reason="cgroups are a Linux feature")
+@pytest.mark.skipif(shutil.which("systemd-run") is None, reason="systemd-run not found")
 def test_out_of_memory_slow_leak_cgroups():
     """
     If an allocation is run that runs out of memory slowly, hitting a cgroup
