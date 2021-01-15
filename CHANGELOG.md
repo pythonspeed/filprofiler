@@ -1,3 +1,16 @@
+# Fil 0.14.1 (2021-01-15)
+
+
+### Features
+
+- Report memory stats when out-of-memory event is detected. ([#114](https://github.com/pythonspeed/filprofiler/issues/114))
+
+
+### Bugfixes
+
+- Correctly handle bad data from cgroups about memory limits, fixing erroneous out-of-memory caused by Docker. ([#113](https://github.com/pythonspeed/filprofiler/issues/113))
+
+
 # Fil 0.14.0 (2021-01-13)
 
 
