@@ -6,12 +6,6 @@ from distutils import sysconfig
 import sys
 
 
-if sys.platform == "darwin":
-    # Want a dynamiclib so that it can inserted with DYLD_INSERT_LIBRARIES:
-    config_vars = sysconfig.get_config_vars()
-    config_vars["LDSHARED"] = config_vars["LDSHARED"].replace("-bundle", "-dynamiclib")
-
-
 def read(path):
     with open(path) as f:
         return f.read()
@@ -19,9 +13,17 @@ def read(path):
 
 extra_compile_args = ["-fno-omit-frame-pointer"]
 extra_link_args = [
-    "-Wl,--version-script=versionscript.txt",
     "-export-dynamic",
 ]
+if sys.platform == "darwin":
+    # Want a dynamiclib so that it can inserted with DYLD_INSERT_LIBRARIES:
+    config_vars = sysconfig.get_config_vars()
+    config_vars["LDSHARED"] = config_vars["LDSHARED"].replace("-bundle", "-dynamiclib")
+else:
+    # macOS lld doesn't support version scripts.
+    extra_link_args.append("-Wl,--version-script=versionscript.txt")
+
+
 if environ.get("CONDA_PREFIX"):
     extra_compile_args.append("-DFIL_SKIP_ALIGNED_ALLOC=1")
 

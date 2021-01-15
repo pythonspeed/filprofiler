@@ -1,0 +1,1 @@
+Correctly handle bad data from cgroups about memory limits, fixing erroneous out-of-memory caused by Docker.
