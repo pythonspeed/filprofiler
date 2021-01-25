@@ -107,8 +107,10 @@ struct FunctionLocation {
 };
 
 // Implemented in the Rust library:
+extern uint64_t pymemprofile_add_function_location(const char* filename, size_t filename_length, const char* function_name,
+                                                   size_t function_length);
 extern void pymemprofile_start_call(uint16_t parent_line_number,
-                                    struct FunctionLocation *loc,
+                                    uint64_t function_id,
                                     uint16_t line_number);
 extern void pymemprofile_finish_call();
 extern void pymemprofile_new_line_number(uint16_t line_number);
@@ -170,7 +172,7 @@ static void __attribute__((constructor)) constructor() {
   initialized = 1;
 }
 
-static void start_call(struct FunctionLocation *loc, uint16_t line_number) {
+static void start_call(uint64_t function_id, uint16_t line_number) {
   if (should_track_memory()) {
     set_will_i_be_reentrant(1);
     uint16_t parent_line_number = 0;
@@ -178,7 +180,7 @@ static void start_call(struct FunctionLocation *loc, uint16_t line_number) {
       PyFrameObject *f = current_frame->f_back;
       parent_line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
     }
-    pymemprofile_start_call(parent_line_number, loc, line_number);
+    pymemprofile_start_call(parent_line_number, function_id, line_number);
     set_will_i_be_reentrant(0);
   }
 }
@@ -200,32 +202,28 @@ fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
     current_frame = frame;
 
     /*
-      We want an efficient identifier for filename+fuction name. So we:
-
-      1. Incref the two string objects so they never get GC'ed.
-      2. Store references to the corresponding UTF8 strings on the code object
-         as extra info.
-
-      The pointer address of the resulting struct can be used as an
-      identifier.
+      We want an efficient identifier for filename+fuction name. So we register
+      the function + filename with some Rust code that gives back its ID, and
+      then store the ID. Due to bad API design, value 0 indicates "no result",
+      so we actually store the result + 1.
     */
-    struct FunctionLocation *loc = NULL;
+    uint64_t function_id = 0;
     assert(extra_code_index != -1);
     _PyCode_GetExtra((PyObject *)frame->f_code, extra_code_index,
-                     (void **)&loc);
-    if (loc == NULL) {
-      // Ensure the two string never get garbage collected;
-      Py_INCREF(frame->f_code->co_filename);
-      Py_INCREF(frame->f_code->co_name);
-      loc = REAL_IMPL(malloc)(sizeof(struct FunctionLocation));
-      loc->filename = PyUnicode_AsUTF8AndSize(frame->f_code->co_filename,
-                                              &loc->filename_length);
-      loc->function_name = PyUnicode_AsUTF8AndSize(frame->f_code->co_name,
-                                                   &loc->function_name_length);
+                     (void **)&function_id);
+    if (function_id == 0) {
+      Py_ssize_t filename_length, function_length;
+      const char* filename = PyUnicode_AsUTF8AndSize(frame->f_code->co_filename,
+                                                     &filename_length);
+      const char* function_name = PyUnicode_AsUTF8AndSize(frame->f_code->co_name,
+                                                          &function_length);
+      function_id = pymemprofile_add_function_location(filename, (uint64_t)filename_length, function_name, (uint64_t)function_length);
       _PyCode_SetExtra((PyObject *)frame->f_code, extra_code_index,
-                       (void *)loc);
+                       (void *)function_id + 1);
+    } else {
+      function_id -= 1;
     }
-    start_call(loc, frame->f_lineno);
+    start_call(function_id, frame->f_lineno);
     break;
   case PyTrace_RETURN:
     finish_call();

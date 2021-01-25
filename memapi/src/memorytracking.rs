@@ -12,63 +12,63 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
-use std::slice;
 
-/// A function location provided by the C code. Matches struct in _filpreload.c.
-#[repr(C)]
-pub struct FunctionLocation {
-    filename: *const u8,
-    filename_length: isize,
-    function_name: *const u8,
-    function_name_length: isize,
-}
-
-impl FunctionLocation {
-    #[cfg(test)]
-    fn from_strings(filename: &str, function_name: &str) -> Self {
-        FunctionLocation {
-            filename: filename.as_ptr(),
-            filename_length: filename.len() as isize,
-            function_name: function_name.as_ptr(),
-            function_name_length: function_name.len() as isize,
-        }
-    }
-}
-
-/// A Rust-y wrapper for FunctionLocation
-#[derive(Clone, Debug, PartialEq, Eq, Copy, Hash)]
-pub struct FunctionId {
-    function: *const FunctionLocation,
-}
-
-unsafe impl Send for FunctionId {}
-unsafe impl Sync for FunctionId {}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct FunctionId(u32);
 
 impl FunctionId {
-    pub fn new(function: *const FunctionLocation) -> Self {
-        FunctionId { function }
+    pub fn new(id: u32) -> Self {
+        FunctionId(id)
     }
 
-    fn get_filename(&self) -> &str {
-        unsafe {
-            let loc = &*self.function;
-            let slice = slice::from_raw_parts(loc.filename, loc.filename_length as usize);
-            std::str::from_utf8_unchecked(slice)
+    pub fn as_u32(&self) -> u32 {
+        self.0
+    }
+}
+
+/// A function location in the Python source code, e.g. "example() in foo.py".
+#[derive(Clone)]
+struct FunctionLocation {
+    filename: String,
+    function_name: String,
+}
+
+/// Stores FunctionLocations, returns a FunctionId
+#[derive(Clone)]
+struct FunctionLocations {
+    functions: Vec<FunctionLocation>,
+}
+
+impl FunctionLocations {
+    /// Create a new tracker.
+    fn new() -> Self {
+        Self {
+            functions: Vec::with_capacity(8192),
         }
     }
 
-    fn get_function_name(&self) -> &str {
-        unsafe {
-            let loc = &*self.function;
-            let slice = slice::from_raw_parts(loc.function_name, loc.function_name_length as usize);
-            std::str::from_utf8_unchecked(slice)
-        }
+    /// Register a function, get back its id.
+    fn add_function(&mut self, filename: String, function_name: String) -> FunctionId {
+        self.functions.push(FunctionLocation {
+            filename,
+            function_name,
+        });
+        // If we ever have 2 ** 32 or more functions in our program, this will
+        // break. Seems unlikely, even with long running workers.
+        FunctionId((self.functions.len() - 1) as u32)
+    }
+
+    /// Get the function name and filename.
+    fn get_function_and_filename(&self, id: FunctionId) -> (&str, &str) {
+        let location = &self.functions[id.0 as usize];
+        (&location.function_name, &location.filename)
     }
 }
 
 /// A specific location: file + function + line number.
 #[derive(Clone, Debug, PartialEq, Eq, Copy, Hash)]
 struct CallSiteId {
+    /// The function + filename. We use IDs for performance reasons (faster hashing).
     function: FunctionId,
     /// Line number within the _file_, 1-indexed.
     line_number: u16,
@@ -83,8 +83,7 @@ impl CallSiteId {
     }
 }
 
-/// The current Python callstack. We use IDs instead of Function objects for
-/// performance reasons.
+/// The current Python callstack.
 #[derive(Derivative)]
 #[derivative(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Callstack {
@@ -141,26 +140,27 @@ impl Callstack {
         callstack_id
     }
 
-    fn as_string(&self, to_be_post_processed: bool) -> String {
+    fn as_string(&self, to_be_post_processed: bool, functions: &FunctionLocations) -> String {
         if self.calls.is_empty() {
             "[No Python stack]".to_string()
         } else {
             self.calls
                 .iter()
                 .map(|id| {
+                    let (function, filename) = functions.get_function_and_filename(id.function);
                     if to_be_post_processed {
                         format!(
                             "{filename}:{line} ({function});TB@@{filename}:{line}@@TB",
-                            filename = id.function.get_filename(),
+                            filename = filename,
                             line = id.line_number,
-                            function = id.function.get_function_name(),
+                            function = function,
                         )
                     } else {
                         format!(
                             "{filename}:{line} ({function})",
-                            filename = id.function.get_filename(),
+                            filename = filename,
                             line = id.line_number,
-                            function = id.function.get_function_name()
+                            function = function,
                         )
                     }
                 })
@@ -307,6 +307,10 @@ struct AllocationTracker {
     // anonymous mmap(), i.e. not file backed:
     current_anon_mmaps: RangeMap<CallstackId>,
 
+    // Map FunctionIds to function + filename strings, so we can store the
+    // former and save memory.
+    functions: FunctionLocations,
+
     // Map CallstackIds to Callstacks, so we can store the former and save
     // memory:
     interner: CallstackInterner,
@@ -326,6 +330,7 @@ impl<'a> AllocationTracker {
             current_allocations: new_hashmap(),
             current_anon_mmaps: RangeMap::new(),
             interner: CallstackInterner::new(),
+            functions: FunctionLocations::new(),
             current_memory_usage: ImVector::new(),
             peak_memory_usage: ImVector::new(),
             current_allocated_bytes: 0,
@@ -450,13 +455,14 @@ impl<'a> AllocationTracker {
     ) -> impl Iterator<Item = String> + '_ {
         let by_call = self.combine_callstacks(peak).into_iter();
         let id_to_callstack = self.interner.get_reverse_map();
+        let functions = &self.functions;
         by_call.map(move |(callstack_id, size)| {
             format!(
                 "{} {}",
                 id_to_callstack
                     .get(&callstack_id)
                     .unwrap()
-                    .as_string(to_be_post_processed),
+                    .as_string(to_be_post_processed, functions),
                 size,
             )
         })
@@ -621,6 +627,15 @@ lazy_static! {
         allocations: AllocationTracker::new("/tmp".to_string()),
         oom: OutOfMemoryEstimator::new(RealMemoryInfo::new()),
     });
+}
+
+/// Register a new function/filename location.
+pub fn add_function(filename: String, function_name: String) -> FunctionId {
+    let mut tracker_state = TRACKER_STATE.lock();
+    tracker_state
+        .allocations
+        .functions
+        .add_function(filename, function_name)
 }
 
 /// Add to per-thread function stack:
@@ -866,7 +881,7 @@ mod tests {
             let mut expected_memory_usage = im::vector![];
             for i in 0..allocated_sizes.len() {
                 let mut cs = Callstack::new();
-                cs.start_call(0, CallSiteId::new(FunctionId::new(i as *const FunctionLocation), 0));
+                cs.start_call(0, CallSiteId::new(FunctionId::new(i as u32), 0));
                 let cs_id = tracker.get_callstack_id(&cs);
                 tracker.add_allocation(i as usize,*allocated_sizes.get(i).unwrap(), cs_id);
                 expected_memory_usage.push_back(*allocated_sizes.get(i).unwrap());
@@ -900,7 +915,7 @@ mod tests {
             let addresses : Vec<usize> = (0..allocated_sizes.len()).map(|i| i * 10000).collect();
             for i in 0..allocated_sizes.len() {
                 let mut cs = Callstack::new();
-                cs.start_call(0, CallSiteId::new(FunctionId::new(i as *const FunctionLocation), 0));
+                cs.start_call(0, CallSiteId::new(FunctionId::new(i as u32), 0));
                 let csid = tracker.get_callstack_id(&cs);
                 tracker.add_anon_mmap(addresses[i] as usize, *allocated_sizes.get(i).unwrap(), csid);
                 expected_memory_usage.push_back(*allocated_sizes.get(i).unwrap());
@@ -940,22 +955,10 @@ mod tests {
     }
 
     #[test]
-    fn functionlocation_and_functionid_strings() {
-        let func = FunctionLocation::from_strings("a", "af");
-        let fid = FunctionId::new(&func as *const FunctionLocation);
-        assert_eq!(fid.get_filename(), "a");
-        assert_eq!(fid.get_function_name(), "af");
-    }
-
-    #[test]
     fn callstack_line_numbers() {
-        let func1 = FunctionLocation::from_strings("a", "af");
-        let func3 = FunctionLocation::from_strings("b", "bf");
-        let func5 = FunctionLocation::from_strings("c", "cf");
-
-        let fid1 = FunctionId::new(&func1 as *const FunctionLocation);
-        let fid3 = FunctionId::new(&func3 as *const FunctionLocation);
-        let fid5 = FunctionId::new(&func5 as *const FunctionLocation);
+        let fid1 = FunctionId::new(1u32);
+        let fid3 = FunctionId::new(3u32);
+        let fid5 = FunctionId::new(5u32);
 
         // Parent line number does nothing if it's first call:
         let mut cs1 = Callstack::new();
@@ -982,10 +985,8 @@ mod tests {
 
     #[test]
     fn callstackinterner_notices_duplicates() {
-        let func1 = FunctionLocation::from_strings("a", "af");
-        let func3 = FunctionLocation::from_strings("b", "bf");
-        let fid1 = FunctionId::new(&func1 as *const FunctionLocation);
-        let fid3 = FunctionId::new(&func3 as *const FunctionLocation);
+        let fid1 = FunctionId::new(1u32);
+        let fid3 = FunctionId::new(3u32);
 
         let mut cs1 = Callstack::new();
         cs1.start_call(0, CallSiteId::new(fid1, 2));
@@ -1038,8 +1039,7 @@ mod tests {
         let id0b = cs1.id_for_new_allocation(0, |cs| interner.get_or_insert_id(cs, || ()));
         assert_eq!(id0, id0b);
 
-        let func1 = FunctionLocation::from_strings("a", "af");
-        let fid1 = FunctionId::new(&func1 as *const FunctionLocation);
+        let fid1 = FunctionId::new(1u32);
 
         cs1.start_call(0, CallSiteId::new(fid1, 2));
         let id1 = cs1.id_for_new_allocation(1, |cs| interner.get_or_insert_id(cs, || ()));
@@ -1077,10 +1077,8 @@ mod tests {
 
     #[test]
     fn peak_allocations_only_updated_on_new_peaks() {
-        let func1 = FunctionLocation::from_strings("a", "af");
-        let func3 = FunctionLocation::from_strings("b", "bf");
-        let fid1 = FunctionId::new(&func1 as *const FunctionLocation);
-        let fid3 = FunctionId::new(&func3 as *const FunctionLocation);
+        let fid1 = FunctionId::new(1u32);
+        let fid3 = FunctionId::new(3u32);
 
         let mut tracker = AllocationTracker::new(".".to_string());
         let mut cs1 = Callstack::new();
@@ -1166,15 +1164,17 @@ mod tests {
 
     #[test]
     fn combine_callstacks_and_sum_allocations() {
-        let func1 = FunctionLocation::from_strings("a", "af");
-        let func2 = FunctionLocation::from_strings("b", "bf");
-        let func3 = FunctionLocation::from_strings("c", "cf");
-
-        let fid1 = FunctionId::new(&func1 as *const FunctionLocation);
-        let fid2 = FunctionId::new(&func2 as *const FunctionLocation);
-        let fid3 = FunctionId::new(&func3 as *const FunctionLocation);
-
         let mut tracker = AllocationTracker::new(".".to_string());
+        let fid1 = tracker
+            .functions
+            .add_function("a".to_string(), "af".to_string());
+        let fid2 = tracker
+            .functions
+            .add_function("b".to_string(), "bf".to_string());
+        let fid3 = tracker
+            .functions
+            .add_function("c".to_string(), "cf".to_string());
+
         let id1 = CallSiteId::new(fid1, 1);
         // Same function, different line number—should be different item:
         let id1_different = CallSiteId::new(fid1, 7);

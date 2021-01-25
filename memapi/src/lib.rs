@@ -48,16 +48,35 @@ pub extern "C" fn pymemprofile_free_anon_mmap(address: usize, length: libc::size
     memorytracking::free_anon_mmap(address, length);
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn pymemprofile_add_function_location(
+    filename: *const c_char,
+    filename_length: u64,
+    function_name: *const c_char,
+    function_length: u64,
+) -> u64 {
+    let filename = std::str::from_utf8_unchecked(std::slice::from_raw_parts(
+        filename as *const u8,
+        filename_length as usize,
+    ));
+    let function_name = std::str::from_utf8_unchecked(std::slice::from_raw_parts(
+        function_name as *const u8,
+        function_length as usize,
+    ));
+    let function_id = memorytracking::add_function(filename.to_string(), function_name.to_string());
+    function_id.as_u32() as u64
+}
+
 /// # Safety
 /// Intended for use from C APIs, what can I say.
 #[no_mangle]
 pub unsafe extern "C" fn pymemprofile_start_call(
     parent_line_number: u16,
-    function_loc: *const memorytracking::FunctionLocation,
+    function_id: u64,
     line_number: u16,
 ) {
-    let fid = memorytracking::FunctionId::new(function_loc);
-    memorytracking::start_call(fid, parent_line_number, line_number);
+    let function_id = memorytracking::FunctionId::new(function_id as u32);
+    memorytracking::start_call(function_id, parent_line_number, line_number);
 }
 
 #[no_mangle]
