@@ -11,12 +11,13 @@ dependencies = [
 
 [[package]]
 name = "ahash"
-version = "0.5.6"
+version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2deff5792519f5985c9cdd5a0399df3ca3419114841d282bae646acadbf0a99"
+checksum = "796540673305a66d127804eef19ad696f1f204b8c1025aaca4958c17eab32877"
 dependencies = [
  "getrandom 0.2.0",
- "lazy_static",
+ "once_cell",
+ "version_check",
 ]
 
 [[package]]
@@ -524,7 +525,7 @@ dependencies = [
 name = "pymemprofile_api"
 version = "0.1.0"
 dependencies = [
- "ahash 0.5.6",
+ "ahash 0.6.3",
  "cgroups-rs",
  "derivative",
  "im",
@@ -536,7 +537,6 @@ dependencies = [
  "parking_lot",
  "proptest",
  "psutil",
- "rustc-hash",
 ]
 
 [[package]]
@@ -766,15 +766,6 @@ name = "rgb"
 version = "0.8.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5ec4ab2cf0b27e111e266e161cf7f9efd20125a161190da1c0945c4a4408fef3"
-
-[[package]]
-name = "rustc-hash"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7540fc8b0c49f096ee9c961cda096467dce8084bec6bdca2fc83895fd9b28cb8"
-dependencies = [
- "byteorder",
-]
 
 [[package]]
 name = "rustc_version"
