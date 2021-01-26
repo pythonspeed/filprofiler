@@ -1,12 +1,10 @@
-use super::oom::{OutOfMemoryEstimator, RealMemoryInfo};
 use super::rangemap::RangeMap;
+use super::util::new_hashmap;
 use ahash::RandomState as ARandomState;
 use im::Vector as ImVector;
 use inferno::flamegraph;
 use itertools::Itertools;
 use libc;
-use parking_lot::Mutex;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
@@ -35,7 +33,7 @@ struct FunctionLocation {
 
 /// Stores FunctionLocations, returns a FunctionId
 #[derive(Clone)]
-struct FunctionLocations {
+pub struct FunctionLocations {
     functions: Vec<FunctionLocation>,
 }
 
@@ -48,7 +46,7 @@ impl FunctionLocations {
     }
 
     /// Register a function, get back its id.
-    fn add_function(&mut self, filename: String, function_name: String) -> FunctionId {
+    pub fn add_function(&mut self, filename: String, function_name: String) -> FunctionId {
         self.functions.push(FunctionLocation {
             filename,
             function_name,
@@ -67,7 +65,7 @@ impl FunctionLocations {
 
 /// A specific location: file + function + line number.
 #[derive(Clone, Debug, PartialEq, Eq, Copy, Hash)]
-struct CallSiteId {
+pub struct CallSiteId {
     /// The function + filename. We use IDs for performance reasons (faster hashing).
     function: FunctionId,
     /// Line number within the _file_, 1-indexed.
@@ -75,7 +73,7 @@ struct CallSiteId {
 }
 
 impl CallSiteId {
-    fn new(function: FunctionId, line_number: u16) -> CallSiteId {
+    pub fn new(function: FunctionId, line_number: u16) -> CallSiteId {
         CallSiteId {
             function,
             line_number,
@@ -93,14 +91,14 @@ pub struct Callstack {
 }
 
 impl Callstack {
-    pub fn new() -> Callstack {
+    pub(crate) fn new() -> Callstack {
         Callstack {
             calls: Vec::new(),
             cached_callstack_id: None,
         }
     }
 
-    fn start_call(&mut self, parent_line_number: u16, callsite_id: CallSiteId) {
+    pub(crate) fn start_call(&mut self, parent_line_number: u16, callsite_id: CallSiteId) {
         if parent_line_number != 0 {
             if let Some(mut call) = self.calls.last_mut() {
                 call.line_number = parent_line_number;
@@ -110,12 +108,12 @@ impl Callstack {
         self.cached_callstack_id = None;
     }
 
-    fn finish_call(&mut self) {
+    pub(crate) fn finish_call(&mut self) {
         self.calls.pop();
         self.cached_callstack_id = None;
     }
 
-    fn id_for_new_allocation<F>(&mut self, line_number: u16, get_callstack_id: F) -> CallstackId
+    pub fn id_for_new_allocation<F>(&mut self, line_number: u16, get_callstack_id: F) -> CallstackId
     where
         F: FnOnce(&Callstack) -> CallstackId,
     {
@@ -169,19 +167,7 @@ impl Callstack {
     }
 }
 
-thread_local!(static THREAD_CALLSTACK: RefCell<Callstack> = RefCell::new(Callstack::new()));
-
-type CallstackId = u32;
-
-/// Create a new hashmap with an optional fixed seed.
-fn new_hashmap<K, V>() -> HashMap<K, V, ARandomState> {
-    match *HASH_SEED {
-        Some(seed) => {
-            HashMap::with_hasher(ARandomState::with_seeds(seed, seed + 1, seed + 2, seed + 3))
-        }
-        None => HashMap::default(),
-    }
-}
+pub type CallstackId = u32;
 
 /// Maps Functions to integer identifiers used in CallStacks.
 struct CallstackInterner {
@@ -301,7 +287,7 @@ fn filter_to_useful_callstacks(
 }
 
 /// The main data structure tracking everything.
-struct AllocationTracker {
+pub struct AllocationTracker {
     // malloc()/calloc():
     current_allocations: HashMap<usize, Allocation, ARandomState>,
     // anonymous mmap(), i.e. not file backed:
@@ -309,7 +295,7 @@ struct AllocationTracker {
 
     // Map FunctionIds to function + filename strings, so we can store the
     // former and save memory.
-    functions: FunctionLocations,
+    pub functions: FunctionLocations,
 
     // Map CallstackIds to Callstacks, so we can store the former and save
     // memory:
@@ -325,7 +311,7 @@ struct AllocationTracker {
 }
 
 impl<'a> AllocationTracker {
-    fn new(default_path: String) -> AllocationTracker {
+    pub fn new(default_path: String) -> AllocationTracker {
         AllocationTracker {
             current_allocations: new_hashmap(),
             current_anon_mmaps: RangeMap::new(),
@@ -336,6 +322,18 @@ impl<'a> AllocationTracker {
             current_allocated_bytes: 0,
             peak_allocated_bytes: 0,
             default_path,
+        }
+    }
+
+    pub fn get_current_allocated_bytes(&self) -> usize {
+        self.current_allocated_bytes
+    }
+
+    pub fn get_allocation_size(&self, address: usize) -> usize {
+        if let Some(allocation) = self.current_allocations.get(&address) {
+            allocation.size()
+        } else {
+            0
         }
     }
 
@@ -361,14 +359,19 @@ impl<'a> AllocationTracker {
         self.current_memory_usage[index] -= bytes;
     }
 
-    fn get_callstack_id(&mut self, callstack: &Callstack) -> CallstackId {
+    pub fn get_callstack_id(&mut self, callstack: &Callstack) -> CallstackId {
         let current_memory_usage = &mut self.current_memory_usage;
         self.interner
             .get_or_insert_id(callstack, || current_memory_usage.push_back(0))
     }
 
     /// Add a new allocation based off the current callstack.
-    fn add_allocation(&mut self, address: usize, size: libc::size_t, callstack_id: CallstackId) {
+    pub fn add_allocation(
+        &mut self,
+        address: usize,
+        size: libc::size_t,
+        callstack_id: CallstackId,
+    ) {
         let alloc = Allocation::new(callstack_id, size);
         let compressed_size = alloc.size();
         if let Some(previous) = self.current_allocations.insert(address, alloc) {
@@ -387,7 +390,7 @@ impl<'a> AllocationTracker {
     }
 
     /// Free an existing allocation.
-    fn free_allocation(&mut self, address: usize) {
+    pub fn free_allocation(&mut self, address: usize) {
         // Before we reduce memory, let's check if we've previously hit a peak:
         self.check_if_new_peak();
 
@@ -399,12 +402,12 @@ impl<'a> AllocationTracker {
     }
 
     /// Add a new anonymous mmap() based of the current callstack.
-    fn add_anon_mmap(&mut self, address: usize, size: libc::size_t, callstack_id: CallstackId) {
+    pub fn add_anon_mmap(&mut self, address: usize, size: libc::size_t, callstack_id: CallstackId) {
         self.current_anon_mmaps.add(address, size, callstack_id);
         self.add_memory_usage(callstack_id, size);
     }
 
-    fn free_anon_mmap(&mut self, address: usize, size: libc::size_t) {
+    pub fn free_anon_mmap(&mut self, address: usize, size: libc::size_t) {
         // Before we reduce memory, let's check if we've previously hit a peak:
         self.check_if_new_peak();
         // Now remove, and update totoal memory tracking:
@@ -444,7 +447,7 @@ impl<'a> AllocationTracker {
 
     /// Dump all callstacks in peak memory usage to various files describing the
     /// memory usage.
-    fn dump_peak_to_flamegraph(&mut self, path: &str) {
+    pub fn dump_peak_to_flamegraph(&mut self, path: &str) {
         self.dump_to_flamegraph(path, true, "peak-memory", "Peak Tracked Memory Usage", true);
     }
 
@@ -544,14 +547,14 @@ impl<'a> AllocationTracker {
     }
 
     /// Clear memory we won't be needing anymore, since we're going to exit out.
-    fn oom_break_glass(&mut self) {
+    pub fn oom_break_glass(&mut self) {
         self.current_allocations.clear();
         self.current_allocations.shrink_to_fit();
         self.peak_memory_usage.clear();
     }
 
     /// Dump information about where we are.
-    fn oom_dump(&mut self) {
+    pub fn oom_dump(&mut self) {
         eprintln!(
             "=fil-profile= We'll try to dump out SVGs. Note that no HTML file will be written."
         );
@@ -590,7 +593,7 @@ impl<'a> AllocationTracker {
 
     /// Reset internal state in way that doesn't invalidate e.g. thread-local
     /// caching of callstack ID.
-    fn reset(&mut self, default_path: String) {
+    pub fn reset(&mut self, default_path: String) {
         self.current_allocations.clear();
         self.current_anon_mmaps = RangeMap::new();
         for i in self.current_memory_usage.iter_mut() {
@@ -602,165 +605,6 @@ impl<'a> AllocationTracker {
         self.default_path = default_path;
         self.validate();
     }
-}
-
-struct TrackerState {
-    oom: OutOfMemoryEstimator<RealMemoryInfo>,
-    allocations: AllocationTracker,
-}
-
-lazy_static! {
-    // If the PYTHONHASHSEED environment variable is set, we will use it as seed
-    // for Rust hashmaps as well, to reduce randomness when benchmarking.
-    static ref HASH_SEED: Option<u64> = match std::env::var("PYTHONHASHSEED") {
-        Ok(value) => {
-            if value == "random" {
-                None
-            } else {
-                let seed = value.parse::<i64>().unwrap();
-                Some(seed as u64)
-            }
-        }
-        _ => None,
-    };
-    static ref TRACKER_STATE: Mutex<TrackerState> = Mutex::new(TrackerState {
-        allocations: AllocationTracker::new("/tmp".to_string()),
-        oom: OutOfMemoryEstimator::new(RealMemoryInfo::new()),
-    });
-}
-
-/// Register a new function/filename location.
-pub fn add_function(filename: String, function_name: String) -> FunctionId {
-    let mut tracker_state = TRACKER_STATE.lock();
-    tracker_state
-        .allocations
-        .functions
-        .add_function(filename, function_name)
-}
-
-/// Add to per-thread function stack:
-pub fn start_call(call_site: FunctionId, parent_line_number: u16, line_number: u16) {
-    THREAD_CALLSTACK.with(|cs| {
-        cs.borrow_mut()
-            .start_call(parent_line_number, CallSiteId::new(call_site, line_number));
-    });
-}
-
-/// Finish off (and move to reporting structure) current function in function
-/// stack.
-pub fn finish_call() {
-    THREAD_CALLSTACK.with(|cs| {
-        cs.borrow_mut().finish_call();
-    });
-}
-
-/// Get the current thread's callstack.
-pub fn get_current_callstack() -> Callstack {
-    THREAD_CALLSTACK.with(|cs| (*cs.borrow()).clone())
-}
-
-/// Set the current callstack. Typically should only be used when starting up
-/// new threads.
-pub fn set_current_callstack(callstack: &Callstack) {
-    THREAD_CALLSTACK.with(|cs| {
-        *cs.borrow_mut() = callstack.clone();
-    })
-}
-
-/// Add a new allocation based off the current callstack.
-pub fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_mmap: bool) {
-    let mut tracker_state = TRACKER_STATE.lock();
-    let current_allocated_bytes = tracker_state.allocations.current_allocated_bytes;
-
-    // Check if we're out of memory:
-    let oom = (address == 0)
-        || tracker_state
-            .oom
-            .too_big_allocation(size, current_allocated_bytes);
-
-    // If we're out-of-memory, we're not going to exit this function or ever
-    // free() anything ever again, so we should clear some memory in order to
-    // reduce chances of running out as part of OOM reporting. We can also free
-    // the allocation that just happened, cause it's never going to be used.
-    if oom {
-        if address == 0 {
-            eprintln!(
-                "=fil-profile= WARNING: Allocation of size {} failed (mmap()? {})",
-                size, is_mmap
-            );
-        } else {
-            unsafe {
-                let address = address as *mut libc::c_void;
-                if is_mmap {
-                    libc::munmap(address, size);
-                } else {
-                    libc::free(address);
-                }
-            }
-        }
-        tracker_state.allocations.oom_break_glass();
-        eprintln!("=fil-profile= WARNING: Detected out-of-memory condition, exiting soon.");
-        tracker_state.oom.memory_info.print_info();
-    }
-
-    let allocations = &mut tracker_state.allocations;
-    let callstack_id = THREAD_CALLSTACK.with(|tcs| {
-        let mut callstack = tcs.borrow_mut();
-        callstack.id_for_new_allocation(line_number, |callstack| {
-            allocations.get_callstack_id(callstack)
-        })
-    });
-
-    if is_mmap {
-        allocations.add_anon_mmap(address, size, callstack_id);
-    } else {
-        allocations.add_allocation(address, size, callstack_id);
-    }
-
-    if oom {
-        // Uh-oh, we're out of memory.
-        allocations.oom_dump();
-    }
-}
-
-/// Free an existing allocation.
-pub fn free_allocation(address: usize) {
-    let mut tracker_state = TRACKER_STATE.lock();
-
-    let allocations = &mut tracker_state.allocations;
-    allocations.free_allocation(address);
-}
-
-/// Get the size of an allocation, or 0 if it's not tracked.
-pub fn get_allocation_size(address: usize) -> libc::size_t {
-    let tracker_state = TRACKER_STATE.lock();
-    let allocations = &tracker_state.allocations;
-    if let Some(allocation) = allocations.current_allocations.get(&address) {
-        allocation.size()
-    } else {
-        0
-    }
-}
-
-/// Free an anonymous mmap().
-pub fn free_anon_mmap(address: usize, length: libc::size_t) {
-    let mut tracker_state = TRACKER_STATE.lock();
-
-    let allocations = &mut tracker_state.allocations;
-    allocations.free_anon_mmap(address, length);
-}
-
-/// Reset internal state.
-pub fn reset(default_path: String) {
-    let mut tracker_state = TRACKER_STATE.lock();
-    tracker_state.allocations.reset(default_path);
-}
-
-/// Dump all callstacks in peak memory usage to format used by flamegraph.
-pub fn dump_peak_to_flamegraph(path: &str) {
-    let mut tracker_state = TRACKER_STATE.lock();
-    let allocations = &mut tracker_state.allocations;
-    allocations.dump_peak_to_flamegraph(path);
 }
 
 /// Write strings to disk, one line per string.
@@ -822,7 +666,7 @@ fn write_flamegraph(
 mod tests {
     use super::{
         filter_to_useful_callstacks, Allocation, AllocationTracker, CallSiteId, Callstack,
-        CallstackInterner, FunctionId, FunctionLocation, HIGH_32BIT, MIB,
+        CallstackInterner, FunctionId, HIGH_32BIT, MIB,
     };
     use im;
     use proptest::prelude::*;
