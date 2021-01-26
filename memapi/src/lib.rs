@@ -1,7 +1,7 @@
-mod memorytracking;
+pub mod memorytracking;
 pub mod oom;
 mod rangemap;
-mod util;
+pub mod util;
 
 use libc::{c_char, c_void};
 use memorytracking::{AllocationTracker, CallSiteId, Callstack, FunctionId};
