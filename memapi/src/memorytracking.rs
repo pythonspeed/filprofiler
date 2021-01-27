@@ -91,9 +91,16 @@ pub struct Callstack {
 }
 
 impl Callstack {
-    pub(crate) fn new() -> Callstack {
+    pub fn new() -> Callstack {
         Callstack {
             calls: Vec::new(),
+            cached_callstack_id: None,
+        }
+    }
+
+    pub fn from_vec(vec: Vec<CallSiteId>) -> Self {
+        Self {
+            calls: vec,
             cached_callstack_id: None,
         }
     }
