@@ -382,16 +382,22 @@ impl<'a> AllocationTracker {
         let alloc = Allocation::new(callstack_id, size);
         let compressed_size = alloc.size();
         if let Some(previous) = self.current_allocations.insert(address, alloc) {
-            // I've seen this happen on macOS only in some threaded code
-            // (malloc_on_thread_exit test). Not sure why, but difference was
-            // only 16 bytes, which shouldn't have real impact on profiling
-            // outcomes.
-            eprintln!(
+            // In production use (proposed commercial product) allocations are
+            // only sampled, so missing allocations are common and not the sign
+            // of an error.
+            #[cfg(not(feature = "production"))]
+            {
+                // I've seen this happen on macOS only in some threaded code
+                // (malloc_on_thread_exit test). Not sure why, but difference was
+                // only 16 bytes, which shouldn't have real impact on profiling
+                // outcomes.
+                eprintln!(
                 "=fil-profile= WARNING: Somehow an allocation of size {} disappeared. This can happen if e.g. a library frees memory with private OS APIs. If this happens only a few times with small allocations, it doesn't really matter. If you see this happening a lot, or with large allocations, please file a bug.",
                 previous.size()
             );
-            // Cleanup the previous allocation, since we never saw its free():
-            self.remove_memory_usage(previous.callstack_id, previous.size());
+                // Cleanup the previous allocation, since we never saw its free():
+                self.remove_memory_usage(previous.callstack_id, previous.size());
+            }
         }
         self.add_memory_usage(callstack_id, compressed_size as usize);
     }

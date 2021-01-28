@@ -37,3 +37,9 @@ proptest = "0.9.5"
 [lib]
 name = "pymemprofile_api"
 crate_type = ["staticlib", "rlib"]
+
+[features]
+default = []
+
+# Tweaks for the production version of Fil.
+production = []
