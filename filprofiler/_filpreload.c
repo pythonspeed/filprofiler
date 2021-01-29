@@ -159,10 +159,6 @@ static void __attribute__((constructor)) constructor() {
     exit(1);
   }
 
-  unsetenv("LD_PRELOAD");
-  // This seems to break things... revisit at some point.
-  // unsetenv("DYLD_INSERT_LIBRARIES");
-
   // Initialize Rust static state before we start doing any calls via malloc(),
   // to ensure we don't get unpleasant reentrancy issues.
   pymemprofile_reset("/tmp");
@@ -499,21 +495,4 @@ DYLD_INTERPOSE(SYMBOL_PREFIX(aligned_alloc), aligned_alloc)
 #  endif
 DYLD_INTERPOSE(SYMBOL_PREFIX(posix_memalign), posix_memalign)
 DYLD_INTERPOSE(SYMBOL_PREFIX(pthread_create), pthread_create)
-#endif
-
-
-// Work around stupid linking issues on Conda.
-//
-// 1. Conda doesn't have modern glibc symbols.
-// 2. Nix package refers to these symbols.
-// 3. Static library from Rust has code that refers to these symbols even though
-//    we don't use that code.
-// 4. Compiling _fil-python without -export-dynamic fixes that, but causes
-//    segfault.
-//
-// This is, frankly, terrible, but it's only used in benchmarks.
-#ifdef CONDA_EXECUTABLE_FOR_BENCHMARKS
-__attribute__((visibility("default"))) void setns() {}
-__attribute__((visibility("default"))) void process_vm_readv() {}
-__attribute__((visibility("default"))) void process_vm_writev() {}
 #endif
