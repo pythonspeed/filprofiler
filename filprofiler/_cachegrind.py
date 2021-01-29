@@ -7,8 +7,6 @@ from subprocess import check_call, check_output
 import sys
 from tempfile import NamedTemporaryFile
 
-ARCH = check_output(["uname", "-m"]).strip()
-
 
 def _run(args_list: List[str]) -> Dict[str, int]:
     """
@@ -17,6 +15,7 @@ def _run(args_list: List[str]) -> Dict[str, int]:
 
     For now we just ignore program output, and in general this is not robust.
     """
+    ARCH = check_output(["uname", "-m"]).strip()
     temp_file = NamedTemporaryFile("r+")
     check_call(
         [
