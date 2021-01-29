@@ -16,7 +16,9 @@ if os.environ.get("FIL_BENCHMARK"):
     # Linux only, and somehow loading library breaks stuff.
     preload = PyDLL(None)
 else:
-    # We're using preloaded library:
+    # We're using preloaded library. TODO figure out if we can use None on
+    # Linux and continuet to do this on macOS, and if so if that allows
+    # dropping -export-dynamic.
     preload = PyDLL(library_path("_filpreload"))
 preload.fil_initialize_from_python()
 
