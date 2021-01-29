@@ -159,10 +159,6 @@ static void __attribute__((constructor)) constructor() {
     exit(1);
   }
 
-  unsetenv("LD_PRELOAD");
-  // This seems to break things... revisit at some point.
-  // unsetenv("DYLD_INSERT_LIBRARIES");
-
   // Initialize Rust static state before we start doing any calls via malloc(),
   // to ensure we don't get unpleasant reentrancy issues.
   pymemprofile_reset("/tmp");

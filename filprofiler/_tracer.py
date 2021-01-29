@@ -13,7 +13,7 @@ from ._utils import timestamp_now, library_path
 from ._report import render_report
 
 if os.environ.get("FIL_BENCHMARK"):
-    # We're using Valgrind + executable:
+    # Linux only, and somehow loading library breaks stuff.
     preload = PyDLL(None)
 else:
     # We're using preloaded library:

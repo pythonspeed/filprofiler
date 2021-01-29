@@ -12,9 +12,7 @@ def read(path):
 
 
 extra_compile_args = ["-fno-omit-frame-pointer"]
-extra_link_args = [
-    "-export-dynamic",
-]
+extra_link_args = ["-export-dynamic"]
 if sys.platform == "darwin":
     # Want a dynamiclib so that it can inserted with DYLD_INSERT_LIBRARIES:
     config_vars = sysconfig.get_config_vars()
