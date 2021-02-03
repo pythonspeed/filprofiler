@@ -11,11 +11,6 @@ build: target/release/libpymemprofile_api.a
 	python setup.py build_ext --inplace
 	python setup.py install_data
 
-# Only necessary for benchmarks, only works with Python 3.8 for now.
-.PHONY: _fil-python
-_fil-python: filprofiler/*.c target/release/libpymemprofile_api.a
-	gcc -std=c11 $(shell python3.8-config --cflags) -DFIL_SKIP_ALIGNED_ALLOC=1 -DCONDA_EXECUTABLE_FOR_BENCHMARKS=1 -export-dynamic -flto -o ${CONDA_PREFIX}/bin/_fil-python $^ -lpython3.8 $(shell python3.8-config --ldflags)
-
 target/release/libpymemprofile_api.a: Cargo.lock memapi/Cargo.toml memapi/src/*.rs
 	cargo build --release
 
@@ -59,7 +54,6 @@ manylinux-wheel:
 
 .PHONY: clean
 clean:
-	rm -f filprofiler/_fil-python
 	rm -rf target
 	rm -rf filprofiler/*.so
 	rm -rf filprofiler/*.dylib
@@ -76,7 +70,7 @@ data_kernelspec/kernel.json: generate-kernelspec.py
 	python generate-kernelspec.py
 
 .PHONY: benchmark
-benchmark: _fil-python
+benchmark:
 # Possibly some cache warming is still necessary :(
 	make benchmarks/results/*.json
 	make benchmarks/results/*.json

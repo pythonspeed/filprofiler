@@ -7,7 +7,7 @@ Command-line tools. Because of LD_PRELOAD, it's actually a two stage setup:
 
 import json
 import sys
-from os import environ, execv, getpid, makedirs
+from os import environ, execve, getpid, makedirs
 from os.path import abspath, dirname, join, exists
 from argparse import ArgumentParser, RawDescriptionHelpFormatter, REMAINDER
 import runpy
@@ -103,9 +103,19 @@ def stage_1():
             arguments = PARSER.parse_args()
             pyargs = arguments.rest
         python_result = benchmark([sys.executable] + pyargs)
-        # 2. Run using Valgrind + executable (Valgrind doesn't work well with
-        # LD_PRELOAD).
-        fil_result = benchmark([which("_fil-python")] + args)
+        # 2. Run using Valgrind. Valgrind has its own LD_PRELOAD which has
+        # issues with our own, so we add our extra LD_PRELOAD by using
+        # command-line based non-execve()ing /lib/ld.so's preload support,
+        # without having Valgrind trace forks.
+        fil_result = benchmark(
+            [
+                "/lib64/ld-linux-x86-64.so.2",
+                "--preload",
+                library_path("_filpreload"),
+                which("python"),
+            ]
+            + args
+        )
         # 3. Store the difference.
         result = {k: (fil_result[k] - python_result[k]) for k in fil_result}
         with open(destination, "w+") as f:
@@ -116,9 +126,10 @@ def stage_1():
             print(f.read())
     else:
         # Normal operation, via LD_PRELOAD or equivalent:
+        ld_preload = environ.get("LD_PRELOAD")
         environ["LD_PRELOAD"] = library_path("_filpreload")
         environ["DYLD_INSERT_LIBRARIES"] = library_path("_filpreload")
-        execv(sys.executable, [sys.executable] + args)
+        execve(sys.executable, [sys.executable] + args, env=environ)
 
 
 PARSER = ArgumentParser(
@@ -152,6 +163,8 @@ def stage_2():
 
     Presumes LD_PRELOAD etc. has been set by stage_1().
     """
+    if not environ.get("FIL_BENCHMARK") and environ.get("LD_PRELOAD"):
+        del environ["LD_PRELOAD"]
     arguments = PARSER.parse_args()
     if arguments.license:
         print(LICENSE)
