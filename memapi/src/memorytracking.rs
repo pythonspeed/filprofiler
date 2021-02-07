@@ -4,7 +4,6 @@ use ahash::RandomState as ARandomState;
 use im::Vector as ImVector;
 use inferno::flamegraph;
 use itertools::Itertools;
-use libc;
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
@@ -234,7 +233,7 @@ struct Allocation {
 }
 
 impl Allocation {
-    fn new(callstack_id: CallstackId, size: libc::size_t) -> Self {
+    fn new(callstack_id: CallstackId, size: usize) -> Self {
         let compressed_size = if size >= HIGH_32BIT as usize {
             // Rounding division by MiB, plus the high bit:
             (((size + MIB / 2) / MIB) as u32) | HIGH_32BIT
@@ -247,11 +246,11 @@ impl Allocation {
         }
     }
 
-    fn size(&self) -> libc::size_t {
+    fn size(&self) -> usize {
         if self.compressed_size >= HIGH_32BIT {
-            (self.compressed_size - HIGH_32BIT) as libc::size_t * MIB
+            (self.compressed_size - HIGH_32BIT) as usize * MIB
         } else {
-            self.compressed_size as libc::size_t
+            self.compressed_size as usize
         }
     }
 }
@@ -373,12 +372,7 @@ impl<'a> AllocationTracker {
     }
 
     /// Add a new allocation based off the current callstack.
-    pub fn add_allocation(
-        &mut self,
-        address: usize,
-        size: libc::size_t,
-        callstack_id: CallstackId,
-    ) {
+    pub fn add_allocation(&mut self, address: usize, size: usize, callstack_id: CallstackId) {
         let alloc = Allocation::new(callstack_id, size);
         let compressed_size = alloc.size();
         if let Some(previous) = self.current_allocations.insert(address, alloc) {
@@ -415,12 +409,12 @@ impl<'a> AllocationTracker {
     }
 
     /// Add a new anonymous mmap() based of the current callstack.
-    pub fn add_anon_mmap(&mut self, address: usize, size: libc::size_t, callstack_id: CallstackId) {
+    pub fn add_anon_mmap(&mut self, address: usize, size: usize, callstack_id: CallstackId) {
         self.current_anon_mmaps.add(address, size, callstack_id);
         self.add_memory_usage(callstack_id, size);
     }
 
-    pub fn free_anon_mmap(&mut self, address: usize, size: libc::size_t) {
+    pub fn free_anon_mmap(&mut self, address: usize, size: usize) {
         // Before we reduce memory, let's check if we've previously hit a peak:
         self.check_if_new_peak();
         // Now remove, and update totoal memory tracking:
@@ -579,9 +573,7 @@ impl<'a> AllocationTracker {
             "Current allocations at out-of-memory time",
             false,
         );
-        unsafe {
-            libc::_exit(53);
-        }
+        std::process::exit(53);
     }
 
     /// Validate internal state is in a good state. This won't pass until

@@ -533,7 +533,6 @@ dependencies = [
  "itertools",
  "jemallocator",
  "lazy_static",
- "libc",
  "parking_lot",
  "proptest",
  "psutil",

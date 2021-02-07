@@ -3,12 +3,12 @@ pub mod oom;
 mod rangemap;
 pub mod util;
 
-use libc::{c_char, c_void};
 use memorytracking::{AllocationTracker, CallSiteId, Callstack, FunctionId};
 use oom::{OutOfMemoryEstimator, RealMemoryInfo};
 use parking_lot::Mutex;
 use std::cell::RefCell;
 use std::ffi::CStr;
+use std::os::raw::{c_char, c_void};
 
 #[macro_use]
 extern crate lazy_static;
@@ -75,8 +75,13 @@ fn set_current_callstack(callstack: &Callstack) {
     })
 }
 
+extern "C" {
+    fn free(address: *mut c_void);
+    fn munmap(address: *mut c_void, size: usize);
+}
+
 /// Add a new allocation based off the current callstack.
-fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_mmap: bool) {
+fn add_allocation(address: usize, size: usize, line_number: u16, is_mmap: bool) {
     let mut tracker_state = TRACKER_STATE.lock();
     let current_allocated_bytes = tracker_state.allocations.get_current_allocated_bytes();
 
@@ -98,11 +103,11 @@ fn add_allocation(address: usize, size: libc::size_t, line_number: u16, is_mmap:
             );
         } else {
             unsafe {
-                let address = address as *mut libc::c_void;
+                let address = address as *mut c_void;
                 if is_mmap {
-                    libc::munmap(address, size);
+                    munmap(address, size);
                 } else {
-                    libc::free(address);
+                    free(address);
                 }
             }
         }
@@ -140,14 +145,14 @@ fn free_allocation(address: usize) {
 }
 
 /// Get the size of an allocation, or 0 if it's not tracked.
-fn get_allocation_size(address: usize) -> libc::size_t {
+fn get_allocation_size(address: usize) -> usize {
     let tracker_state = TRACKER_STATE.lock();
     let allocations = &tracker_state.allocations;
     allocations.get_allocation_size(address)
 }
 
 /// Free an anonymous mmap().
-fn free_anon_mmap(address: usize, length: libc::size_t) {
+fn free_anon_mmap(address: usize, length: usize) {
     let mut tracker_state = TRACKER_STATE.lock();
 
     let allocations = &mut tracker_state.allocations;
@@ -168,11 +173,7 @@ fn dump_peak_to_flamegraph(path: &str) {
 }
 
 #[no_mangle]
-pub extern "C" fn pymemprofile_add_allocation(
-    address: usize,
-    size: libc::size_t,
-    line_number: u16,
-) {
+pub extern "C" fn pymemprofile_add_allocation(address: usize, size: usize, line_number: u16) {
     add_allocation(address, size, line_number, false);
 }
 
@@ -183,17 +184,17 @@ pub extern "C" fn pymemprofile_free_allocation(address: usize) {
 
 /// Returns allocation size, or 0 if not stored. Useful for tests, mostly.
 #[no_mangle]
-pub extern "C" fn pymemprofile_get_allocation_size(address: usize) -> libc::size_t {
+pub extern "C" fn pymemprofile_get_allocation_size(address: usize) -> usize {
     get_allocation_size(address)
 }
 
 #[no_mangle]
-pub extern "C" fn pymemprofile_add_anon_mmap(address: usize, size: libc::size_t, line_number: u16) {
+pub extern "C" fn pymemprofile_add_anon_mmap(address: usize, size: usize, line_number: u16) {
     add_allocation(address, size, line_number, true);
 }
 
 #[no_mangle]
-pub extern "C" fn pymemprofile_free_anon_mmap(address: usize, length: libc::size_t) {
+pub extern "C" fn pymemprofile_free_anon_mmap(address: usize, length: usize) {
     free_anon_mmap(address, length);
 }
 

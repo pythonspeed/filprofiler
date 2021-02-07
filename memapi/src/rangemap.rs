@@ -1,4 +1,3 @@
-use libc;
 use std::cmp::{max, min};
 #[cfg(test)]
 use std::collections::HashMap;
@@ -11,7 +10,7 @@ struct Range {
 }
 
 impl Range {
-    fn new(start: usize, length: libc::size_t) -> Self {
+    fn new(start: usize, length: usize) -> Self {
         assert!(length > 0);
         Range {
             start,
@@ -51,7 +50,7 @@ impl<V: Clone> RangeMap<V> {
         RangeMap { ranges: vec![] }
     }
 
-    pub fn add(&mut self, start: usize, length: libc::size_t, value: V) {
+    pub fn add(&mut self, start: usize, length: usize, value: V) {
         if length <= 0 {
             return;
         }
@@ -59,7 +58,7 @@ impl<V: Clone> RangeMap<V> {
     }
 
     /// Return how many bytes were removed.
-    pub fn remove(&mut self, start: usize, length: libc::size_t) -> Vec<(V, usize)> {
+    pub fn remove(&mut self, start: usize, length: usize) -> Vec<(V, usize)> {
         if length <= 0 {
             return vec![];
         }
@@ -151,14 +150,14 @@ mod tests {
             }
         }
 
-        fn add(&mut self, start: usize, length: libc::size_t, value: V) {
+        fn add(&mut self, start: usize, length: usize, value: V) {
             assert!(length > 0);
             for i in start..(start + length) {
                 self.items.insert(i, value.clone());
             }
         }
 
-        fn remove(&mut self, start: usize, length: libc::size_t) -> Vec<(V, usize)> {
+        fn remove(&mut self, start: usize, length: usize) -> Vec<(V, usize)> {
             assert!(length > 0);
             let mut removed = HashMap::new();
             for i in start..(start + length) {
