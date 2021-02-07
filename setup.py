@@ -34,7 +34,7 @@ setup(
         Extension(
             name="filprofiler._filpreload",
             sources=[join("filprofiler", "_filpreload.c")],
-            extra_objects=[join("target", "release", "libpymemprofile_api.a")],
+            extra_objects=[join("target", "release", "libfilpreload.a")],
             extra_compile_args=extra_compile_args,
             extra_link_args=extra_link_args,
         )

@@ -71,8 +71,6 @@ data_kernelspec/kernel.json: generate-kernelspec.py
 
 .PHONY: benchmark
 benchmark:
-# Possibly some cache warming is still necessary :(
-	make benchmarks/results/*.json
 	make benchmarks/results/*.json
 	python setup.py --version > benchmarks/results/version.txt
 	git diff --word-diff benchmarks/results/
