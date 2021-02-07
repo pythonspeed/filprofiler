@@ -2,6 +2,7 @@
 
 members = [
         "memapi",
+        "filpreload",
 ]
 
 [profile.release]

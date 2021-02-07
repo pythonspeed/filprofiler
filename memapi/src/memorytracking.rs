@@ -104,7 +104,7 @@ impl Callstack {
         }
     }
 
-    pub(crate) fn start_call(&mut self, parent_line_number: u16, callsite_id: CallSiteId) {
+    pub fn start_call(&mut self, parent_line_number: u16, callsite_id: CallSiteId) {
         if parent_line_number != 0 {
             if let Some(mut call) = self.calls.last_mut() {
                 call.line_number = parent_line_number;
@@ -114,7 +114,7 @@ impl Callstack {
         self.cached_callstack_id = None;
     }
 
-    pub(crate) fn finish_call(&mut self) {
+    pub fn finish_call(&mut self) {
         self.calls.pop();
         self.cached_callstack_id = None;
     }
