@@ -396,8 +396,8 @@ impl<'a> AllocationTracker {
         self.add_memory_usage(callstack_id, compressed_size as usize);
     }
 
-    /// Free an existing allocation.
-    pub fn free_allocation(&mut self, address: usize) {
+    /// Free an existing allocation, return how much was removed, if any.
+    pub fn free_allocation(&mut self, address: usize) -> Option<usize> {
         // Before we reduce memory, let's check if we've previously hit a peak:
         self.check_if_new_peak();
 
@@ -405,6 +405,9 @@ impl<'a> AllocationTracker {
         // didn't capture an allocation for some reason.
         if let Some(removed) = self.current_allocations.remove(&address) {
             self.remove_memory_usage(removed.callstack_id, removed.size());
+            Some(removed.size())
+        } else {
+            None
         }
     }
 
@@ -740,8 +743,10 @@ mod tests {
             prop_assert_eq!(tracker.current_allocated_bytes, expected_sum);
             prop_assert_eq!(&tracker.current_memory_usage, &expected_memory_usage);
             for i in free_indices.iter() {
-                expected_sum -= allocated_sizes.get(*i).unwrap();
-                tracker.free_allocation(*i);
+                let expected_removed = allocated_sizes.get(*i).unwrap();
+                expected_sum -= expected_removed;
+                let removed = tracker.free_allocation(*i);
+                prop_assert_eq!(removed, Some(*expected_removed));
                 expected_memory_usage[*i] -= allocated_sizes.get(*i).unwrap();
                 prop_assert_eq!(tracker.current_allocated_bytes, expected_sum);
                 prop_assert_eq!(&tracker.current_memory_usage, &expected_memory_usage);
@@ -801,6 +806,12 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn untracked_allocation_removal() {
+        let mut tracker = AllocationTracker::new("/tmp".to_string());
+        assert_eq!(tracker.free_allocation(123), None);
     }
 
     #[test]
