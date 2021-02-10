@@ -165,6 +165,11 @@ static void __attribute__((constructor)) constructor() {
   // to ensure we don't get unpleasant reentrancy issues.
   pymemprofile_reset("/tmp");
 
+  // Drop LD_PRELOAD and DYLD_INSERT_LIBRARIES so that subprocesses don't have
+  // this preloaded.
+  unsetenv("LD_PRELOAD");
+  unsetenv("DYLD_INSERT_LIBRARIES");
+  
   initialized = 1;
 }
 
@@ -282,7 +287,6 @@ fil_dump_peak_to_flamegraph(const char *path) {
 }
 
 // *** End APIs called by Python ***
-
 static void add_allocation(size_t address, size_t size) {
   uint16_t line_number = 0;
   PyFrameObject *f = current_frame;

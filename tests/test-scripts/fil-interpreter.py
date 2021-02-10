@@ -10,6 +10,7 @@ import os
 from ctypes import c_void_p
 import re
 from pathlib import Path
+from subprocess import check_output
 
 import pytest
 import numpy as np
@@ -214,3 +215,15 @@ def test_profiling_without_blosc_and_numexpr(tmpdir):
     finally:
         del sys.modules["blosc"]
         del sys.modules["numexpr"]
+
+def test_subprocess(tmpdir):
+    """
+    Running a subprocess doesn't blow up.
+    """
+    start_tracing(tmpdir)
+    try:
+        output = check_output(["printf", "hello"])
+    finally:
+        stop_tracing(tmpdir)
+    assert output == b"hello"
+
