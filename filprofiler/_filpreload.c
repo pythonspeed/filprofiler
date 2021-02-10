@@ -10,6 +10,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/mman.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 // Macro to create the publicly exposed symbol:
 #ifdef __APPLE__
@@ -36,6 +38,7 @@ static int (*underlying_real_pthread_create)(pthread_t *thread,
                                              const pthread_attr_t *attr,
                                              void *(*start_routine)(void *),
                                              void *arg) = 0;
+static pid_t (*underlying_real_fork)(void) = 0;
 
 // Used on Linux to implement these APIs:
 extern void *_rjem_malloc(size_t length);
@@ -160,6 +163,11 @@ static void __attribute__((constructor)) constructor() {
     fprintf(stderr, "Couldn't load pthread_create(): %s\n", dlerror());
     exit(1);
   }
+  underlying_real_fork = dlsym(RTLD_NEXT, "fork");
+  if (!underlying_real_fork) {
+    fprintf(stderr, "Couldn't load fork(): %s\n", dlerror());
+    exit(1);
+  }
 
   // Initialize Rust static state before we start doing any calls via malloc(),
   // to ensure we don't get unpleasant reentrancy issues.
@@ -169,7 +177,7 @@ static void __attribute__((constructor)) constructor() {
   // this preloaded.
   unsetenv("LD_PRELOAD");
   unsetenv("DYLD_INSERT_LIBRARIES");
-  
+
   initialized = 1;
 }
 
@@ -303,6 +311,17 @@ static void add_anon_mmap(size_t address, size_t size) {
     line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
   }
   pymemprofile_add_anon_mmap(address, size, line_number);
+}
+
+// Disable memory tracking after fork() in the child.
+__attribute__((visibility("default"))) pid_t SYMBOL_PREFIX(fork)(void) {
+  fprintf(stderr, "=fil-profile= WARNING: Fil does not (yet) support tracking subprocesses.\n");
+  pid_t result = underlying_real_fork();
+  if (result == 0) {
+    // We're the child.
+    fil_stop_tracking();
+  }
+  return result;
 }
 
 // Override memory-allocation functions:
@@ -497,4 +516,5 @@ DYLD_INTERPOSE(SYMBOL_PREFIX(aligned_alloc), aligned_alloc)
 #  endif
 DYLD_INTERPOSE(SYMBOL_PREFIX(posix_memalign), posix_memalign)
 DYLD_INTERPOSE(SYMBOL_PREFIX(pthread_create), pthread_create)
+DYLD_INTERPOSE(SYMBOL_PREFIX(fork), fork)
 #endif

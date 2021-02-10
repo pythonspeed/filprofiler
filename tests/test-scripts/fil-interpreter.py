@@ -11,6 +11,7 @@ from ctypes import c_void_p
 import re
 from pathlib import Path
 from subprocess import check_output
+import multiprocessing
 
 import pytest
 import numpy as np
@@ -216,6 +217,7 @@ def test_profiling_without_blosc_and_numexpr(tmpdir):
         del sys.modules["blosc"]
         del sys.modules["numexpr"]
 
+
 def test_subprocess(tmpdir):
     """
     Running a subprocess doesn't blow up.
@@ -227,3 +229,23 @@ def test_subprocess(tmpdir):
         stop_tracing(tmpdir)
     assert output == b"hello"
 
+
+def return123():
+    return 123
+
+
+@pytest.mark.parametrize("mode", ["spawn", "forkserver", "fork"])
+def test_multiprocessing(tmpdir, mode):
+    """
+    Running a subprocess via multiprocessing in the various different modes
+    doesn't blow up.
+    """
+    start_tracing(tmpdir)
+    try:
+        with multiprocessing.get_context(mode).Pool() as pool:
+            assert pool.apply(return123) == 123
+    finally:
+        stop_tracing(tmpdir)
+        from subprocess import check_call
+
+        check_call(["tree", tmpdir])
