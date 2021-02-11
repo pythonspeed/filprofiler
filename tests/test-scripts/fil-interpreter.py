@@ -254,6 +254,3 @@ def test_multiprocessing(tmpdir, mode):
             assert pool.apply((3).__add__, (4,)) == 7
     finally:
         stop_tracing(tmpdir)
-        from subprocess import check_call
-
-        check_call(["tree", tmpdir])
