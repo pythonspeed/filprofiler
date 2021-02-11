@@ -51,7 +51,10 @@ def test_temporary_profiling(tmpdir):
     stop_tracing(tmpdir)
 
     # Allocations were tracked:
-    path = ((__file__, "f", 46), (numpy.core.numeric.__file__, "ones", ANY))
+    path = (
+        (__file__, "f", 48),
+        (numpy.core.numeric.__file__, "ones", ANY),
+    )
     allocations = get_allocations(tmpdir)
     assert match(allocations, {path: big}, as_mb) == pytest.approx(32, 0.1)
 
@@ -240,10 +243,15 @@ def test_multiprocessing(tmpdir, mode):
     Running a subprocess via multiprocessing in the various different modes
     doesn't blow up.
     """
+    # Non-tracing:
+    with multiprocessing.get_context(mode).Pool() as pool:
+        assert pool.apply((3).__add__, (4,)) == 7
+
+    # Tracing:
     start_tracing(tmpdir)
     try:
         with multiprocessing.get_context(mode).Pool() as pool:
-            assert pool.apply(return123) == 123
+            assert pool.apply((3).__add__, (4,)) == 7
     finally:
         stop_tracing(tmpdir)
         from subprocess import check_call
