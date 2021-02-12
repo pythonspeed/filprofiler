@@ -22,6 +22,7 @@ For more information, including an example of the output, see https://pythonspee
 * [Using Fil](#using-fil)
     * [Measuring peak (high-water mark) memory usage in Jupyter](#peak-jupyter)
     * [Measuring peak memory usage for Python scripts](#peak-python)
+    * [Measuring memory usage of a Python function](#code)
     * [Debugging out-of-memory crashes in your code](#oom)
 * [Reducing memory usage in your code](#reducing-memory-usage)
 * [How Fil works](#how-fil-works)
