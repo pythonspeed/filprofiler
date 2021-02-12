@@ -451,6 +451,12 @@ def test_jupyter(tmpdir):
     )
     assert match(allocations, {path: big}, as_mb) == pytest.approx(48, 0.1)
 
+    # It's possible to run nbconvert again.
+    check_call(
+        ["jupyter", "nbconvert", "--execute", "jupyter.ipynb", "--to", "html",],
+        cwd=tmpdir,
+    )
+
 
 def test_no_threadpools_filprofile_run():
     """`fil-profile run` disables thread pools it knows about."""

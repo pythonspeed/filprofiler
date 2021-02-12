@@ -6,6 +6,7 @@ a Jupyter notebook.
 from pathlib import Path
 from textwrap import indent
 from contextlib import contextmanager
+from tempfile import mkdtemp
 
 from IPython.core.magic import Magics, magics_class, cell_magic
 from IPython.display import IFrame, display
@@ -57,7 +58,10 @@ class FilMagics(Magics):
 @contextmanager
 def run_with_profile():
     """Run some code under Fil, display result."""
-    tempdir = "fil-result"
+    topdir = Path("fil-result")
+    if not topdir.exists():
+        topdir.mkdir()
+    tempdir = mkdtemp(dir=topdir)
     start_tracing(tempdir)
     with disable_thread_pools():
         try:

@@ -46,7 +46,8 @@ def test_temporary_profiling(tmpdir):
         arr = np.ones((1024, 1024, 4), dtype=np.uint64)  # 32MB
 
     f()
-    stop_tracing(tmpdir)
+    # get_allocations() expects actual output in a subdirectory.
+    stop_tracing(tmpdir / "output")
 
     # Allocations were tracked:
     path = ((__file__, "f", 46), (numpy.core.numeric.__file__, "ones", ANY))
