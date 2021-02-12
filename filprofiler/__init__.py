@@ -21,7 +21,7 @@ def load_ipython_extension(ipython):
     from IPython.core.error import UsageError
     import os
 
-    if os.environ.get("FIL_PYTHON") != "1":
+    if os.environ.get("__FIL_PYTHON") != "1":
         raise UsageError(
             "In order to use Fil, you need to run your notebook with the Fil kernel.\n\n"
             "You can change the kernel via the 'Change Kernel' option at the bottom of "
