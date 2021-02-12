@@ -11,7 +11,7 @@ from tempfile import mkdtemp
 from IPython.core.magic import Magics, magics_class, cell_magic
 from IPython.display import IFrame, display
 
-from ._tracer import start_tracing, stop_tracing, disable_thread_pools
+from .api import profile
 
 
 HOPEFULLY_UNIQUE_VAR = "__arghbldsada__"
@@ -61,12 +61,10 @@ def run_with_profile():
     topdir = Path("fil-result")
     if not topdir.exists():
         topdir.mkdir()
-    tempdir = mkdtemp(dir=topdir)
-    start_tracing(tempdir)
-    with disable_thread_pools():
-        try:
+    tempdir = Path(mkdtemp(dir=topdir))
+    try:
+        with profile(tempdir):
             yield
-        finally:
-            index_html_path = stop_tracing(tempdir)
-            svg_path = Path(index_html_path).parent / "peak-memory.svg"
-            display(IFrame(svg_path, width="100%", height="600"))
+    finally:
+        svg_path = tempdir / "peak-memory.svg"
+        display(IFrame(svg_path, width="100%", height="600"))

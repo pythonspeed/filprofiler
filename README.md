@@ -134,7 +134,7 @@ $ python -m filprofiler run yourscript.py --input-file=yourfile
 ### <a name="code">Measuring memory usage of a Python function</a>
 
 You can also measure memory usage in part of your program; this requires version 0.15 or later.
-These involves two steps.
+This requires two steps.
 
 #### 1. Add profiling in your code
 
@@ -152,14 +152,12 @@ You only want to get memory profiling for the `run_processing()` call.
 You can do so in the code like so:
 
 ```python
-from filprofiler import run_profile
+from filprofiler.api import profile
 
 def main():
     config = load_config()
-    result = run_profile(
-        lambda: run_processing(config),
-        output_directory="/tmp/fil-result"
-    )
+    with profile("/tmp/fil-result"):
+        result = run_processing(config)
     generate_report(result)
 ```
 
@@ -167,15 +165,13 @@ You could also make it conditional, e.g. based on an environment variable:
 
 ```python
 import os
-from filprofiler import run_profile
+from filprofiler.api import profile
 
 def main():
     config = load_config()
     if os.environ.get("FIL_PROFILE"):
-        result = run_profile(
-            lambda: run_processing(config),
-            output_directory="/tmp/fil-result"
-        )
+        with profile("/tmp/fil-result"):
+            result = run_processing(config)
     else:
         result = run_processing(config)
     generate_report(result)
@@ -197,14 +193,14 @@ $ filprofiler python yourscript.py --config=myconfig
 ```
 
 Notice that you're doing `filprofiler `**`python`**, rather than `filprofiler run` as you would if you were profiling the full script.
-Only functions explicitly called with `filprofiler.run_profile()` will have memory profiling enabled; the rest of the code will run at (close) to normal speed and configuration.
-Each call to `run_profile()` will generate a separate port.
+Only functions explicitly called with the `filprofiler.api.profile()` context manager will have memory profiling enabled; the rest of the code will run at (close) to normal speed and configuration.
+Each call to `profile()` will generate a separate report.
 
-The memory profiling report will be written to the directory specified as the output destination when calling `run_profile()`; in or example above that was `"/tmp/fil-result"`.
+The memory profiling report will be written to the directory specified as the output destination when calling `profile()`; in or example above that was `"/tmp/fil-result"`.
 Unlike full-program profiling:
 
 1. The directory you give will be used directly, there won't be timestamped sub-directories.
-   **If there are multiple calls to `run_profile()`, it is your responsibility to ensure each call writes to a unique directory.**
+   **If there are multiple calls to `profile()`, it is your responsibility to ensure each call writes to a unique directory.**
 2. The report(s) will _not_ be opened in a browser automatically, on the presumption you're running this in an automated fashion.
 
 ### <a name="oom">Debugging out-of-memory crashes</a>
