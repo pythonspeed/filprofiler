@@ -20,9 +20,9 @@ For more information, including an example of the output, see https://pythonspee
 * [Fil vs. other Python memory tools](#other-tools)
 * [Installation](#installation)
 * [Using Fil](#using-fil)
-    * [Measuring peak (high-water mark) memory usage in Jupyter](#peak-jupyter)
-    * [Measuring peak memory usage for Python scripts](#peak-python)
-    * [Measuring memory usage of a Python function](#code)
+    * [Profiling in Jupyter](#peak-jupyter)
+    * [Profiling complete Python programs](#peak-python)
+    * [API for profiling specific Python functions](#code)
     * [Debugging out-of-memory crashes in your code](#oom)
 * [Reducing memory usage in your code](#reducing-memory-usage)
 * [How Fil works](#how-fil-works)
@@ -97,9 +97,9 @@ $ pip install filprofiler
 
 ## Using Fil
 
-### <a name="peak-jupyter">Measuring peak (high-water mark) memory usage in Jupyter</a>
+### <a name="peak-jupyter">Profiling in Jupyter</a>
 
-To measure memory usage of some code in Jupyter you need to do three things:
+To measure peak memory usage of some code in Jupyter you need to do three things:
 
 1. Use an alternative kernel, "Python 3 with Fil".
    You can choose this kernel when you create a new notebook, or you can switch an existing notebook in the Kernel menu; there should be a "Change Kernel" option in there in both Jupyter Notebook and JupyterLab.
@@ -109,7 +109,7 @@ To measure memory usage of some code in Jupyter you need to do three things:
 
 ![Screenshot of JupyterLab](https://raw.githubusercontent.com/pythonspeed/filprofiler/master/images/jupyter.png)
 
-### <a name="peak-python">Measuring peak (high-water mark) memory usage for Python scripts</a>
+### <a name="peak-python">Profiling complete Python programs</a>
 
 Instead of doing:
 
@@ -132,7 +132,7 @@ As of version 0.11, you can also run it like this:
 $ python -m filprofiler run yourscript.py --input-file=yourfile
 ```
 
-### <a name="code">Measuring memory usage of a Python function</a>
+### <a name="code">API for profiling specific Python functions</a>
 
 You can also measure memory usage in part of your program; this requires version 0.15 or later.
 This requires two steps.
