@@ -127,7 +127,6 @@ def stage_1():
             print(f.read())
     else:
         # Normal operation, via LD_PRELOAD or equivalent:
-        ld_preload = environ.get("LD_PRELOAD")
         environ["LD_PRELOAD"] = library_path("_filpreload")
         environ["DYLD_INSERT_LIBRARIES"] = library_path("_filpreload")
         execve(sys.executable, [sys.executable] + args, env=environ)
@@ -164,8 +163,6 @@ def stage_2():
 
     Presumes LD_PRELOAD etc. has been set by stage_1().
     """
-    if not environ.get("FIL_BENCHMARK") and environ.get("LD_PRELOAD"):
-        del environ["LD_PRELOAD"]
     arguments = PARSER.parse_args()
     if arguments.license:
         print(LICENSE)

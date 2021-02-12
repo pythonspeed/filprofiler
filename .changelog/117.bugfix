@@ -1,0 +1,1 @@
+Fil now works better with subprocessses. It doesn't support memory tracking in subprocesses yet, but it doesn't break them either.

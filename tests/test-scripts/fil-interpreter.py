@@ -10,6 +10,8 @@ import os
 from ctypes import c_void_p
 import re
 from pathlib import Path
+from subprocess import check_output
+import multiprocessing
 
 import pytest
 import numpy as np
@@ -51,7 +53,7 @@ def test_temporary_profiling(tmpdir):
         f()
 
     # Allocations were tracked:
-    path = ((__file__, "f", 48), (numpy.core.numeric.__file__, "ones", ANY))
+    path = ((__file__, "f", 50), (numpy.core.numeric.__file__, "ones", ANY))
     allocations = get_allocations(tmpdir)
     assert match(allocations, {path: big}, as_mb) == pytest.approx(32, 0.1)
 
@@ -219,3 +221,38 @@ def test_profiling_without_blosc_and_numexpr(tmpdir):
     finally:
         del sys.modules["blosc"]
         del sys.modules["numexpr"]
+
+
+def test_subprocess(tmpdir):
+    """
+    Running a subprocess doesn't blow up.
+    """
+    start_tracing(tmpdir)
+    try:
+        output = check_output(["printf", "hello"])
+    finally:
+        stop_tracing(tmpdir)
+    assert output == b"hello"
+
+
+def return123():
+    return 123
+
+
+@pytest.mark.parametrize("mode", ["spawn", "forkserver", "fork"])
+def test_multiprocessing(tmpdir, mode):
+    """
+    Running a subprocess via multiprocessing in the various different modes
+    doesn't blow up.
+    """
+    # Non-tracing:
+    with multiprocessing.get_context(mode).Pool() as pool:
+        assert pool.apply((3).__add__, (4,)) == 7
+
+    # Tracing:
+    start_tracing(tmpdir)
+    try:
+        with multiprocessing.get_context(mode).Pool() as pool:
+            assert pool.apply((3).__add__, (4,)) == 7
+    finally:
+        stop_tracing(tmpdir)
