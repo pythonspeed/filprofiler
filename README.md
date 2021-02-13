@@ -157,8 +157,7 @@ from filprofiler.api import profile
 
 def main():
     config = load_config()
-    with profile("/tmp/fil-result"):
-        result = run_processing(config)
+    result = profile(lambda: run_processing(config), "/tmp/fil-result")
     generate_report(result)
 ```
 
@@ -171,8 +170,7 @@ from filprofiler.api import profile
 def main():
     config = load_config()
     if os.environ.get("FIL_PROFILE"):
-        with profile("/tmp/fil-result"):
-            result = run_processing(config)
+        result = profile(lambda: run_processing(config), "/tmp/fil-result")
     else:
         result = run_processing(config)
     generate_report(result)
@@ -194,7 +192,7 @@ $ filprofiler python yourscript.py --config=myconfig
 ```
 
 Notice that you're doing `filprofiler `**`python`**, rather than `filprofiler run` as you would if you were profiling the full script.
-Only functions explicitly called with the `filprofiler.api.profile()` context manager will have memory profiling enabled; the rest of the code will run at (close) to normal speed and configuration.
+Only functions explicitly called with the `filprofiler.api.profile()` will have memory profiling enabled; the rest of the code will run at (close) to normal speed and configuration.
 Each call to `profile()` will generate a separate report.
 
 The memory profiling report will be written to the directory specified as the output destination when calling `profile()`; in or example above that was `"/tmp/fil-result"`.

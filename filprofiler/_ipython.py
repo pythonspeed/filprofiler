@@ -25,7 +25,7 @@ HOPEFULLY_UNIQUE_VAR = "__arghbldsada__"
 TEMPLATE = """\
 def __magic_run_with_fil():
 {}
-with {}(): __magic_run_with_fil()
+{}(__magic_run_with_fil)
 """
 
 
@@ -55,16 +55,14 @@ class FilMagics(Magics):
         self.shell.drop_by_id({HOPEFULLY_UNIQUE_VAR: run_with_profile})
 
 
-@contextmanager
-def run_with_profile():
+def run_with_profile(code_to_profile):
     """Run some code under Fil, display result."""
     topdir = Path("fil-result")
     if not topdir.exists():
         topdir.mkdir()
     tempdir = Path(mkdtemp(dir=topdir))
     try:
-        with profile(tempdir):
-            yield
+        return profile(code_to_profile, tempdir)
     finally:
         svg_path = tempdir / "peak-memory.svg"
         display(IFrame(svg_path, width="100%", height="600"))

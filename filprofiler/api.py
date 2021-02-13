@@ -10,15 +10,16 @@ instead of:
     $ python yourprogram.py
 """
 
-from contextlib import contextmanager, AbstractContextManager
-from typing import Union
+from typing import Union, Callable, TypeVar
 from pathlib import Path
 
 from ._tracer import start_tracing, stop_tracing, disable_thread_pools
 
 
-@contextmanager
-def profile(path: Union[str, Path]) -> AbstractContextManager:
+_T = TypeVar("_T")
+
+
+def profile(code_to_profile: Callable[[], _T], path: Union[str, Path]) -> _T:
     """
     Context manager that profiles memory and dumps the result to the given
     path.
@@ -26,7 +27,7 @@ def profile(path: Union[str, Path]) -> AbstractContextManager:
     start_tracing(path)
     with disable_thread_pools():
         try:
-            yield
+            return code_to_profile()
         finally:
             stop_tracing(path)
 

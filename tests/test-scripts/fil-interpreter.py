@@ -44,16 +44,16 @@ def test_no_profiling():
 def test_temporary_profiling(tmpdir):
     """Profiling can be run temporarily."""
     # get_allocations() expects actual output in a subdirectory.
-    with profile(tmpdir / "output"):
+    def f():
+        arr = np.ones((1024, 1024, 4), dtype=np.uint64)  # 32MB
+        del arr
+        return 1234
 
-        def f():
-            arr = np.ones((1024, 1024, 4), dtype=np.uint64)  # 32MB
-            del arr
-
-        f()
+    result = profile(f, tmpdir / "output")
+    assert result == 1234
 
     # Allocations were tracked:
-    path = ((__file__, "f", 50), (numpy.core.numeric.__file__, "ones", ANY))
+    path = ((__file__, "f", 48), (numpy.core.numeric.__file__, "ones", ANY))
     allocations = get_allocations(tmpdir)
     assert match(allocations, {path: big}, as_mb) == pytest.approx(32, 0.1)
 
@@ -175,9 +175,9 @@ f()
 
 
 @pytest.mark.parametrize(
-    "contextmanager_factory", [lambda tempdir: run_with_profile(), profile,]
+    "profile_func", [lambda f, tempdir: run_with_profile(f), profile,]
 )
-def test_profiling_disables_threadpools(tmpdir, contextmanager_factory):
+def test_profiling_disables_threadpools(tmpdir, profile_func):
     """
     Memory profiling disables thread pools, then restores them when done.
     """
@@ -190,12 +190,15 @@ def test_profiling_disables_threadpools(tmpdir, contextmanager_factory):
     numexpr.set_num_threads(3)
     blosc.set_nthreads(3)
     with threadpoolctl.threadpool_limits(3, "blas"):
-        with contextmanager_factory(tmpdir):
+
+        def check():
             assert numexpr.set_num_threads(2) == 1
             assert blosc.set_nthreads(2) == 1
 
             for d in threadpoolctl.threadpool_info():
                 assert d["num_threads"] == 1, d
+
+        profile_func(check, tmpdir)
 
         # Resets when done:
         assert numexpr.set_num_threads(2) == 3
