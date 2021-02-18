@@ -1,3 +1,16 @@
+# Fil 0.15.0 (2021-02-18)
+
+
+### Features
+
+- Fil now supports profiling individual functions in normal Python scripts; previously this was only possible in Jupyter. ([#71](https://github.com/pythonspeed/filprofiler/issues/71))
+
+
+### Bugfixes
+
+- Fil now works better with subprocessses. It doesn't support memory tracking in subprocesses yet, but it doesn't break them either. ([#117](https://github.com/pythonspeed/filprofiler/issues/117))
+
+
 # Fil 0.14.1 (2021-01-15)
 
 

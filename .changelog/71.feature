@@ -1,1 +1,0 @@
-Fil now supports profiling individual functions in normal Python scripts; previously this was only possible in Jupyter.
