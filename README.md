@@ -20,8 +20,9 @@ For more information, including an example of the output, see https://pythonspee
 * [Fil vs. other Python memory tools](#other-tools)
 * [Installation](#installation)
 * [Using Fil](#using-fil)
-    * [Measuring peak (high-water mark) memory usage in Jupyter](#peak-jupyter)
-    * [Measuring peak memory usage for Python scripts](#peak-python)
+    * [Profiling in Jupyter](#peak-jupyter)
+    * [Profiling complete Python programs](#peak-python)
+    * [API for profiling specific Python functions](#code)
     * [Debugging out-of-memory crashes in your code](#oom)
 * [Reducing memory usage in your code](#reducing-memory-usage)
 * [How Fil works](#how-fil-works)
@@ -76,11 +77,17 @@ pip 19.3.0
 
 If you're using something older than v19, you can upgrade by doing:
 
-```
+```console
 $ pip install --upgrade pip
 ```
 
-If _that_ doesn't work, try running that in a virtualenv.
+If _that_ doesn't work, try running your code in a virtualenv:
+
+```console
+$ python3 -m venv venv/
+$ . venv/bin/activate
+(venv) $ pip install --upgrade pip
+```
 
 Assuming you have a new enough version of pip:
 
@@ -90,9 +97,9 @@ $ pip install filprofiler
 
 ## Using Fil
 
-### <a name="peak-jupyter">Measuring peak (high-water mark) memory usage in Jupyter</a>
+### <a name="peak-jupyter">Profiling in Jupyter</a>
 
-To measure memory usage of some code in Jupyter you need to do three things:
+To measure peak memory usage of some code in Jupyter you need to do three things:
 
 1. Use an alternative kernel, "Python 3 with Fil".
    You can choose this kernel when you create a new notebook, or you can switch an existing notebook in the Kernel menu; there should be a "Change Kernel" option in there in both Jupyter Notebook and JupyterLab.
@@ -102,7 +109,7 @@ To measure memory usage of some code in Jupyter you need to do three things:
 
 ![Screenshot of JupyterLab](https://raw.githubusercontent.com/pythonspeed/filprofiler/master/images/jupyter.png)
 
-### <a name="peak-python">Measuring peak (high-water mark) memory usage for Python scripts</a>
+### <a name="peak-python">Profiling complete Python programs</a>
 
 Instead of doing:
 
@@ -116,13 +123,84 @@ Just do:
 $ fil-profile run yourscript.py --input-file=yourfile
 ```
 
-And it will generate a report.
+And it will generate a report and automatically try to open it in for you in a browser.
+Reports will be stored in the `fil-result/` directory in your current working directory.
 
 As of version 0.11, you can also run it like this:
 
 ```
 $ python -m filprofiler run yourscript.py --input-file=yourfile
 ```
+
+### <a name="code">API for profiling specific Python functions</a>
+
+You can also measure memory usage in part of your program; this requires version 0.15 or later.
+This requires two steps.
+
+#### 1. Add profiling in your code
+
+Let's you have some code that does the following:
+
+```python
+def main():
+    config = load_config()
+    result = run_processing(config)
+    generate_report(result)
+```
+
+You only want to get memory profiling for the `run_processing()` call.
+
+You can do so in the code like so:
+
+```python
+from filprofiler.api import profile
+
+def main():
+    config = load_config()
+    result = profile(lambda: run_processing(config), "/tmp/fil-result")
+    generate_report(result)
+```
+
+You could also make it conditional, e.g. based on an environment variable:
+
+```python
+import os
+from filprofiler.api import profile
+
+def main():
+    config = load_config()
+    if os.environ.get("FIL_PROFILE"):
+        result = profile(lambda: run_processing(config), "/tmp/fil-result")
+    else:
+        result = run_processing(config)
+    generate_report(result)
+```
+
+#### 2. Run your script with Fil
+
+You still need to run your program in a special way.
+If previously you did:
+
+```console
+$ python yourscript.py --config=myconfig
+```
+
+Now you would do:
+
+```console
+$ filprofiler python yourscript.py --config=myconfig
+```
+
+Notice that you're doing `filprofiler `**`python`**, rather than `filprofiler run` as you would if you were profiling the full script.
+Only functions explicitly called with the `filprofiler.api.profile()` will have memory profiling enabled; the rest of the code will run at (close) to normal speed and configuration.
+Each call to `profile()` will generate a separate report.
+
+The memory profiling report will be written to the directory specified as the output destination when calling `profile()`; in or example above that was `"/tmp/fil-result"`.
+Unlike full-program profiling:
+
+1. The directory you give will be used directly, there won't be timestamped sub-directories.
+   **If there are multiple calls to `profile()`, it is your responsibility to ensure each call writes to a unique directory.**
+2. The report(s) will _not_ be opened in a browser automatically, on the presumption you're running this in an automated fashion.
 
 ### <a name="oom">Debugging out-of-memory crashes</a>
 

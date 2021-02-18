@@ -6,11 +6,12 @@ a Jupyter notebook.
 from pathlib import Path
 from textwrap import indent
 from contextlib import contextmanager
+from tempfile import mkdtemp
 
 from IPython.core.magic import Magics, magics_class, cell_magic
 from IPython.display import IFrame, display
 
-from ._tracer import start_tracing, stop_tracing, disable_thread_pools
+from .api import profile
 
 
 HOPEFULLY_UNIQUE_VAR = "__arghbldsada__"
@@ -24,7 +25,7 @@ HOPEFULLY_UNIQUE_VAR = "__arghbldsada__"
 TEMPLATE = """\
 def __magic_run_with_fil():
 {}
-with {}(): __magic_run_with_fil()
+{}(__magic_run_with_fil)
 """
 
 
@@ -54,15 +55,14 @@ class FilMagics(Magics):
         self.shell.drop_by_id({HOPEFULLY_UNIQUE_VAR: run_with_profile})
 
 
-@contextmanager
-def run_with_profile():
+def run_with_profile(code_to_profile):
     """Run some code under Fil, display result."""
-    tempdir = "fil-result"
-    start_tracing(tempdir)
-    with disable_thread_pools():
-        try:
-            yield
-        finally:
-            index_html_path = stop_tracing(tempdir)
-            svg_path = Path(index_html_path).parent / "peak-memory.svg"
-            display(IFrame(svg_path, width="100%", height="600"))
+    topdir = Path("fil-result")
+    if not topdir.exists():
+        topdir.mkdir()
+    tempdir = Path(mkdtemp(dir=topdir))
+    try:
+        return profile(code_to_profile, tempdir)
+    finally:
+        svg_path = tempdir / "peak-memory.svg"
+        display(IFrame(svg_path, width="100%", height="600"))

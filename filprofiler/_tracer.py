@@ -8,6 +8,8 @@ import sys
 import threading
 import webbrowser
 from contextlib import contextmanager
+from pathlib import Path
+from typing import Union
 
 from ._utils import timestamp_now, library_path
 from ._report import render_report
@@ -23,10 +25,9 @@ else:
 preload.fil_initialize_from_python()
 
 
-def start_tracing(output_path: str):
+def start_tracing(output_path: Union[str, Path]):
     """Start tracing allocations."""
-    path = os.path.join(output_path, timestamp_now()).encode("utf-8")
-    preload.fil_reset(path)
+    preload.fil_reset(str(output_path).encode("utf-8"))
     preload.fil_start_tracking()
     threading.setprofile(_start_thread_trace)
     preload.register_fil_tracer()
@@ -60,10 +61,9 @@ def stop_tracing(output_path: str) -> str:
     return result
 
 
-def create_report(output_path: str) -> str:
+def create_report(output_path: Union[str, Path]) -> str:
+    preload.fil_dump_peak_to_flamegraph(str(output_path).encode("utf-8"))
     now = datetime.now()
-    output_path = os.path.join(output_path, now.isoformat(timespec="milliseconds"))
-    preload.fil_dump_peak_to_flamegraph(output_path.encode("utf-8"))
     return render_report(output_path, now)
 
 
@@ -80,7 +80,7 @@ def trace_until_exit(code, globals_, output_path: str):
                 file=sys.stderr,
             )
             return
-        index_path = stop_tracing(output_path)
+        index_path = stop_tracing(os.path.join(output_path, timestamp_now()))
         print("=fil-profile= Wrote HTML report to " + index_path, file=sys.stderr)
         try:
             webbrowser.open("file://" + os.path.abspath(index_path))
@@ -94,7 +94,7 @@ def trace_until_exit(code, globals_, output_path: str):
     # Use atexit rather than try/finally so threads that live beyond main
     # thread also get profiled:
     atexit.register(shutdown)
-    start_tracing(output_path)
+    start_tracing(os.path.join(output_path, timestamp_now()))
     with disable_thread_pools():
         exec(code, globals_, None)
 

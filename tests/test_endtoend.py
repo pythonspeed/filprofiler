@@ -445,11 +445,21 @@ def test_jupyter(tmpdir):
     allocations = get_allocations(output_dir)
     print(allocations)
     path = (
-        (re.compile("<ipython-input-3-.*"), "__magic_run_with_fil", 2),
+        (re.compile("<ipython-input-3-.*"), "__magic_run_with_fil", 3),
         (re.compile("<ipython-input-2-.*"), "alloc", 4),
         (numpy.core.numeric.__file__, "ones", ANY),
     )
     assert match(allocations, {path: big}, as_mb) == pytest.approx(48, 0.1)
+    path2 = (
+        (re.compile("<ipython-input-3-.*"), "__magic_run_with_fil", 2),
+        (numpy.core.numeric.__file__, "ones", ANY),
+    )
+    assert match(allocations, {path2: big}, as_mb) == pytest.approx(20, 0.1)
+    # It's possible to run nbconvert again.
+    check_call(
+        ["jupyter", "nbconvert", "--execute", "jupyter.ipynb", "--to", "html",],
+        cwd=tmpdir,
+    )
 
 
 def test_no_threadpools_filprofile_run():
