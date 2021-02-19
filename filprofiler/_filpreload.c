@@ -315,7 +315,9 @@ static void add_anon_mmap(size_t address, size_t size) {
 
 // Disable memory tracking after fork() in the child.
 __attribute__((visibility("default"))) pid_t SYMBOL_PREFIX(fork)(void) {
-  fprintf(stderr, "=fil-profile= WARNING: Fil does not (yet) support tracking memory in subprocesses.\n");
+  if (tracking_allocations) {
+    fprintf(stderr, "=fil-profile= WARNING: Fil does not (yet) support tracking memory in subprocesses.\n");
+  }
   pid_t result = underlying_real_fork();
   if (result == 0) {
     // We're the child.
