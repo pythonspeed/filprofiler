@@ -28,7 +28,7 @@ def test_replace_code_references_encoded():
     s = f"<title>TB@@{file_path}:1@@TB</title>"
     assert (
         replace_code_references(s)
-        == f'''<title>&#160;&#160;&#160;&#160;"""A file used by test_report."""</title>'''
+        == '''<title>&#160;&#160;&#160;&#160;"""A file used by test_report."""</title>'''
     )
 
 

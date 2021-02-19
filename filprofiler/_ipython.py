@@ -5,7 +5,6 @@ a Jupyter notebook.
 
 from pathlib import Path
 from textwrap import indent
-from contextlib import contextmanager
 from tempfile import mkdtemp
 
 from IPython.core.magic import Magics, magics_class, cell_magic
