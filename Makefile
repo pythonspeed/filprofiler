@@ -31,6 +31,7 @@ test-rust:
 test-python: build
 	make test-python-no-deps
 	env RUST_BACKTRACE=1 py.test filprofiler/tests/
+	flake8 filprofiler/
 
 .PHONY: test-python-no-deps
 test-python-no-deps:
