@@ -13,8 +13,6 @@ from argparse import ArgumentParser, RawDescriptionHelpFormatter, REMAINDER
 import runpy
 import signal
 from shutil import which
-from subprocess import check_output, check_call
-
 from ._utils import library_path
 from ._cachegrind import benchmark
 from . import __version__, __file__

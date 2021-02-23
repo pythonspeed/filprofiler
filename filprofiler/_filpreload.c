@@ -176,7 +176,9 @@ static void __attribute__((constructor)) constructor() {
   // Drop LD_PRELOAD and DYLD_INSERT_LIBRARIES so that subprocesses don't have
   // this preloaded.
   unsetenv("LD_PRELOAD");
-  unsetenv("DYLD_INSERT_LIBRARIES");
+  // Enabling this breaks things. Don't trust CI being green, check this
+  // manually (see https://github.com/pythonspeed/filprofiler/issues/137).
+  // unsetenv("DYLD_INSERT_LIBRARIES");
 
   initialized = 1;
 }
@@ -315,7 +317,9 @@ static void add_anon_mmap(size_t address, size_t size) {
 
 // Disable memory tracking after fork() in the child.
 __attribute__((visibility("default"))) pid_t SYMBOL_PREFIX(fork)(void) {
-  fprintf(stderr, "=fil-profile= WARNING: Fil does not (yet) support tracking memory in subprocesses.\n");
+  if (tracking_allocations) {
+    fprintf(stderr, "=fil-profile= WARNING: Fil does not (yet) support tracking memory in subprocesses.\n");
+  }
   pid_t result = underlying_real_fork();
   if (result == 0) {
     // We're the child.

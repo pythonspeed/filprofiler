@@ -1,7 +1,6 @@
 """Tests for filprofiler._utils."""
 
 import os
-import sys
 
 from .._utils import library_path
 

@@ -4,7 +4,6 @@ Cachegrind performance metrics.
 
 from typing import List, Dict
 from subprocess import check_call, check_output
-import sys
 from tempfile import NamedTemporaryFile
 
 
