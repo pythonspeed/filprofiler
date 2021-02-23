@@ -89,6 +89,10 @@ parser_run.set_defaults(command="run")
 parser_run.add_argument("rest", nargs=REMAINDER)
 del subparsers, parser_run
 
+# Can't figure out if this is a standard path _everywhere_, but it definitely
+# exists on Ubuntu 18.04 and 20.04, Debian Buster, CentOS 8, and Arch.
+LD_LINUX = "/lib64/ld-linux-x86-64.so.2"
+
 
 def stage_1_benchmark(args: List[str]):
     """Run the script in benchmarking mode."""
@@ -111,13 +115,7 @@ def stage_1_benchmark(args: List[str]):
     # command-line based non-execve()ing /lib/ld.so's preload support,
     # without having Valgrind trace forks.
     fil_result = benchmark(
-        [
-            "/lib64/ld-linux-x86-64.so.2",
-            "--preload",
-            library_path("_filpreload"),
-            which("python"),
-        ]
-        + args
+        [LD_LINUX, "--preload", library_path("_filpreload"), which("python"),] + args
     )
     # 3. Store the difference.
     result = {k: (fil_result[k] - python_result[k]) for k in fil_result}
@@ -162,10 +160,10 @@ def stage_1():
     executable = sys.executable
 
     if sys.platform == "linux":
-        if glibc_version() >= (2, 30):
+        if glibc_version() >= (2, 30) and exists(LD_LINUX):
             # Launch with ld.so, which is more robust than relying on
             # environment variables.
-            executable = "/lib64/ld-linux-x86-64.so.2"
+            executable = LD_LINUX
             args = ["--preload", to_preload, sys.executable] + args
         else:
             # Fall back to LD_PRELOAD env variable on older versions of glibc.
