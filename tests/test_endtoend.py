@@ -16,7 +16,7 @@ import pytest
 import psutil
 
 from filprofiler._testing import get_allocations, big, as_mb
-
+from filprofiler._utils import glibc_version
 
 TEST_SCRIPTS = Path("tests") / "test-scripts"
 
@@ -321,6 +321,7 @@ def get_systemd_run_args(available_memory):
 
 
 @pytest.mark.skipif(shutil.which("systemd-run") is None, reason="systemd-run not found")
+@pytest.mark.skipif(glibc_version() < (2, 30), reason="Old systemd-run, probably")
 def test_out_of_memory_slow_leak_cgroups():
     """
     If an allocation is run that runs out of memory slowly, hitting a cgroup
