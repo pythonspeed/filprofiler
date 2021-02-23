@@ -14,7 +14,7 @@ from typing import List
 import runpy
 import signal
 from shutil import which
-from ._utils import library_path
+from ._utils import library_path, glibc_version
 from ._cachegrind import benchmark
 from . import __version__, __file__
 
@@ -72,10 +72,7 @@ PARSER = ArgumentParser(
 )
 PARSER.add_argument("--version", action="version", version=__version__)
 PARSER.add_argument(
-    "--license",
-    action="store_true",
-    default=False,
-    help="Print licensing information",
+    "--license", action="store_true", default=False, help="Print licensing information",
 )
 PARSER.add_argument(
     "-o",
@@ -86,10 +83,7 @@ PARSER.add_argument(
 )
 subparsers = PARSER.add_subparsers(help="sub-command help")
 parser_run = subparsers.add_parser(
-    "run",
-    help="Run a Python script or package",
-    prefix_chars=[""],
-    add_help=False,
+    "run", help="Run a Python script or package", prefix_chars=[""], add_help=False,
 )
 parser_run.set_defaults(command="run")
 parser_run.add_argument("rest", nargs=REMAINDER)
@@ -164,9 +158,22 @@ def stage_1():
         return
 
     # Normal operation, via LD_PRELOAD or equivalent:
-    environ["LD_PRELOAD"] = library_path("_filpreload")
-    environ["DYLD_INSERT_LIBRARIES"] = library_path("_filpreload")
-    execve(sys.executable, [sys.executable] + args, env=environ)
+    to_preload = library_path("_filpreload")
+    executable = sys.executable
+
+    if sys.platform == "linux":
+        if glibc_version() >= (2, 30):
+            # Launch with ld.so, which is more robust than relying on
+            # environment variables.
+            executable = "/lib64/ld-linux-x86-64.so.2"
+            args = ["--preload", to_preload, sys.executable] + args
+        else:
+            # Fall back to LD_PRELOAD env variable on older versions of glibc.
+            environ["LD_PRELOAD"] = to_preload
+    else:
+        environ["DYLD_INSERT_LIBRARIES"] = to_preload
+
+    execve(executable, [executable] + args, env=environ)
 
 
 def stage_2():
