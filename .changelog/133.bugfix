@@ -1,1 +1,1 @@
-Fix reported crash on Arch Linux.
+On Linux, use a more robust method of preloading the shared library (requires glibc 2.30+, i.e. a Linux distribution released in 2020 or later).
