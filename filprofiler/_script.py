@@ -115,7 +115,7 @@ def stage_1_benchmark(args: List[str]):
     # command-line based non-execve()ing /lib/ld.so's preload support,
     # without having Valgrind trace forks.
     fil_result = benchmark(
-        [LD_LINUX, "--preload", library_path("_filpreload"), which("python"),] + args
+        [LD_LINUX, "--preload", library_path("_filpreload"), which("python")] + args
     )
     # 3. Store the difference.
     result = {k: (fil_result[k] - python_result[k]) for k in fil_result}
