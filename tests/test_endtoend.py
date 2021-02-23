@@ -320,8 +320,10 @@ def get_systemd_run_args(available_memory):
     return args
 
 
-@pytest.mark.skipif(shutil.which("systemd-run") is None, reason="systemd-run not found")
-@pytest.mark.skipif(glibc_version() < (2, 30), reason="Old systemd-run, probably")
+@pytest.mark.skipif(
+    shutil.which("systemd-run") is None or glibc_version() < (2, 30),
+    reason="systemd-run not found, or old systemd probably",
+)
 def test_out_of_memory_slow_leak_cgroups():
     """
     If an allocation is run that runs out of memory slowly, hitting a cgroup
