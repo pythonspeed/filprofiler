@@ -642,20 +642,18 @@ fn write_flamegraph(
         if reversed { ", Reversed" } else { "" },
         peak_bytes as f64 / (1024.0 * 1024.0)
     );
-    let mut options = flamegraph::Options {
-        title,
-        count_name: "bytes".to_string(),
-        font_size: 16,
-        font_type: "mono".to_string(),
-        frame_height: 22,
-        reverse_stack_order: reversed,
-        color_diffusion: true,
-        direction: flamegraph::Direction::Inverted,
-        // Maybe disable this some day, but for now it makes debugging much
-        // easier:
-        pretty_xml: true,
-        ..Default::default()
-    };
+    let mut options = flamegraph::Options::default();
+    options.title = title;
+    options.count_name = "bytes".to_string();
+    options.font_size = 16;
+    options.font_type = "mono".to_string();
+    options.frame_height = 22;
+    options.reverse_stack_order = reversed;
+    options.color_diffusion = true;
+    options.direction = flamegraph::Direction::Inverted;
+    // Maybe disable this some day; but for now it makes debugging much
+    // easier:
+    options.pretty_xml = true;
     if to_be_post_processed {
         options.subtitle = Some("SUBTITLE-HERE".to_string());
     }
