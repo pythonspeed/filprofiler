@@ -1,3 +1,13 @@
+# Fil 0.16.0 (2021-02-24)
+
+
+### Bugfixes
+
+- On Linux, use a more robust method of preloading the shared library (requires glibc 2.30+, i.e. a Linux distribution released in 2020 or later). ([#133](https://github.com/pythonspeed/filprofiler/issues/133))
+- Fixed in regression in Fil v0.15 that made it unusable on macOS. ([#135](https://github.com/pythonspeed/filprofiler/issues/135))
+- Fewer spurious warnings about launching subprocesses. ([#136](https://github.com/pythonspeed/filprofiler/issues/136))
+
+
 # Fil 0.15.0 (2021-02-18)
 
 
