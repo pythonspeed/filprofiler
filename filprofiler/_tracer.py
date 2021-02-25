@@ -10,19 +10,34 @@ import webbrowser
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Union
+import traceback
 
 from ._utils import timestamp_now, library_path
 from ._report import render_report
 
-if os.environ.get("FIL_BENCHMARK"):
-    # Linux only, and somehow loading library breaks stuff.
-    preload = PyDLL(None)
-else:
-    # We're using preloaded library. TODO figure out if we can use None on
-    # Linux and continuet to do this on macOS, and if so if that allows
-    # dropping -export-dynamic.
-    preload = PyDLL(library_path("_filpreload"))
-preload.fil_initialize_from_python()
+try:
+    if sys.platform == "linux":
+        # Linux only, and somehow loading library breaks stuff.
+        preload = PyDLL(None)
+    else:
+        # macOS.
+        preload = PyDLL(library_path("_filpreload"))
+    preload.fil_initialize_from_python()
+except Exception as e:
+    raise SystemExit(
+        f"""\
+Failed to preload the Fil shared library: {e}.
+
+This can happen on Linux for unknown reasons on versions of glibc older than 2.30. Upgrading to a version of Linux from 2020 or later might solve this.
+
+If you're on macOS or a sufficiently new Linux, you've found a bug! You can file an issue or just ask for help at:
+https://github.com/pythonspeed/filprofiler/issues/new/choose
+
+Full trackback:
+
+{traceback.format_exc()}
+"""
+    )
 
 
 def start_tracing(output_path: Union[str, Path]):
