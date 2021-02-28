@@ -325,6 +325,7 @@ __attribute__((visibility("default"))) pid_t SYMBOL_PREFIX(fork)(void) {
   pid_t result = underlying_real_fork();
   if (result == 0) {
     // We're the child.
+    // Clear any memory if we're in icky fork()-without-exec() mode.
     fil_stop_tracking();
   }
   return result;

@@ -72,7 +72,10 @@ PARSER = ArgumentParser(
 )
 PARSER.add_argument("--version", action="version", version=__version__)
 PARSER.add_argument(
-    "--license", action="store_true", default=False, help="Print licensing information",
+    "--license",
+    action="store_true",
+    default=False,
+    help="Print licensing information",
 )
 PARSER.add_argument(
     "-o",
@@ -83,7 +86,10 @@ PARSER.add_argument(
 )
 subparsers = PARSER.add_subparsers(help="sub-command help")
 parser_run = subparsers.add_parser(
-    "run", help="Run a Python script or package", prefix_chars=[""], add_help=False,
+    "run",
+    help="Run a Python script or package",
+    prefix_chars=[""],
+    add_help=False,
 )
 parser_run.set_defaults(command="run")
 parser_run.add_argument("rest", nargs=REMAINDER)
@@ -145,10 +151,11 @@ def stage_1():
 
     if sys.argv[1] == "python":
         # Tells IPython layer we're setup correctly:
-        environ["__FIL_PYTHON"] = "1"
+        environ["__FIL_PYTHON"] = "api"
         # Start the normal Python interpreter, with Fil available but inactive.
         args = sys.argv[2:]
     else:
+        environ["__FIL_PYTHON"] = "program"
         args = ["-m", "filprofiler._script"] + sys.argv[1:]
 
     if environ.get("FIL_BENCHMARK"):

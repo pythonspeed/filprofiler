@@ -256,7 +256,11 @@ def test_out_of_memory():
     time.sleep(10)  # wait for child process to finish
     allocations = get_allocations(
         output_dir,
-        ["out-of-memory.svg", "out-of-memory-reversed.svg", "out-of-memory.prof",],
+        [
+            "out-of-memory.svg",
+            "out-of-memory-reversed.svg",
+            "out-of-memory.prof",
+        ],
         "out-of-memory.prof",
     )
 
@@ -283,7 +287,11 @@ def test_out_of_memory_slow_leak():
     time.sleep(10)  # wait for child process to finish
     allocations = get_allocations(
         output_dir,
-        ["out-of-memory.svg", "out-of-memory-reversed.svg", "out-of-memory.prof",],
+        [
+            "out-of-memory.svg",
+            "out-of-memory-reversed.svg",
+            "out-of-memory.prof",
+        ],
         "out-of-memory.prof",
     )
 
@@ -332,12 +340,18 @@ def test_out_of_memory_slow_leak_cgroups():
     available_memory = psutil.virtual_memory().available
     script = TEST_SCRIPTS / "oom-slow.py"
     output_dir = profile(
-        script, expect_exit_code=53, argv_prefix=get_systemd_run_args(available_memory),
+        script,
+        expect_exit_code=53,
+        argv_prefix=get_systemd_run_args(available_memory),
     )
     time.sleep(10)  # wait for child process to finish
     allocations = get_allocations(
         output_dir,
-        ["out-of-memory.svg", "out-of-memory-reversed.svg", "out-of-memory.prof",],
+        [
+            "out-of-memory.svg",
+            "out-of-memory-reversed.svg",
+            "out-of-memory.prof",
+        ],
         "out-of-memory.prof",
     )
 
@@ -431,7 +445,14 @@ def test_jupyter(tmpdir):
     """Jupyter magic can run Fil."""
     shutil.copyfile(TEST_SCRIPTS / "jupyter.ipynb", tmpdir / "jupyter.ipynb")
     check_call(
-        ["jupyter", "nbconvert", "--execute", "jupyter.ipynb", "--to", "html",],
+        [
+            "jupyter",
+            "nbconvert",
+            "--execute",
+            "jupyter.ipynb",
+            "--to",
+            "html",
+        ],
         cwd=tmpdir,
     )
     output_dir = tmpdir / "fil-result"
@@ -460,7 +481,14 @@ def test_jupyter(tmpdir):
     assert match(allocations, {path2: big}, as_mb) == pytest.approx(20, 0.1)
     # It's possible to run nbconvert again.
     check_call(
-        ["jupyter", "nbconvert", "--execute", "jupyter.ipynb", "--to", "html",],
+        [
+            "jupyter",
+            "nbconvert",
+            "--execute",
+            "jupyter.ipynb",
+            "--to",
+            "html",
+        ],
         cwd=tmpdir,
     )
 
@@ -468,7 +496,11 @@ def test_jupyter(tmpdir):
 def test_no_threadpools_filprofile_run():
     """`fil-profile run` disables thread pools it knows about."""
     check_call(
-        ["fil-profile", "run", str(TEST_SCRIPTS / "threadpools.py"),]
+        [
+            "fil-profile",
+            "run",
+            str(TEST_SCRIPTS / "threadpools.py"),
+        ]
     )
 
 
@@ -478,5 +510,22 @@ def test_malloc_on_thread_exit():
     Reproducer for https://github.com/pythonspeed/filprofiler/issues/99
     """
     check_call(
-        ["fil-profile", "run", str(TEST_SCRIPTS / "thread_exit.py"),]
+        [
+            "fil-profile",
+            "run",
+            str(TEST_SCRIPTS / "thread_exit.py"),
+        ]
     )
+
+
+def test_api_import(tmpdir):
+    """
+    It should be possible to import filprofiler.api even when NOT running under
+    Fil.
+    """
+    # Importing is fine:
+    from filprofiler import api
+
+    # Calling APIs won't work:
+    with pytest.raises(RuntimeError):
+        api.profile(lambda: None, tmpdir)

@@ -10,11 +10,12 @@ instead of:
     $ python yourprogram.py
 """
 
+# Design invariant: this should be importable without causing exceptions, even
+# if Fil won't work. As such, all imports of ._tracer should not happen at
+# module level.
+
 from typing import Union, Callable, TypeVar
 from pathlib import Path
-
-from ._tracer import start_tracing, stop_tracing, disable_thread_pools
-
 
 _T = TypeVar("_T")
 
@@ -24,6 +25,8 @@ def profile(code_to_profile: Callable[[], _T], path: Union[str, Path]) -> _T:
     Context manager that profiles memory and dumps the result to the given
     path.
     """
+    from ._tracer import start_tracing, stop_tracing, disable_thread_pools
+
     start_tracing(path)
     with disable_thread_pools():
         try:
