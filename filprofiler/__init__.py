@@ -2,7 +2,7 @@
 
 __all__ = ["__version__"]
 
-from os import getenv, unsetenv, register_at_fork
+from os import getenv, register_at_fork
 
 try:
     from ._version import version as __version__
@@ -38,5 +38,14 @@ def load_ipython_extension(ipython):
 
 # After forks, make sure Fil is no longer enabled, since we don't yet support child processes:
 if getenv("__FIL_PYTHON"):
-    register_at_fork(after_in_child=lambda unsetenv=unsetenv: unsetenv("__FIL_PYTHON"))
-del getenv, unsetenv, register_at_fork
+
+    def unset():
+        import os
+
+        os.unsetenv("__FIL_PYTHON")
+        if "__FIL_PYTHON" in os.environ:
+            os.environ.pop("__FIL_PYTHON")
+
+    register_at_fork(after_in_child=unset)
+    del unset
+del getenv, register_at_fork

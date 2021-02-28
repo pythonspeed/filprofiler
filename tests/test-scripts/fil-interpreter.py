@@ -250,13 +250,13 @@ def test_multiprocessing(tmpdir, mode):
     doesn't blow up.
     """
     # Non-tracing:
-    with multiprocessing.get_context(mode).Pool() as pool:
+    with multiprocessing.get_context(mode).Pool(processes=1) as pool:
         assert pool.apply((3).__add__, (4,)) == 7
 
     # Tracing:
     start_tracing(tmpdir)
     try:
-        with multiprocessing.get_context(mode).Pool() as pool:
+        with multiprocessing.get_context(mode).Pool(processes=1) as pool:
             assert pool.apply((3).__add__, (4,)) == 7
     finally:
         stop_tracing(tmpdir)
@@ -269,7 +269,7 @@ def test_multiprocessing_good_error_message_fil_api(tmpdir, mode):
     """
     start_tracing(tmpdir)
     try:
-        with multiprocessing.get_context(mode).Pool() as pool:
+        with multiprocessing.get_context(mode).Pool(processes=1) as pool:
             with pytest.raises(RuntimeError) as e:
                 pool.apply(fil_api.run_with_fil)
     finally:
