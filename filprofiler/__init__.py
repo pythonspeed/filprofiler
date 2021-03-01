@@ -2,7 +2,27 @@
 
 __all__ = ["__version__"]
 
-from os import getenv, register_at_fork
+# If we're running with Fil preloaded, after forks make sure Fil is no longer
+# enabled, since we don't yet support child processes. This is also done in C
+# code; doing it only in Python or only C doesn't seem to work.
+import sys
+import os
+
+if sys.version_info[:2] > (3, 6):
+    # register_at_fork only works in Python 3.6 or later.
+    if os.getenv("__FIL_STATUS") in ("api", "program"):
+
+        def unset(_os=os):
+            _os.environ["__FIL_STATUS"] = "subprocess"
+
+        os.register_at_fork(after_in_child=unset)
+        del unset
+
+# Fallback mechanism for detecting forks, for Python 3.6 or if someone isn't
+# doing fork()-without-exec() right (i.e. not calling the C API postfork()):
+_original_pid = os.getpid()
+
+del sys, os
 
 try:
     from ._version import version as __version__
@@ -34,18 +54,3 @@ def load_ipython_extension(ipython):
     from ._ipython import FilMagics
 
     ipython.register_magics(FilMagics)
-
-
-# If we're running with Fil preloaded, after forks make sure Fil is no longer
-# enabled, since we don't yet support child processes. This is also done in C
-# code; doing it only in Python or only C doesn't seem to work.
-if getenv("__FIL_STATUS") in ("api", "program"):
-
-    def unset():
-        import os
-
-        os.environ["__FIL_STATUS"] = "subprocess"
-
-    register_at_fork(after_in_child=unset)
-    del unset
-del getenv, register_at_fork
