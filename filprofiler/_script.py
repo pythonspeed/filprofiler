@@ -102,6 +102,7 @@ LD_LINUX = "/lib64/ld-linux-x86-64.so.2"
 
 def stage_1_benchmark(args: List[str]):
     """Run the script in benchmarking mode."""
+    environ["__FIL_STATUS"] = "launcher"
     destination = environ["FIL_BENCHMARK"]
     # Set fixed hash, in order to get repeatable results:
     environ["PYTHONHASHSEED"] = "12345"
@@ -151,11 +152,11 @@ def stage_1():
 
     if sys.argv[1] == "python":
         # Tells IPython layer we're setup correctly:
-        environ["__FIL_PYTHON"] = "api"
+        environ["__FIL_STATUS"] = "api"
         # Start the normal Python interpreter, with Fil available but inactive.
         args = sys.argv[2:]
     else:
-        environ["__FIL_PYTHON"] = "program"
+        environ["__FIL_STATUS"] = "program"
         args = ["-m", "filprofiler._script"] + sys.argv[1:]
 
     if environ.get("FIL_BENCHMARK"):

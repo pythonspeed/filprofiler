@@ -54,7 +54,7 @@ def test_temporary_profiling(tmpdir):
     assert result == 1234
 
     # Allocations were tracked:
-    path = ((__file__, "f", 48), (numpy.core.numeric.__file__, "ones", ANY))
+    path = ((__file__, "f", 49), (numpy.core.numeric.__file__, "ones", ANY))
     allocations = get_allocations(tmpdir)
     assert match(allocations, {path: big}, as_mb) == pytest.approx(32, 0.1)
 

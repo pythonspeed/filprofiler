@@ -25,7 +25,7 @@ def load_ipython_extension(ipython):
     from IPython.core.error import UsageError
     import os
 
-    if os.environ.get("__FIL_PYTHON") != "api":
+    if os.environ.get("__FIL_STATUS") != "api":
         raise UsageError(
             "In order to use Fil, you need to run your notebook with the Fil kernel.\n\n"
             "You can change the kernel via the 'Change Kernel' option at the bottom of "
@@ -36,15 +36,15 @@ def load_ipython_extension(ipython):
     ipython.register_magics(FilMagics)
 
 
-# After forks, make sure Fil is no longer enabled, since we don't yet support child processes:
-if getenv("__FIL_PYTHON"):
+# If we're running with Fil preloaded, after forks make sure Fil is no longer
+# enabled, since we don't yet support child processes. This is also done in C
+# code; doing it only in Python or only C doesn't seem to work.
+if getenv("__FIL_STATUS") in ("api", "program"):
 
     def unset():
         import os
 
-        os.unsetenv("__FIL_PYTHON")
-        if "__FIL_PYTHON" in os.environ:
-            os.environ.pop("__FIL_PYTHON")
+        os.environ["__FIL_STATUS"] = "subprocess"
 
     register_at_fork(after_in_child=unset)
     del unset

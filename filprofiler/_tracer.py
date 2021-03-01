@@ -18,11 +18,14 @@ from ._report import render_report
 
 def check_if_fil_preloaded():
     """Raise exception if Fil library is not preloaded."""
-    if os.getenv("__FIL_PYTHON") is None:
+    if os.getenv("__FIL_STATUS") in ("launcher", None):
         raise RuntimeError(
             "Fil APIs can't be used from Python started without Fil "
-            ", i.e. fil-profile on command-line, Fil kernel in Jupyter. "
-            "Additionally, Fil does not yet support tracing in subprocesses, "
+            ", i.e. fil-profile on command-line, Fil kernel in Jupyter."
+        )
+    if os.getenv("__FIL_STATUS") == "subprocess":
+        raise RuntimeError(
+            "Fil does not yet support tracing in subprocesses, "
             "so starting the parent process with Fil is not sufficient for "
             "Fil APIs to work in child processes."
         )
@@ -37,7 +40,7 @@ try:
     else:
         # macOS.
         preload = PyDLL(library_path("_filpreload"))
-        preload.fil_initialize_from_python()
+    preload.fil_initialize_from_python()
 except Exception as e:
     raise SystemExit(
         f"""\
