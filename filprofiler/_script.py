@@ -102,7 +102,6 @@ LD_LINUX = "/lib64/ld-linux-x86-64.so.2"
 
 def stage_1_benchmark(args: List[str]):
     """Run the script in benchmarking mode."""
-    environ["__FIL_STATUS"] = "launcher"
     destination = environ["FIL_BENCHMARK"]
     # Set fixed hash, in order to get repeatable results:
     environ["PYTHONHASHSEED"] = "12345"
@@ -140,6 +139,8 @@ def stage_1():
         PARSER.print_help()
         sys.exit(0)
 
+    # Initial status:
+    environ["__FIL_STATUS"] = "launcher"
     # Tracebacks when Rust crashes:
     environ["RUST_BACKTRACE"] = "1"
     # Route all allocations from Python through malloc() directly:
