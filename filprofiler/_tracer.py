@@ -15,6 +15,26 @@ import traceback
 from ._utils import timestamp_now, library_path
 from ._report import render_report
 
+
+def check_if_fil_preloaded():
+    """Raise exception if Fil library is not preloaded."""
+    from . import _original_pid
+
+    if os.getenv("__FIL_STATUS") in ("launcher", None):
+        raise RuntimeError(
+            "Fil APIs can't be used from Python started without Fil "
+            ", i.e. fil-profile on command-line, Fil kernel in Jupyter."
+        )
+    if os.getenv("__FIL_STATUS") == "subprocess" or os.getpid() != _original_pid:
+        raise RuntimeError(
+            "Fil does not yet support tracing in subprocesses, "
+            "so starting the parent process with Fil is not sufficient for "
+            "Fil APIs to work in child processes."
+        )
+
+
+check_if_fil_preloaded()
+
 try:
     if sys.platform == "linux":
         # Linux only, and somehow loading library breaks stuff.

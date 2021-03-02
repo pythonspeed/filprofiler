@@ -31,6 +31,7 @@ from filprofiler._testing import get_allocations, big, as_mb
 from filprofiler._ipython import run_with_profile
 from filprofiler.api import profile
 from pymalloc import pymalloc
+import fil_api
 
 
 def test_no_profiling():
@@ -53,7 +54,7 @@ def test_temporary_profiling(tmpdir):
     assert result == 1234
 
     # Allocations were tracked:
-    path = ((__file__, "f", 48), (numpy.core.numeric.__file__, "ones", ANY))
+    path = ((__file__, "f", 49), (numpy.core.numeric.__file__, "ones", ANY))
     allocations = get_allocations(tmpdir)
     assert match(allocations, {path: big}, as_mb) == pytest.approx(32, 0.1)
 
@@ -175,7 +176,11 @@ f()
 
 
 @pytest.mark.parametrize(
-    "profile_func", [lambda f, tempdir: run_with_profile(f), profile,]
+    "profile_func",
+    [
+        lambda f, tempdir: run_with_profile(f),
+        profile,
+    ],
 )
 def test_profiling_disables_threadpools(tmpdir, profile_func):
     """
@@ -238,10 +243,6 @@ def test_subprocess(tmpdir):
     assert output == b"hello"
 
 
-def return123():
-    return 123
-
-
 @pytest.mark.parametrize("mode", ["spawn", "forkserver", "fork"])
 def test_multiprocessing(tmpdir, mode):
     """
@@ -249,13 +250,27 @@ def test_multiprocessing(tmpdir, mode):
     doesn't blow up.
     """
     # Non-tracing:
-    with multiprocessing.get_context(mode).Pool() as pool:
+    with multiprocessing.get_context(mode).Pool(processes=1) as pool:
         assert pool.apply((3).__add__, (4,)) == 7
 
     # Tracing:
     start_tracing(tmpdir)
     try:
-        with multiprocessing.get_context(mode).Pool() as pool:
+        with multiprocessing.get_context(mode).Pool(processes=1) as pool:
             assert pool.apply((3).__add__, (4,)) == 7
+    finally:
+        stop_tracing(tmpdir)
+
+
+@pytest.mark.parametrize("mode", ["spawn", "forkserver", "fork"])
+def test_multiprocessing_good_error_message_fil_api(tmpdir, mode):
+    """
+    Using Fil API from a subprocess gives a reasonable error message.
+    """
+    start_tracing(tmpdir)
+    try:
+        with multiprocessing.get_context(mode).Pool(processes=1) as pool:
+            with pytest.raises(RuntimeError) as e:
+                pool.apply(fil_api.run_with_fil)
     finally:
         stop_tracing(tmpdir)

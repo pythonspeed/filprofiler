@@ -325,6 +325,11 @@ __attribute__((visibility("default"))) pid_t SYMBOL_PREFIX(fork)(void) {
   pid_t result = underlying_real_fork();
   if (result == 0) {
     // We're the child.
+    // Change status. This is actually done in Python code too
+    // (filprofiler/__init__.py), so os.environ stays in sync. Doing it in only
+    // C or only Python doesn't seem to work, need both for some reason.
+    setenv("__FIL_STATUS", "subprocess", 1);
+    // Clear any memory if we're in icky fork()-without-exec() mode.
     fil_stop_tracking();
   }
   return result;
