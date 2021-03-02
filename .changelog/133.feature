@@ -1,1 +1,0 @@
-Improve error messages when using API in subprocesses, so it's clear it's not (yet) possible.

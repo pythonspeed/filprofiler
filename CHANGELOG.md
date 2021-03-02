@@ -1,3 +1,11 @@
+# Fil 0.17.0 (2021-03-02)
+
+
+### Features
+
+- Improve error messages when using API in subprocesses, so it's clear it's not (yet) possible. ([#133](https://github.com/pythonspeed/filprofiler/issues/133))
+
+
 # Fil 0.16.0 (2021-02-24)
 
 
