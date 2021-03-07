@@ -153,11 +153,27 @@ impl Callstack {
                 .map(|id| {
                     let (function, filename) = functions.get_function_and_filename(id.function);
                     if to_be_post_processed {
+                        // Get Python code.
+                        let code = crate::python::get_source_line(filename, id.line_number)
+                            .unwrap_or_else(|_| "".to_string());
+                        // Leading whitespace is dropped by SVG, so replace with non-breaking space.
+                        let code = code.replace(" ", "\u{00a0}");
+                        // Semicolons are used as separator in the flamegraph
+                        // input format, so need to replace them with some other
+                        // character. We use "full-width semicolon", and then
+                        // replace it back in post-processing.
+                        let code = code.replace(";", "\u{ff1b}");
+                        let code_suffix = if code.len() > 0 {
+                            ";".to_string() + &code.trim_end()
+                        } else {
+                            "".to_string()
+                        };
                         format!(
-                            "{filename}:{line} ({function});TB@@{filename}:{line}@@TB",
+                            "{filename}:{line} ({function}){code_suffix}",
                             filename = filename,
                             line = id.line_number,
                             function = function,
+                            code_suffix = code_suffix,
                         )
                     } else {
                         format!(
@@ -671,6 +687,8 @@ fn write_flamegraph(
                 let mut data = String::new();
                 file2.read_to_string(&mut data)?;
                 let data = data.replace("FIL-SUBTITLE-HERE", r#"Made with the Fil memory profiler. <a href="https://pythonspeed.com/fil/" style="text-decoration: underline;" target="_parent">Try it on your code!</a>"#);
+                // Restore normal semi-colons.
+                let data = data.replace("\u{ff1b}", ";");
                 file.seek(std::io::SeekFrom::Start(0))?;
                 file.write_all(&data.as_bytes())?;
             }
