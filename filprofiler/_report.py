@@ -51,10 +51,7 @@ def update_svg(svg_path: str):
     2. Add source code lines.
     """
     with open(svg_path) as f:
-        data = f.read().replace(
-            "SUBTITLE-HERE",
-            """Made with the Fil memory profiler. <a href="https://pythonspeed.com/products/filmemoryprofiler/" style="text-decoration: underline;" target="_parent">Try it on your code!</a>""",
-        )
+        data = f.read()
         data = replace_code_references(data)
     with open(svg_path, "w") as f:
         f.write(data)

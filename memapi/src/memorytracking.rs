@@ -4,11 +4,11 @@ use ahash::RandomState as ARandomState;
 use im::Vector as ImVector;
 use inferno::flamegraph;
 use itertools::Itertools;
-use std::collections::HashMap;
-use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
+use std::{collections::HashMap, io::Read};
+use std::{fs, io::Seek};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct FunctionId(u32);
@@ -655,16 +655,27 @@ fn write_flamegraph(
     // easier:
     options.pretty_xml = true;
     if to_be_post_processed {
-        options.subtitle = Some("SUBTITLE-HERE".to_string());
+        // Can't put structured text into subtitle, so have to do a hack.
+        options.subtitle = Some("FIL-SUBTITLE-HERE".to_string());
     }
-    if let Err(e) = flamegraph::from_files(&mut options, &[PathBuf::from(lines_file_path)], &file) {
-        Err(std::io::Error::new(
+    match flamegraph::from_files(&mut options, &[PathBuf::from(lines_file_path)], &file) {
+        Err(e) => Err(std::io::Error::new(
             std::io::ErrorKind::Other,
             format!("{}", e),
-        ))
-    } else {
-        file.flush()?;
-        Ok(())
+        )),
+        Ok(_) => {
+            file.flush()?;
+            if to_be_post_processed {
+                // Replace with real subtitle.
+                let mut file2 = std::fs::File::open(path)?;
+                let mut data = String::new();
+                file2.read_to_string(&mut data)?;
+                let data = data.replace("FIL-SUBTITLE-HERE", r#"Made with the Fil memory profiler. <a href="https://pythonspeed.com/fil/" style="text-decoration: underline;" target="_parent">Try it on your code!</a>"#);
+                file.seek(std::io::SeekFrom::Start(0))?;
+                file.write_all(&data.as_bytes())?;
+            }
+            Ok(())
+        }
     }
 }
 
