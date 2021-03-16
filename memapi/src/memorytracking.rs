@@ -156,13 +156,25 @@ impl Callstack {
                         // Get Python code.
                         let code = crate::python::get_source_line(filename, id.line_number)
                             .unwrap_or_else(|_| "".to_string());
-                        // Leading whitespace is dropped by SVG, so replace with non-breaking space.
-                        let code = code.replace(" ", "\u{00a0}");
+                        // Leading whitespace is dropped by SVG, so we'd like to
+                        // replace it with non-breaking space. However, inferno
+                        // trims whitespace
+                        // (https://github.com/jonhoo/inferno/blob/de3f7d94d4718bfee57655c1fddd4d2714bc78d0/src/flamegraph/merge.rs#L126)
+                        // and that causes incorrect "unsorted lines" errors
+                        // which I can't be bothered to fix right now, so for
+                        // now do hack where we shove in some other character
+                        // that can be fixed in post-processing.
+                        let code = code.replace(" ", "\u{12e4}");
                         // Semicolons are used as separator in the flamegraph
                         // input format, so need to replace them with some other
                         // character. We use "full-width semicolon", and then
                         // replace it back in post-processing.
-                        let code = code.replace(";", "\u{ff1b}");
+                        let mut code = code.replace(";", "\u{ff1b}");
+                        // Make sure we don't have empty lines; we'll get rid of
+                        // this in post-processing.
+                        if &code.trim_end() == &"" {
+                            code = "\u{2800}".to_string();
+                        }
                         let code_suffix = if code.len() > 0 {
                             ";".to_string() + &code.trim_end()
                         } else {
@@ -689,7 +701,12 @@ fn write_flamegraph(
                 let data = data.replace("FIL-SUBTITLE-HERE", r#"Made with the Fil memory profiler. <a href="https://pythonspeed.com/fil/" style="text-decoration: underline;" target="_parent">Try it on your code!</a>"#);
                 // Restore normal semi-colons.
                 let data = data.replace("\u{ff1b}", ";");
+                // Restore (non-breaking) spaces.
+                let data = data.replace("\u{12e4}", "\u{00a0}");
+                // Get rid of empty-line markers:
+                let data = data.replace("\u{2800}", "");
                 file.seek(std::io::SeekFrom::Start(0))?;
+                file.set_len(0)?;
                 file.write_all(&data.as_bytes())?;
             }
             Ok(())
