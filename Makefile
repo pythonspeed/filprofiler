@@ -25,7 +25,8 @@ test:
 
 .PHONY: test-rust
 test-rust:
-	env RUST_BACKTRACE=1 cargo test
+	cd memapi && env RUST_BACKTRACE=1 cargo test --no-default-features
+	cd filpreload && env RUST_BACKTRACE=1 cargo test --no-default-features
 
 .PHONY: test-python
 test-python: build

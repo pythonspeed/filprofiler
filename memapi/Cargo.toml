@@ -25,7 +25,6 @@ features = ["memory", "process"]
 
 [dependencies.pyo3]
 version = "0.13.2"
-features = ["extension-module"]
 
 [target.'cfg(target_os = "linux")'.dependencies]
 cgroups-rs = "0.2.3"
