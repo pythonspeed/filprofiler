@@ -6,14 +6,10 @@ post-fact in Python.
 """
 
 from datetime import datetime
-import linecache
 import os
 import shlex
-import re
 import sys
-from xml.sax.saxutils import escape
 from urllib.parse import quote_plus as url_quote
-import html
 from . import __version__
 
 DEBUGGING_INFO = url_quote(

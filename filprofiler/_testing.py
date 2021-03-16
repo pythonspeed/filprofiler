@@ -30,8 +30,6 @@ def get_allocations(
                 result[calls] = size_kb
                 continue
             for call in calls.split(";"):
-                if call.startswith("TB@@"):
-                    continue
                 part1, func_name = call.rsplit(" ", 1)
                 assert func_name[0] == "("
                 assert func_name[-1] == ")"
