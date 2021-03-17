@@ -293,7 +293,7 @@ fn filter_to_useful_callstacks(
     allocations: &ImVector<usize>,
 ) -> HashMap<CallstackId, usize, ARandomState> {
     let total_allocated: usize = allocations.iter().sum();
-    let mut stored = 0.0;
+    let mut stored: usize = 0;
     allocations
         .iter()
         // Convert to (callstack id, size) tuples:
@@ -304,16 +304,21 @@ fn filter_to_useful_callstacks(
         .sorted_by(|a, b| Ord::cmp(b.1, a.1))
         // Keep track of how much total allocations we've accumulated so far:
         .map(|(i, size)| {
-            stored += *size as f64;
+            stored += *size;
             (stored.clone(), i as u32, size)
         })
+        // We don't do more than 10,000 allocations. More than that uses vast
+        // amounts of memory to generate the report, and overburdens the browser
+        // displaying the SVG.
+        .take(10_000)
         // Stop once we've hit 99% of allocations, but include at least 100 just
         // so there's some context:
         .scan((false, 0), |(past_threshold, taken), (stored, i, size)| {
             if *past_threshold && (*taken > 99) {
                 return None;
             }
-            *past_threshold = (stored / total_allocated as f64) >= 0.99;
+            // Stop if we've hit 99% of allocated data.
+            *past_threshold = stored > (total_allocated * 99) / 100;
             *taken += 1;
             Some((i, *size))
         })
@@ -751,6 +756,7 @@ mod tests {
         CallstackInterner, FunctionId, HIGH_32BIT, MIB,
     };
     use im;
+    use itertools::Itertools;
     use proptest::prelude::*;
     use std::collections::HashMap;
 
@@ -867,17 +873,24 @@ mod tests {
         #[test]
         fn filtering_of_callstacks(
             // Allocated bytes. Will use index as the memory address.
-            allocated_sizes in prop::collection::vec(1..1000 as usize, 5..5000),
+            allocated_sizes in prop::collection::vec(0..1000 as usize, 5..15000),
         ) {
             let total_size : usize = allocated_sizes.iter().sum();
-            let filtered = filter_to_useful_callstacks(&im::Vector::from(allocated_sizes));
-            let filtered_size = filtered.values().into_iter().sum::<usize>() as f64;
-            prop_assert!(filtered_size >= 0.99 * (total_size as f64));
-            if filtered.len() > 100 {
-                // Removing any item should take us below 99%
-                for value in filtered.values() {
-                    prop_assert!(filtered_size - (*value as f64) < 0.99 * (total_size as f64));
+            let total_size_99 = (99 * total_size) / 100;
+            let filtered = filter_to_useful_callstacks(&im::Vector::from(&allocated_sizes));
+            let filtered_size :usize = filtered.values().into_iter().sum();
+            if filtered_size >= total_size_99  {
+                if filtered.len() > 100 {
+                    // Removing any item should take us to or below 99%
+                    for value in filtered.values() {
+                        prop_assert!(filtered_size - *value <= total_size_99)
+                    }
                 }
+            } else {
+                // Cut out before 99%, so must be too many items
+                prop_assert_eq!(filtered.len(), 10000);
+                prop_assert_eq!(filtered_size, allocated_sizes.clone().iter().sorted_by(
+                    |a, b| Ord::cmp(b, a)).take(10000).sum::<usize>());
             }
         }
     }
