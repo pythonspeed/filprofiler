@@ -2,15 +2,15 @@ use std::fs::read_to_string;
 
 /// Logic for handling out-of-memory situations.
 
-// Anything less than this is too dangerous, and we should dump and
-// exit.
-const MINIMAL_FREE: usize = 100 * 1024 * 1024;
-
 pub trait MemoryInfo {
+    /// Return how much memory the computer has, as bytes.
+    fn total_memory(&self) -> usize;
     /// Return how much memory we have, as bytes.
     fn get_available_memory(&self) -> usize;
     /// Return how much process memory is resident, as bytes.
     fn get_resident_process_memory(&self) -> usize;
+    /// Print some debug info.
+    fn print_info(&self);
 }
 
 /// Estimate whether we're about to run out of memory.
@@ -34,6 +34,8 @@ pub struct OutOfMemoryEstimator<M: MemoryInfo> {
     // How many bytes it takes until we check again: whenever it's reset, it
     // starts as 1% of available memory.
     check_threshold_bytes: usize,
+    // Minimum number of bytes we want to be available at any time.
+    minimal_required_available_bytes: usize,
     // Pluggable way to get memory usage of the system and process.
     pub memory_info: M,
 }
@@ -42,6 +44,12 @@ impl<M: MemoryInfo> OutOfMemoryEstimator<M> {
     pub fn new(memory_info: M) -> Self {
         Self {
             check_threshold_bytes: 0,
+            // Either 100MB or 2% of available memory, whatever is bigger.
+            minimal_required_available_bytes: std::cmp::max(
+                100 * 1024 * 1024,
+                memory_info.total_memory() / 50,
+            ),
+
             memory_info,
         }
     }
@@ -51,10 +59,10 @@ impl<M: MemoryInfo> OutOfMemoryEstimator<M> {
         let available_bytes = self.memory_info.get_available_memory();
 
         // Check if we're in danger zone, with very low available memory:
-        if available_bytes < MINIMAL_FREE {
+        if available_bytes < self.minimal_required_available_bytes {
             eprintln!(
                 "=fil-profile= WARNING: Available bytes {} less than minimal required {}",
-                available_bytes, MINIMAL_FREE
+                available_bytes, self.minimal_required_available_bytes
             );
             return true;
         }
@@ -111,9 +119,11 @@ impl<M: MemoryInfo> OutOfMemoryEstimator<M> {
             // We've allocated enough that it's time to check for potential OOM
             // condition.
             return self.are_we_oom(total_allocated_bytes);
+        } else {
+            self.check_threshold_bytes = current_threshold - allocated_bytes;
+            debug_assert!(self.check_threshold_bytes < current_threshold);
+            return false;
         }
-        self.check_threshold_bytes = current_threshold - allocated_bytes;
-        return false;
     }
 }
 
@@ -197,9 +207,28 @@ impl RealMemoryInfo {
     pub fn get_cgroup_available_memory(&self) -> usize {
         std::usize::MAX
     }
+}
+
+impl MemoryInfo for RealMemoryInfo {
+    fn total_memory(&self) -> usize {
+        psutil::memory::virtual_memory().unwrap().total() as usize
+    }
+
+    /// Return how much free memory we have, as bytes.
+    fn get_available_memory(&self) -> usize {
+        // This will include memory that can become available by syncing
+        // filesystem buffers to disk, which is probably what we want.
+        let available = psutil::memory::virtual_memory().unwrap().available() as usize;
+        let cgroup_available = self.get_cgroup_available_memory();
+        std::cmp::min(available, cgroup_available)
+    }
+
+    fn get_resident_process_memory(&self) -> usize {
+        self.process.memory_info().unwrap().rss() as usize
+    }
 
     /// Print debugging info to stderr.
-    pub fn print_info(&self) {
+    fn print_info(&self) {
         eprintln!(
             "=fil-profile= Host memory info: {:?} {:?}",
             psutil::memory::virtual_memory(),
@@ -222,24 +251,10 @@ impl RealMemoryInfo {
     }
 }
 
-impl MemoryInfo for RealMemoryInfo {
-    /// Return how much free memory we have, as bytes.
-    fn get_available_memory(&self) -> usize {
-        // This will include memory that can become available by syncing
-        // filesystem buffers to disk, which is probably what we want.
-        let available = psutil::memory::virtual_memory().unwrap().available() as usize;
-        let cgroup_available = self.get_cgroup_available_memory();
-        std::cmp::min(available, cgroup_available)
-    }
-
-    fn get_resident_process_memory(&self) -> usize {
-        self.process.memory_info().unwrap().rss() as usize
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::{MemoryInfo, OutOfMemoryEstimator};
+    use proptest::prelude::*;
     use std::cell::Ref;
     use std::cell::RefCell;
 
@@ -272,11 +287,15 @@ mod tests {
         }
 
         fn get_allocated(&self) -> usize {
-            1_000_000_000 - *self.available_memory.borrow()
+            self.total_memory() - *self.available_memory.borrow()
         }
     }
 
     impl MemoryInfo for FakeMemory {
+        fn total_memory(&self) -> usize {
+            1_000_000_000
+        }
+
         fn get_available_memory(&self) -> usize {
             self.checks
                 .borrow_mut()
@@ -287,11 +306,31 @@ mod tests {
         fn get_resident_process_memory(&self) -> usize {
             self.get_allocated() - *self.swap.borrow()
         }
+
+        fn print_info(&self) {}
     }
 
     fn setup_estimator() -> OutOfMemoryEstimator<FakeMemory> {
         let fake_memory = FakeMemory::new();
         OutOfMemoryEstimator::new(fake_memory)
+    }
+
+    proptest! {
+        // Random allocations don't break invariants
+        #[test]
+        fn not_oom(allocated_sizes in prop::collection::vec(1..1000 as usize, 10..2000)) {
+            let mut estimator = setup_estimator();
+            let mut allocated = 0;
+            for size in allocated_sizes {
+                estimator.memory_info.allocate(size);
+                allocated += size;
+                let too_big = estimator.too_big_allocation(size, allocated);
+                prop_assert_eq!(too_big, estimator.memory_info.get_available_memory() <= estimator.minimal_required_available_bytes);
+                if too_big {
+                    break;
+                }
+            }
+        }
     }
 
     // We're out of memory if we're below the threshold.
