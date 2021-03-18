@@ -1,6 +1,6 @@
 use parking_lot::Mutex;
 use pymemprofile_api::memorytracking::{AllocationTracker, CallSiteId, Callstack, FunctionId};
-use pymemprofile_api::oom::{OutOfMemoryEstimator, RealMemoryInfo};
+use pymemprofile_api::oom::{MemoryInfo, OutOfMemoryEstimator, RealMemoryInfo};
 use std::cell::RefCell;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_void};
