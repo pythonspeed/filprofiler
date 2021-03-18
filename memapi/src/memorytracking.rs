@@ -709,7 +709,7 @@ fn write_flamegraph(
     options.title = title;
     options.count_name = "bytes".to_string();
     options.font_size = 16;
-    options.font_type = "mono".to_string();
+    options.font_type = "monospace".to_string();
     options.frame_height = 22;
     options.reverse_stack_order = reversed;
     options.color_diffusion = true;
