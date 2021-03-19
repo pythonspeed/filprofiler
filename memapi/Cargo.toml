@@ -23,6 +23,9 @@ version = "3.2.0"
 default-features = false
 features = ["memory", "process"]
 
+[dependencies.pyo3]
+version = "0.13.2"
+
 [target.'cfg(target_os = "linux")'.dependencies]
 cgroups-rs = "0.2.3"
 
@@ -33,7 +36,5 @@ proptest = "1.0.0"
 name = "pymemprofile_api"
 
 [features]
-default = []
-
-# Tweaks for the production version of Fil.
-production = []
+extension-module = ["pyo3/extension-module"]
+default = ["extension-module"]

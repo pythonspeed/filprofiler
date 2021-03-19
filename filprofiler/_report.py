@@ -6,17 +6,11 @@ post-fact in Python.
 """
 
 from datetime import datetime
-import linecache
 import os
 import shlex
-import re
 import sys
-from xml.sax.saxutils import escape
 from urllib.parse import quote_plus as url_quote
-import html
 from . import __version__
-
-LINE_REFERENCE = re.compile(r"\<title\>TB@@([^:]+):(\d+)@@TB")
 
 DEBUGGING_INFO = url_quote(
     f"""\
@@ -27,47 +21,8 @@ Python: {sys.version}
 )
 
 
-def replace_code_references(string: str) -> str:
-    """
-    Replace occurrences of TB@@file.py:123@@TB with the line of code at that
-    location, XML quoted and slightly indented.
-    """
-
-    def replace_with_code(match):
-        filename, line = match.group(1, 2)
-        filename = html.unescape(filename)
-        line = int(line)
-        return "<title>&#160;&#160;&#160;&#160;" + escape(
-            linecache.getline(filename, line).strip()
-        )
-
-    return re.sub(LINE_REFERENCE, replace_with_code, string)
-
-
-def update_svg(svg_path: str):
-    """Fix up the SVGs.
-
-    1. Add an appropriate subtitle.
-    2. Add source code lines.
-    """
-    with open(svg_path) as f:
-        data = f.read().replace(
-            "SUBTITLE-HERE",
-            """Made with the Fil memory profiler. <a href="https://pythonspeed.com/products/filmemoryprofiler/" style="text-decoration: underline;" target="_parent">Try it on your code!</a>""",
-        )
-        data = replace_code_references(data)
-    with open(svg_path, "w") as f:
-        f.write(data)
-
-
 def render_report(output_path: str, now: datetime) -> str:
     """Write out the HTML index and improve the SVGs."""
-    for svg_path in [
-        os.path.join(output_path, "peak-memory.svg"),
-        os.path.join(output_path, "peak-memory-reversed.svg"),
-    ]:
-        update_svg(svg_path)
-
     index_path = os.path.join(output_path, "index.html")
     with open(index_path, "w") as index:
         index.write(
