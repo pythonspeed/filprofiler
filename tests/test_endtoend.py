@@ -9,6 +9,8 @@ import sys
 from typing import Union
 import re
 import shutil
+from glob import glob
+from xml.etree import ElementTree
 
 import numpy.core.numeric
 from pampy import match, _ as ANY
@@ -529,3 +531,28 @@ def test_api_import(tmpdir):
     # Calling APIs won't work:
     with pytest.raises(RuntimeError):
         api.profile(lambda: None, tmpdir)
+
+
+def test_source_rendering():
+    """
+    Minimal tests that SVGs aren't completely broken in some edge cases.
+    """
+    script = TEST_SCRIPTS / "source-code.py"
+    output_dir = profile(script)
+
+    svg_path = glob(str(output_dir / "*" / "peak-memory.svg"))[0]
+
+    with open(svg_path) as f:
+        svg = f.read()
+
+    # Semicolons are still there:
+    assert (
+        ">a = np.ones((1024, 1024)); b = np.ones((1024, 1024))".replace(" ", "\u00a0")
+        in svg
+    )
+
+    # Prefix spaces are turned into non-break spaces:
+    assert ">    c = np.ones((1024, 1024))".replace(" ", "\u00a0") in svg
+
+    # It's valid XML:
+    ElementTree.fromstring(svg)
