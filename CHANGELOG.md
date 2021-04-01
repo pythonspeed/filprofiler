@@ -1,3 +1,21 @@
+# Fil 2021.04.01 (2021-04-01)
+
+### Bugfixes
+- Fil no longer blows up if checking cgroup memory is not possible, e.g. on CentOS 7. ([#147](https://github.com/pythonspeed/filprofiler/issues/147))
+
+
+# Fil 2021.03.02 (2021-03-19)
+
+### Features
+
+- Try to ensure monospace font is used for reports. ([#143](https://github.com/pythonspeed/filprofiler/issues/143))
+
+
+### Bugfixes
+
+- Number of allocations in the profiling results are now limited to 10,000. If there are more than this, they are all quite tiny, so probably less informative, and including massive number of tiny allocations makes report generation (and report display) extremely resource intensive. ([#140](https://github.com/pythonspeed/filprofiler/issues/140))
+- The out-of-memory detector should work more reliably on Linux. ([#144](https://github.com/pythonspeed/filprofiler/issues/144))
+
 # Fil 0.17.0 (2021-03-02)
 
 
