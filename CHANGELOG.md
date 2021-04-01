@@ -1,10 +1,10 @@
-# Fil 2021.04.01 (2021-04-01)
+# Fil 2021.04.0 (2021-04-01)
 
 ### Bugfixes
 - Fil no longer blows up if checking cgroup memory is not possible, e.g. on CentOS 7. ([#147](https://github.com/pythonspeed/filprofiler/issues/147))
 
 
-# Fil 2021.03.02 (2021-03-19)
+# Fil 2021.03.0 (2021-03-19)
 
 ### Features
 
