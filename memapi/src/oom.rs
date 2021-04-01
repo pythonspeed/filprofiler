@@ -166,14 +166,29 @@ impl RealMemoryInfo {
             let cgroup_paths = get_cgroup_paths(&contents);
             for path in cgroup_paths {
                 let h = cgroups_rs::hierarchies::auto();
-                return Some(cgroups_rs::Cgroup::load(h, path));
+                let cgroup = cgroups_rs::Cgroup::load(h, path);
+                // Make sure memory_stat() works. Sometimes it doesn't
+                // (https://github.com/pythonspeed/filprofiler/issues/147). If
+                // it doesn't, this'll panic.
+                let mem: &cgroups_rs::memory::MemController = cgroup.controller_of().unwrap();
+                let _mem = mem.memory_stat();
+                return Some(cgroup);
             }
             None
         };
-        return Self {
-            cgroup: get_cgroup(),
-            process: psutil::process::Process::current().unwrap(),
+        let cgroup_result = std::panic::catch_unwind(get_cgroup);
+        let cgroup = match cgroup_result {
+            Ok(c) => c,
+            Err(err) => {
+                eprintln!(
+                    "=fil-profile= Error retrieving cgroup memory, per-container/per-cgroup memory limits won't be respected (error: {:?}). This is expected behavior on old versions of Linux, e.g. RHEL 7. If you're on a newer version, please file a bug at https://github.com/pythonspeed/filprofiler/issues/new/choose.", err);
+                None
+            }
         };
+        Self {
+            cgroup: cgroup,
+            process: psutil::process::Process::current().unwrap(),
+        }
     }
 
     #[cfg(target_os = "macos")]
