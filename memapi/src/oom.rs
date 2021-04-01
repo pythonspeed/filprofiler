@@ -181,7 +181,7 @@ impl RealMemoryInfo {
             Ok(c) => c,
             Err(err) => {
                 eprintln!(
-                    "=fil-profile= Error retrieving cgroup memory, per-container/per-cgroup memory limits won't be respected (error: {:?}). Please file a bug at https://github.com/pythonspeed/filprofiler/issues/new/choose.", err);
+                    "=fil-profile= Error retrieving cgroup memory, per-container/per-cgroup memory limits won't be respected (error: {:?}). This is expected behavior on old versions of Linux, e.g. RHEL 7. If you're on a newer version, please file a bug at https://github.com/pythonspeed/filprofiler/issues/new/choose.", err);
                 None
             }
         };
