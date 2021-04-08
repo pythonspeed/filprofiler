@@ -551,8 +551,29 @@ def test_source_rendering():
         in svg
     )
 
-    # Prefix spaces are turned into non-break spaces:
+    # Spaces are turned into non-break spaces:
     assert ">    c = np.ones((1024, 1024))".replace(" ", "\u00a0") in svg
 
     # It's valid XML:
     ElementTree.fromstring(svg)
+
+
+def test_tabs():
+    """
+    Source code with tabs doesn't break SVG generation.
+    """
+    script = TEST_SCRIPTS / "tabs.py"
+    output_dir = profile(script)
+    get_allocations(output_dir)  # <- smoke test
+
+    for svg in ["peak-memory.svg", "peak-memory-reversed.svg"]:
+        svg_path = glob(str(output_dir / "*" / svg))[0]
+
+        with open(svg_path) as f:
+            svg = f.read()
+
+        # Tabs are still there:
+        assert ">\tarr1, arr2 = make_".replace(" ", "\u00a0") in svg
+
+        # It's valid XML:
+        ElementTree.fromstring(svg)
