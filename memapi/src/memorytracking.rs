@@ -169,23 +169,16 @@ impl Callstack {
                         // input format, so need to replace them with some other
                         // character. We use "full-width semicolon", and then
                         // replace it back in post-processing.
-                        let mut code = code.replace(";", "\u{ff1b}");
-                        // Make sure we don't have empty lines; we'll get rid of
-                        // this in post-processing.
-                        if &code.trim_end() == &"" {
-                            code = "\u{2800}".to_string();
-                        }
-                        let code_suffix = if code.len() > 0 {
-                            ";".to_string() + &code.trim_end()
-                        } else {
-                            "".to_string()
-                        };
+                        let code = code.replace(";", "\u{ff1b}");
+                        // The \u{2800} is to ensure we don't have empty lines,
+                        // and that whitespace doesn't get trimmed from start;
+                        // we'll get rid of this in post-processing.
                         format!(
-                            "{filename}:{line} ({function}){code_suffix}",
+                            "{filename}:{line} ({function});\u{2800}{code}",
                             filename = filename,
                             line = id.line_number,
                             function = function,
-                            code_suffix = code_suffix,
+                            code = &code.trim_end(),
                         )
                     } else {
                         format!(

@@ -1,0 +1,1 @@
+Fixed bug where reverse SVG sometimes was generated empty, e.g. if source code used tabs.
