@@ -1,3 +1,11 @@
+# Fil 2021.04.1 (2021-04-08)
+
+
+### Bugfixes
+
+- Fixed bug where reverse SVG sometimes was generated empty, e.g. if source code used tabs. ([#150](https://github.com/pythonspeed/filprofiler/issues/150))
+
+
 # Fil 2021.04.0 (2021-04-01)
 
 ### Bugfixes
