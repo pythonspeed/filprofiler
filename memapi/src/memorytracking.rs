@@ -340,6 +340,10 @@ pub struct AllocationTracker {
     peak_allocated_bytes: usize,
     // Default directory to write out data lacking other info:
     default_path: String,
+
+    // Allocations that somehow disappeared. Not relevant for sampling profiler.
+    #[cfg(not(feature = "production"))]
+    missing_allocated_bytes: usize,
 }
 
 impl<'a> AllocationTracker {
@@ -353,6 +357,7 @@ impl<'a> AllocationTracker {
             peak_memory_usage: ImVector::new(),
             current_allocated_bytes: 0,
             peak_allocated_bytes: 0,
+            missing_allocated_bytes: 0,
             default_path,
         }
     }
@@ -410,11 +415,9 @@ impl<'a> AllocationTracker {
                 // I've seen this happen on macOS only in some threaded code
                 // (malloc_on_thread_exit test). Not sure why, but difference was
                 // only 16 bytes, which shouldn't have real impact on profiling
-                // outcomes.
-                eprintln!(
-                "=fil-profile= WARNING: Somehow an allocation of size {} disappeared. This can happen if e.g. a library frees memory with private OS APIs. If this happens only a few times with small allocations, it doesn't really matter. If you see this happening a lot, or with large allocations, please file a bug.",
-                previous.size()
-            );
+                // outcomes. Apparently also happening on Linux, hope to fix this
+                // soon (https://github.com/pythonspeed/filprofiler/issues/149).
+                self.missing_allocated_bytes += previous.size();
                 // Cleanup the previous allocation, since we never saw its free():
                 self.remove_memory_usage(previous.callstack_id, previous.size());
             }
@@ -515,6 +518,19 @@ impl<'a> AllocationTracker {
         title: &str,
         to_be_post_processed: bool,
     ) {
+        // Print warning if we're missing allocations.
+        #[cfg(not(feature = "production"))]
+        {
+            let allocated_bytes = if peak {
+                self.peak_allocated_bytes
+            } else {
+                self.current_allocated_bytes
+            };
+            if self.missing_allocated_bytes > 0 {
+                eprintln!("=fil-profile= WARNING: {:.2}% ({} bytes) of reported allocations somehow disappeared. If this is a small percentage you can just ignore this warning, since the missing allocations won't impact the profiling results. If the % is high, please file a bug report at https://github.com/pythonspeed/filprofiler/issues/new", self.missing_allocated_bytes as f64 * 100.0 / allocated_bytes as f64, self.missing_allocated_bytes);
+            }
+        }
+
         eprintln!("=fil-profile= Preparing to write to {}", path);
         let directory_path = Path::new(path);
 
