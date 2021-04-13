@@ -144,7 +144,12 @@ impl Callstack {
         callstack_id
     }
 
-    fn as_string(&self, to_be_post_processed: bool, functions: &FunctionLocations) -> String {
+    fn as_string(
+        &self,
+        to_be_post_processed: bool,
+        functions: &FunctionLocations,
+        separator: &'static str,
+    ) -> String {
         if self.calls.is_empty() {
             "[No Python stack]".to_string()
         } else {
@@ -189,7 +194,7 @@ impl Callstack {
                         )
                     }
                 })
-                .join(";")
+                .join(separator)
         }
     }
 }
@@ -362,6 +367,17 @@ impl<'a> AllocationTracker {
         }
     }
 
+    /// Print a traceback for the given CallstackId.
+    pub fn print_traceback(&self, message: &'static str, callstack_id: CallstackId) {
+        let id_to_callstack = self.interner.get_reverse_map();
+        let callstack = id_to_callstack[&callstack_id];
+        eprintln!("=fil-profile= {}", message);
+        eprintln!(
+            "=| {}",
+            callstack.as_string(false, &self.functions, "\n=| ")
+        );
+    }
+
     pub fn get_current_allocated_bytes(&self) -> usize {
         self.current_allocated_bytes
     }
@@ -420,6 +436,12 @@ impl<'a> AllocationTracker {
                 self.missing_allocated_bytes += previous.size();
                 // Cleanup the previous allocation, since we never saw its free():
                 self.remove_memory_usage(previous.callstack_id, previous.size());
+                if *crate::util::DEBUG_MODE {
+                    self.print_traceback(
+                        "The allocation from this traceback disappeared:",
+                        previous.callstack_id,
+                    );
+                }
             }
         }
         self.add_memory_usage(callstack_id, compressed_size as usize);
@@ -501,10 +523,11 @@ impl<'a> AllocationTracker {
         by_call.map(move |(callstack_id, size)| {
             format!(
                 "{} {}",
-                id_to_callstack
-                    .get(&callstack_id)
-                    .unwrap()
-                    .as_string(to_be_post_processed, functions),
+                id_to_callstack.get(&callstack_id).unwrap().as_string(
+                    to_be_post_processed,
+                    functions,
+                    ";"
+                ),
                 size,
             )
         })
@@ -527,7 +550,7 @@ impl<'a> AllocationTracker {
                 self.current_allocated_bytes
             };
             if self.missing_allocated_bytes > 0 {
-                eprintln!("=fil-profile= WARNING: {:.2}% ({} bytes) of reported allocations somehow disappeared. If this is a small percentage you can just ignore this warning, since the missing allocations won't impact the profiling results. If the % is high, please file a bug report at https://github.com/pythonspeed/filprofiler/issues/new", self.missing_allocated_bytes as f64 * 100.0 / allocated_bytes as f64, self.missing_allocated_bytes);
+                eprintln!("=fil-profile= WARNING: {:.2}% ({} bytes) of tracked memory somehow disappeared. If this is a small percentage you can just ignore this warning, since the missing allocations won't impact the profiling results. If the % is high, please run `export FIL_DEBUG=1` to get more output', re-run Fil on your script, and then file a bug report at https://github.com/pythonspeed/filprofiler/issues/new", self.missing_allocated_bytes as f64 * 100.0 / allocated_bytes as f64, self.missing_allocated_bytes);
             }
         }
 

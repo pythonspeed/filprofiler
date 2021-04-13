@@ -17,6 +17,19 @@ lazy_static! {
     };
 }
 
+lazy_static! {
+    pub static ref DEBUG_MODE: bool = match std::env::var("FIL_DEBUG") {
+        Ok(value) => {
+            if value == "1" {
+                true
+            } else {
+                false
+            }
+        }
+        _ => false,
+    };
+}
+
 /// Create a new hashmap with an optional fixed seed.
 pub fn new_hashmap<K, V>() -> HashMap<K, V, ARandomState> {
     match *HASH_SEED {
