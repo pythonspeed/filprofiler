@@ -102,7 +102,7 @@ def create_report(output_path: Union[str, Path]) -> str:
     return render_report(output_path, now)
 
 
-def trace_until_exit(code, globals_, output_path: str):
+def trace_until_exit(code, globals_, output_path: str, open_browser: bool):
     """
     Given code (Python or code object), run it under the tracer until the
     program exits.
@@ -117,14 +117,14 @@ def trace_until_exit(code, globals_, output_path: str):
             return
         index_path = stop_tracing(os.path.join(output_path, timestamp_now()))
         print("=fil-profile= Wrote HTML report to " + index_path, file=sys.stderr)
-        try:
-            webbrowser.open("file://" + os.path.abspath(index_path))
-        except webbrowser.Error:
-            print(
-                "=fil-profile= Failed to open browser. You can find the new run at:",
-                file=sys.stderr,
-            )
-            print("=fil-profile= " + index_path, file=sys.stderr)
+        if open_browser:
+            try:
+                webbrowser.open("file://" + os.path.abspath(index_path))
+            except webbrowser.Error as e:
+                print(
+                    f"=fil-profile= Failed to open report in browser ({e})",
+                    file=sys.stderr,
+                )
 
     # Use atexit rather than try/finally so threads that live beyond main
     # thread also get profiled:

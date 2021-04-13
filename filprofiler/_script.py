@@ -84,6 +84,11 @@ PARSER.add_argument(
     default="fil-result",
     help="Directory where the profiling results written",
 )
+PARSER.add_argument(
+    "--no-browser",
+    action="store_true",
+    help="Don't try to open the profiling report in a browser.",
+)
 subparsers = PARSER.add_subparsers(help="sub-command help")
 parser_run = subparsers.add_parser(
     "run",
@@ -226,7 +231,10 @@ def stage_2():
     # the _filpread.so code.
     from ._tracer import trace_until_exit, create_report
 
-    signal.signal(signal.SIGUSR2, lambda *args: create_report(arguments.output_path))
+    signal.signal(
+        signal.SIGUSR2,
+        lambda *args: create_report(arguments.output_path),
+    )
     print(
         "=fil-profile= Memory usage will be written out at exit, and opened automatically in a browser.\n"
         "=fil-profile= You can also run the following command while the program is still running to write out peak memory usage up to that point: "
@@ -235,7 +243,8 @@ def stage_2():
     )
     if not exists(arguments.output_path):
         makedirs(arguments.output_path)
-    trace_until_exit(code, globals_, arguments.output_path)
+
+    trace_until_exit(code, globals_, arguments.output_path, not arguments.no_browser)
 
 
 if __name__ == "__main__":
