@@ -7,6 +7,7 @@
 #include "frameobject.h"
 #include <dlfcn.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/mman.h>
@@ -55,7 +56,7 @@ static int initialized = 0;
 // Note whether we're currently tracking allocations. Jupyter users might turn
 // this on and then off, for example, whereas full process profiling will have
 // this on from start until finish.
-static int tracking_allocations = 0;
+static _Atomic int tracking_allocations = ATOMIC_VAR_INIT(0);
 
 // ID of Python code object extra data:
 static Py_ssize_t extra_code_index = -1;
@@ -95,7 +96,7 @@ static inline void set_will_i_be_reentrant(int i) { will_i_be_reentrant = i; }
 //    triggered by the Rust tracking code, as that will result in infinite
 //    recursion.
 static inline int should_track_memory() {
-  return (likely(initialized) && tracking_allocations && !am_i_reentrant());
+  return (likely(initialized) && atomic_load_explicit(&tracking_allocations, memory_order_acquire) && !am_i_reentrant());
 }
 
 // Current thread's Python state:
@@ -258,7 +259,7 @@ __attribute__((visibility("default"))) void fil_initialize_from_python() {
 /// Start memory tracing.
 __attribute__((visibility("default"))) void
 fil_start_tracking() {
-  tracking_allocations = 1;
+  atomic_store_explicit(&tracking_allocations, 1, memory_order_release);
 }
 
 /// Clear previous allocations;
@@ -271,7 +272,7 @@ fil_reset(const char *default_path) {
 
 /// End memory tracing.
 __attribute__((visibility("default"))) void fil_stop_tracking() {
-  tracking_allocations = 0;
+  atomic_store_explicit(&tracking_allocations, 0, memory_order_release);
 }
 
 /// Register the C level Python tracer for the current thread.
@@ -318,7 +319,7 @@ static void add_anon_mmap(size_t address, size_t size) {
 // Disable memory tracking after fork() in the child.
 __attribute__((visibility("default"))) pid_t SYMBOL_PREFIX(fork)(void) {
   static int already_printed = 0;
-  if (tracking_allocations && !already_printed) {
+  if (atomic_load_explicit(&tracking_allocations, memory_order_acquire) && !already_printed) {
     fprintf(stderr, "=fil-profile= WARNING: Fil does not (yet) support tracking memory in subprocesses.\n");
     already_printed = 1;
   }
