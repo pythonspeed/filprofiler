@@ -18,18 +18,24 @@ if sys.platform == "darwin":
     config_vars = sysconfig.get_config_vars()
     config_vars["LDSHARED"] = config_vars["LDSHARED"].replace("-bundle", "-dynamiclib")
 else:
-    # macOS lld doesn't support version scripts.
-    extra_link_args.append("-Wl,--version-script=versionscript.txt")
-
-
-if environ.get("CONDA_PREFIX"):
-    extra_compile_args.append("-DFIL_SKIP_ALIGNED_ALLOC=1")
+    extra_link_args.extend(
+        [
+            # Indicate which symbols are public. macOS lld doesn't support version
+            # scripts.
+            "-Wl,--version-script=versionscript.txt",
+            # Make sure aligned_alloc() is public under its real name;
+            # workaround for old glibc headers in Conda.
+            "-Wl,--defsym=aligned_alloc=reimplemented_aligned_alloc",
+        ]
+    )
 
 
 setup(
     name="filprofiler",
     packages=["filprofiler"],
-    entry_points={"console_scripts": ["fil-profile=filprofiler._script:stage_1"],},
+    entry_points={
+        "console_scripts": ["fil-profile=filprofiler._script:stage_1"],
+    },
     ext_modules=[
         Extension(
             name="filprofiler._filpreload",
@@ -39,7 +45,9 @@ setup(
             extra_link_args=extra_link_args,
         )
     ],
-    package_data={"filprofiler": ["licenses.txt"],},
+    package_data={
+        "filprofiler": ["licenses.txt"],
+    },
     data_files=[
         (
             join("share", "jupyter", "kernels", "filprofile"),

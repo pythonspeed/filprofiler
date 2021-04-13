@@ -435,10 +435,12 @@ SYMBOL_PREFIX(munmap)(void *addr, size_t length) {
   return result;
 }
 
-// Old glibc that conda uses doesn't support aligned_alloc()
-#ifndef FIL_SKIP_ALIGNED_ALLOC
+// Old glibc that Conda uses defines aligned_alloc() using inline that doesn't
+// match this signature, which messes up the SYMBOL_PREFIX() stuff on Linux. So,
+// we do reimplemented_aligned_alloc, the name macOS technique uses, and then
+// rely on symbol alias (see --defsym in setup.py) to fix it.
 __attribute__((visibility("default"))) void *
-SYMBOL_PREFIX(aligned_alloc)(size_t alignment, size_t size) {
+reimplemented_aligned_alloc(size_t alignment, size_t size) {
   void *result = REAL_IMPL(aligned_alloc)(alignment, size);
 
   // For now we only track anonymous mmap()s:
@@ -449,7 +451,6 @@ SYMBOL_PREFIX(aligned_alloc)(size_t alignment, size_t size) {
   }
   return result;
 }
-#endif
 
 #ifdef __linux__
 // Make sure we expose jemalloc variant of malloc_usable_size(), in case someone
