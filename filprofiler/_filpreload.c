@@ -436,10 +436,19 @@ SYMBOL_PREFIX(munmap)(void *addr, size_t length) {
   return result;
 }
 
-// Old glibc that conda uses doesn't support aligned_alloc()
-#ifndef FIL_SKIP_ALIGNED_ALLOC
+// Old glibc that Conda uses defines aligned_alloc() using inline that doesn't
+// match this signature, which messes up the SYMBOL_PREFIX() stuff on Linux. So,
+// we do reimplemented_aligned_alloc, the name macOS technique uses, and then
+// rely on symbol alias (see --defsym in setup.py) to fix it.
+//
+// On macOS, aligned_alloc is only in macOS 10.15 or later, we need to define
+// it.
+#ifdef __APPLE__
+void *aligned_alloc(size_t alignment, size_t size);
+#endif
+
 __attribute__((visibility("default"))) void *
-SYMBOL_PREFIX(aligned_alloc)(size_t alignment, size_t size) {
+reimplemented_aligned_alloc(size_t alignment, size_t size) {
   void *result = REAL_IMPL(aligned_alloc)(alignment, size);
 
   // For now we only track anonymous mmap()s:
@@ -450,7 +459,6 @@ SYMBOL_PREFIX(aligned_alloc)(size_t alignment, size_t size) {
   }
   return result;
 }
-#endif
 
 #ifdef __linux__
 // Make sure we expose jemalloc variant of malloc_usable_size(), in case someone
@@ -522,10 +530,7 @@ DYLD_INTERPOSE(SYMBOL_PREFIX(realloc), realloc)
 DYLD_INTERPOSE(SYMBOL_PREFIX(free), free)
 DYLD_INTERPOSE(SYMBOL_PREFIX(mmap), mmap)
 DYLD_INTERPOSE(SYMBOL_PREFIX(munmap), munmap)
-// Old macOS ABI that Conda uses doesn't support aligned_alloc().
-#  ifndef FIL_SKIP_ALIGNED_ALLOC
 DYLD_INTERPOSE(SYMBOL_PREFIX(aligned_alloc), aligned_alloc)
-#  endif
 DYLD_INTERPOSE(SYMBOL_PREFIX(posix_memalign), posix_memalign)
 DYLD_INTERPOSE(SYMBOL_PREFIX(pthread_create), pthread_create)
 DYLD_INTERPOSE(SYMBOL_PREFIX(fork), fork)
