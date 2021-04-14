@@ -126,11 +126,21 @@ $ fil-profile run yourscript.py --input-file=yourfile
 And it will generate a report and automatically try to open it in for you in a browser.
 Reports will be stored in the `fil-result/` directory in your current working directory.
 
-As of version 0.11, you can also run it like this:
+If your program is usually run as `python -m yourapp.yourmodule --args`, you can do that with Fil too:
+
+```
+$ fil-profile run -m yourapp.yourmodule --args
+```
+
+As of version 0.11, you can use `python -m` to run Fil:
 
 ```
 $ python -m filprofiler run yourscript.py --input-file=yourfile
 ```
+
+As of version 2021.04.2, you can disable opening reports in a browser by using the `--no-browser` option (see `fil-profile --help` for details).
+You will want to view the SVG report in a browser, since they rely heavily on JavaScript.
+If you want to serve the report files from a static directory from a web server, you can use `python -m http.server`.
 
 ### <a name="code">API for profiling specific Python functions</a>
 
