@@ -1,1 +1,0 @@
-Fixed bug where aligned_alloc()-created allocations were untracked when using pip packages with Conda; specifically this is relevant to libraries written in C++.

@@ -1,1 +1,0 @@
-Added --no-browser option to disable automatically opening reports in a browser.

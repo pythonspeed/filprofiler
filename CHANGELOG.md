@@ -1,3 +1,18 @@
+# Fil 2021.04.2 (2021-04-14)
+
+
+### Features
+
+- Added --no-browser option to disable automatically opening reports in a browser. ([#59](https://github.com/pythonspeed/filprofiler/issues/59))
+
+
+### Bugfixes
+
+- Fixed bug where aligned_alloc()-created allocations were untracked when using pip packages with Conda; specifically this is relevant to libraries written in C++. ([#152](https://github.com/pythonspeed/filprofiler/issues/152))
+- Improved output in the rare case where allocations go missing. ([#154](https://github.com/pythonspeed/filprofiler/issues/154))
+- Fixed potential problem with threads noticing profiling is enabled. ([#156](https://github.com/pythonspeed/filprofiler/issues/156))
+
+
 # Fil 2021.04.1 (2021-04-08)
 
 
