@@ -1,3 +1,11 @@
+# Fil 2021.04.3 (2021-04-15)
+
+
+### Bugfixes
+
+- **Major bugfix:** mmap() was usually not added correctly on Linux, and when it was, munmap() was ignored. ([#161](https://github.com/pythonspeed/filprofiler/issues/161))
+
+
 # Fil 2021.04.2 (2021-04-14)
 
 

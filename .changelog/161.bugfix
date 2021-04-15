@@ -1,1 +1,0 @@
-**Major bugfix:** mmap() was usually not added correctly on Linux, and when it was, munmap() was ignored.
