@@ -78,13 +78,29 @@ static inline uint64_t am_i_reentrant() {
 static inline void set_will_i_be_reentrant(uint64_t i) {
   pthread_setspecific(will_i_be_reentrant, (void *)i);
 }
+
+static inline uint64_t maybe_set_reentrant_linux() {}
+static inline maybe_restore_reentrant_linux(uint64_t i) {}
 #elif __linux__
 #include <sys/syscall.h>
-static _Thread_local int will_i_be_reentrant = 0;
+static _Thread_local uint64_t will_i_be_reentrant = 0;
 
-static inline int am_i_reentrant() { return will_i_be_reentrant; }
+static inline uint64_t am_i_reentrant() { return will_i_be_reentrant; }
 
-static inline void set_will_i_be_reentrant(int i) { will_i_be_reentrant = i; }
+static inline void set_will_i_be_reentrant(uint64_t i) { will_i_be_reentrant = i; }
+
+// On Linux we're using jemalloc, which can do mmap() calls, so if we're not
+// already being reentrant we want to make sure that mmap() doesn't get
+// double-counted.
+static inline uint64_t maybe_set_reentrant_linux() {
+  uint64_t currently = will_i_be_reentrant;
+  will_i_be_reentrant = 1;
+  return currently;
+}
+
+static inline void maybe_restore_reentrant_linux(uint64_t i) {
+  will_i_be_reentrant = i;
+}
 #endif
 
 // Return whether to pass malloc() etc. to Rust tracking code.
@@ -339,7 +355,9 @@ __attribute__((visibility("default"))) pid_t SYMBOL_PREFIX(fork)(void) {
 // Override memory-allocation functions:
 __attribute__((visibility("default"))) void *
 SYMBOL_PREFIX(malloc)(size_t size) {
+  uint64_t currently_reentrant = maybe_set_reentrant_linux();
   void *result = REAL_IMPL(malloc)(size);
+  maybe_restore_reentrant_linux(currently_reentrant);
   if (should_track_memory()) {
     set_will_i_be_reentrant(1);
     add_allocation((size_t)result, size);
@@ -350,7 +368,9 @@ SYMBOL_PREFIX(malloc)(size_t size) {
 
 __attribute__((visibility("default"))) void *
 SYMBOL_PREFIX(calloc)(size_t nmemb, size_t size) {
+  uint64_t currently_reentrant = maybe_set_reentrant_linux();
   void *result = REAL_IMPL(calloc)(nmemb, size);
+  maybe_restore_reentrant_linux(currently_reentrant);
   size_t allocated = nmemb * size;
   if (should_track_memory()) {
     set_will_i_be_reentrant(1);
@@ -362,7 +382,9 @@ SYMBOL_PREFIX(calloc)(size_t nmemb, size_t size) {
 
 __attribute__((visibility("default"))) void *
 SYMBOL_PREFIX(realloc)(void *addr, size_t size) {
+  uint64_t currently_reentrant = maybe_set_reentrant_linux();
   void *result = REAL_IMPL(realloc)(addr, size);
+  maybe_restore_reentrant_linux(currently_reentrant);
   if (should_track_memory()) {
     set_will_i_be_reentrant(1);
     // Sometimes you'll get same address, so if we did add first and then
@@ -376,7 +398,9 @@ SYMBOL_PREFIX(realloc)(void *addr, size_t size) {
 
 __attribute__((visibility("default"))) int
 SYMBOL_PREFIX(posix_memalign)(void **memptr, size_t alignment, size_t size) {
+  uint64_t currently_reentrant = maybe_set_reentrant_linux();
   int result = REAL_IMPL(posix_memalign)(memptr, alignment, size);
+  maybe_restore_reentrant_linux(currently_reentrant);
   if (!result && should_track_memory()) {
     set_will_i_be_reentrant(1);
     add_allocation((size_t)*memptr, size);
@@ -386,7 +410,9 @@ SYMBOL_PREFIX(posix_memalign)(void **memptr, size_t alignment, size_t size) {
 }
 
 __attribute__((visibility("default"))) void SYMBOL_PREFIX(free)(void *addr) {
+  uint64_t currently_reentrant = maybe_set_reentrant_linux();
   REAL_IMPL(free)(addr);
+  maybe_restore_reentrant_linux(currently_reentrant);
   if (should_track_memory()) {
     set_will_i_be_reentrant(1);
     pymemprofile_free_allocation((size_t)addr);
@@ -449,9 +475,10 @@ void *aligned_alloc(size_t alignment, size_t size);
 
 __attribute__((visibility("default"))) void *
 reimplemented_aligned_alloc(size_t alignment, size_t size) {
+  uint64_t currently_reentrant = maybe_set_reentrant_linux();
   void *result = REAL_IMPL(aligned_alloc)(alignment, size);
+  maybe_restore_reentrant_linux(currently_reentrant);
 
-  // For now we only track anonymous mmap()s:
   if (should_track_memory()) {
     set_will_i_be_reentrant(1);
     add_allocation((size_t)result, size);
@@ -490,10 +517,10 @@ static void *wrapper_pthread_start(void *nta) {
   void* result = NULL;
   set_will_i_be_reentrant(1);
   pymemprofile_set_current_callstack(args->callstack);
-  set_will_i_be_reentrant(0);
   void *(*start_routine)(void *) = args->start_routine;
   void *arg = args->arg;
   REAL_IMPL(free)(args);
+  set_will_i_be_reentrant(0);
 
   // Register shutdown handler:
   pthread_cleanup_push(thread_shutdown_handler, NULL);
