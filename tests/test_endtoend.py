@@ -155,9 +155,16 @@ def test_anonymous_mmap():
     allocations = get_allocations(output_dir)
 
     script = str(script)
-    path = ((script, "<module>", 6),)
+    path = ((script, "<module>", 8),)
 
     assert match(allocations, {path: big}, as_mb) == pytest.approx(60, 0.1)
+    if sys.platform == "linux":
+        assert match(
+            allocations, {((script, "<module>", 12),): big}, as_mb
+        ) == pytest.approx(45, 0.1)
+        assert match(
+            allocations, {((script, "<module>", 20),): big}, as_mb
+        ) == pytest.approx(63, 0.1)
 
 
 def test_python_objects():
