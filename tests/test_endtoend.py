@@ -160,10 +160,10 @@ def test_anonymous_mmap():
     assert match(allocations, {path: big}, as_mb) == pytest.approx(60, 0.1)
     if sys.platform == "linux":
         assert match(
-            allocations, {((script, "<module>", 12),): big}, as_mb
+            allocations, {((script, "<module>", 14),): big}, as_mb
         ) == pytest.approx(45, 0.1)
         assert match(
-            allocations, {((script, "<module>", 20),): big}, as_mb
+            allocations, {((script, "<module>", 15),): big}, as_mb
         ) == pytest.approx(63, 0.1)
 
 
