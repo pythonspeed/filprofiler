@@ -129,8 +129,8 @@ def trace_until_exit(code, globals_, output_path: str, open_browser: bool):
     # Use atexit rather than try/finally so threads that live beyond main
     # thread also get profiled:
     atexit.register(shutdown)
-    start_tracing(os.path.join(output_path, timestamp_now()))
     with disable_thread_pools():
+        start_tracing(os.path.join(output_path, timestamp_now()))
         exec(code, globals_, None)
 
 

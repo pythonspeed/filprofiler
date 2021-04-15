@@ -18,6 +18,7 @@ if sys.platform == "darwin":
     config_vars = sysconfig.get_config_vars()
     config_vars["LDSHARED"] = config_vars["LDSHARED"].replace("-bundle", "-dynamiclib")
 else:
+    # Linux
     extra_link_args.extend(
         [
             # Indicate which symbols are public. macOS lld doesn't support version
@@ -26,6 +27,10 @@ else:
             # Make sure aligned_alloc() is public under its real name;
             # workaround for old glibc headers in Conda.
             "-Wl,--defsym=aligned_alloc=reimplemented_aligned_alloc",
+            # On 64-bit Linux, mmap() is another way of saying mmap64, or vice
+            # versa, so we point to function of our own.
+            "-Wl,--defsym=mmap=fil_mmap_impl",
+            "-Wl,--defsym=mmap64=fil_mmap_impl",
         ]
     )
 
