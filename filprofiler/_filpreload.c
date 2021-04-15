@@ -456,7 +456,7 @@ SYMBOL_PREFIX(munmap)(void *addr, size_t length) {
   int result = underlying_real_munmap(addr, length);
   if (result != -1 && should_track_memory()) {
     set_will_i_be_reentrant(1);
-    pymemprofile_free_anon_mmap(result, length);
+    pymemprofile_free_anon_mmap((size_t)addr, length);
     set_will_i_be_reentrant(0);
   }
   return result;

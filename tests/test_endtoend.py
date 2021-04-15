@@ -156,7 +156,7 @@ def test_anonymous_mmap():
 
     script = str(script)
     path = ((script, "<module>", 8),)
-
+    assert ((script, "<module>", 6),) not in allocations
     assert match(allocations, {path: big}, as_mb) == pytest.approx(60, 0.1)
     if sys.platform == "linux":
         assert match(
