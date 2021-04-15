@@ -420,8 +420,10 @@ __attribute__((visibility("default"))) void SYMBOL_PREFIX(free)(void *addr) {
   }
 }
 
+// On Linux this is exposed via --wrap, to get both mmap() and mmap64() without
+// fighting the fact that glibc #defines mmap as mmap64 sometimes...
 __attribute__((visibility("default"))) void *
-SYMBOL_PREFIX(mmap)(void *addr, size_t length, int prot, int flags, int fd,
+fil_mmap_impl(void *addr, size_t length, int prot, int flags, int fd,
                     off_t offset) {
   if (unlikely(!initialized)) {
 #ifdef __APPLE__
@@ -443,9 +445,17 @@ SYMBOL_PREFIX(mmap)(void *addr, size_t length, int prot, int flags, int fd,
   return result;
 }
 
-__attribute__((visibility("default"))) int
-SYMBOL_PREFIX(munmap)(void *addr, size_t length) {
-  if (unlikely(!initialized)) {
+#ifdef __APPLE__
+__attribute__((visibility("default"))) void *
+SYMBOL_PREFIX(mmap)(void *addr, size_t length, int prot, int flags, int fd,
+                    off_t offset) {
+  return fil_mmap_impl(addr, length, prot, flags, fd, offset);
+}
+#endif
+
+__attribute__((visibility("default"))) int SYMBOL_PREFIX(munmap)(
+      void *addr, size_t length) {
+    if (unlikely(!initialized)) {
 #ifdef __APPLE__
     return munmap(addr, length);
 #else

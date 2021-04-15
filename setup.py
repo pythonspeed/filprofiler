@@ -28,8 +28,9 @@ else:
             # workaround for old glibc headers in Conda.
             "-Wl,--defsym=aligned_alloc=reimplemented_aligned_alloc",
             # On 64-bit Linux, mmap() is another way of saying mmap64, or vice
-            # versa.
-            "-Wl,--defsym=mmap=mmap64",
+            # versa, so we point to function of our own.
+            "-Wl,--defsym=mmap=fil_mmap_impl",
+            "-Wl,--defsym=mmap64=fil_mmap_impl",
         ]
     )
 
