@@ -245,7 +245,9 @@ fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
                                                      &filename_length);
       const char* function_name = PyUnicode_AsUTF8AndSize(frame->f_code->co_name,
                                                           &function_length);
+      set_will_i_be_reentrant(1);
       function_id = pymemprofile_add_function_location(filename, (uint64_t)filename_length, function_name, (uint64_t)function_length);
+      set_will_i_be_reentrant(0);
       _PyCode_SetExtra((PyObject *)frame->f_code, extra_code_index,
                        (void *)function_id + 1);
     } else {
