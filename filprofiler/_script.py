@@ -150,11 +150,6 @@ def stage_1():
     environ["RUST_BACKTRACE"] = "1"
     # Route all allocations from Python through malloc() directly:
     environ["PYTHONMALLOC"] = "malloc"
-    # Tell jemalloc code (if used) to clean up faster:
-    if environ.get("_RJEM_MALLOC_CONF") is None:
-        environ[
-            "_RJEM_MALLOC_CONF"
-        ] = "dirty_decay_ms:100,muzzy_decay_ms:1000,abort_conf:true"
 
     if sys.argv[1] == "python":
         # Tells IPython layer we're setup correctly:

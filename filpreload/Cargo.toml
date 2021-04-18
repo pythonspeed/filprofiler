@@ -11,9 +11,6 @@ lazy_static = "1.4.0"
 pymemprofile_api = {path = "../memapi"}
 parking_lot = "0.11.1"
 
-[target.'cfg(target_os = "linux")'.dependencies]
-jemallocator = "0.3.2"
-
 [lib]
 name = "filpreload"
 crate_type = ["staticlib"]

@@ -25,7 +25,14 @@
 #ifdef __APPLE__
 #define REAL_IMPL(func) func
 #elif __linux__
-#define REAL_IMPL(func) _rjem_##func
+// glibc has __libc_malloc, __libc_calloc, __libc_free, and __libc_realloc as
+// synonyms.
+extern void *__libc_malloc(size_t length);
+extern void *__libc_calloc(size_t nmemb, size_t length);
+extern void *__libc_realloc(void *addr, size_t length);
+extern void __libc_free(void *addr);
+
+#define REAL_IMPL(func) __libc_##func
 #endif
 
 #define likely(x) __builtin_expect(!!(x), 1)
@@ -40,15 +47,9 @@ static int (*underlying_real_pthread_create)(pthread_t *thread,
                                              void *(*start_routine)(void *),
                                              void *arg) = 0;
 static pid_t (*underlying_real_fork)(void) = 0;
+static int (*underlying_real_posix_memalign)(void **memptr, size_t alignment, size_t size) = 0;
+static void *(*underlying_real_aligned_alloc)(size_t alignment, size_t size) = 0;
 
-// Used on Linux to implement these APIs:
-extern void *_rjem_malloc(size_t length);
-extern void *_rjem_calloc(size_t nmemb, size_t length);
-extern void *_rjem_realloc(void *addr, size_t length);
-extern void _rjem_free(void *addr);
-extern void *_rjem_aligned_alloc(size_t alignment, size_t size);
-extern size_t _rjem_malloc_usable_size(void *ptr);
-extern int _rjem_posix_memalign(void **memptr, size_t alignment, size_t size);
 
 // Note whether we've been initialized yet or not:
 static int initialized = 0;
@@ -89,9 +90,8 @@ static inline uint64_t am_i_reentrant() { return will_i_be_reentrant; }
 
 static inline void set_will_i_be_reentrant(uint64_t i) { will_i_be_reentrant = i; }
 
-// On Linux we're using jemalloc, which can do mmap() calls, so if we're not
-// already being reentrant we want to make sure that mmap() doesn't get
-// double-counted.
+// malloc() can sometimes do mmap() calls, so if we're not already being
+// reentrant we want to make sure that mmap() doesn't get double-counted.
 static inline uint64_t maybe_set_reentrant_linux() {
   uint64_t currently = will_i_be_reentrant;
   will_i_be_reentrant = 1;
@@ -148,17 +148,22 @@ extern void *pymemprofile_get_current_callstack();
 extern void pymemprofile_set_current_callstack(void *callstack);
 extern void pymemprofile_clear_current_callstack();
 
+static void* emulate_aligned_alloc(size_t alignment, size_t size) {
+  void *result = NULL;
+  if (alignment < sizeof(void *)) {
+    alignment = sizeof(void *);
+  }
+  if (posix_memalign(&result, alignment, size) == 0) {
+    return result;
+  } else {
+    return NULL;
+  }
+}
+
 static void __attribute__((constructor)) constructor() {
   if (initialized) {
     return;
   }
-
-#ifdef __linux__
-  // Ensure jemalloc is initialized as early as possible. If jemalloc is
-  // initialized via mmap() -> Rust triggering allocation, it deadlocks because
-  // jemalloc uses mmap to get more memory!
-  _rjem_malloc(1);
-#endif
 
   if (sizeof((void *)0) != sizeof((size_t)0)) {
     fprintf(stderr, "BUG: expected size of size_t and void* to be the same.\n");
@@ -184,6 +189,17 @@ static void __attribute__((constructor)) constructor() {
   if (!underlying_real_fork) {
     fprintf(stderr, "Couldn't load fork(): %s\n", dlerror());
     exit(1);
+  }
+  underlying_real_posix_memalign = dlsym(RTLD_NEXT, "posix_memalign");
+  if (!underlying_real_posix_memalign) {
+    fprintf(stderr, "Couldn't load posix_memalign(): %s\n", dlerror());
+    exit(1);
+  }
+  underlying_real_aligned_alloc = dlsym(RTLD_NEXT, "aligned_alloc");
+  if (!underlying_real_aligned_alloc) {
+    // Old versions of glibc and macOS don't have aligned_alloc, so emulate it
+    // the way glibc does:
+    underlying_real_aligned_alloc = emulate_aligned_alloc;
   }
 
   // Initialize Rust static state before we start doing any calls via malloc(),
@@ -401,7 +417,11 @@ SYMBOL_PREFIX(realloc)(void *addr, size_t size) {
 __attribute__((visibility("default"))) int
 SYMBOL_PREFIX(posix_memalign)(void **memptr, size_t alignment, size_t size) {
   uint64_t currently_reentrant = maybe_set_reentrant_linux();
+#ifdef __APPLE__
   int result = REAL_IMPL(posix_memalign)(memptr, alignment, size);
+#else
+  int result = underlying_real_posix_memalign(memptr, alignment, size);
+#endif
   maybe_restore_reentrant_linux(currently_reentrant);
   if (!result && should_track_memory()) {
     set_will_i_be_reentrant(1);
@@ -488,7 +508,11 @@ void *aligned_alloc(size_t alignment, size_t size);
 __attribute__((visibility("default"))) void *
 reimplemented_aligned_alloc(size_t alignment, size_t size) {
   uint64_t currently_reentrant = maybe_set_reentrant_linux();
+#ifdef __APPLE__
   void *result = REAL_IMPL(aligned_alloc)(alignment, size);
+#else
+  void *result = underlying_real_aligned_alloc(alignment, size);
+#endif
   maybe_restore_reentrant_linux(currently_reentrant);
 
   if (should_track_memory()) {
@@ -498,15 +522,6 @@ reimplemented_aligned_alloc(size_t alignment, size_t size) {
   }
   return result;
 }
-
-#ifdef __linux__
-// Make sure we expose jemalloc variant of malloc_usable_size(), in case someone
-// actually uses it.
-__attribute__((visibility("default"))) size_t
-SYMBOL_PREFIX(malloc_usable_size)(void *ptr) {
-  return REAL_IMPL(malloc_usable_size)(ptr);
-}
-#endif
 
 // Argument for wrapper_pthread_start().
 struct NewThreadArgs {

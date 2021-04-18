@@ -8,13 +8,6 @@ use std::os::raw::{c_char, c_void};
 #[macro_use]
 extern crate lazy_static;
 
-#[cfg(target_os = "linux")]
-use jemallocator::Jemalloc;
-
-#[cfg(target_os = "linux")]
-#[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
-
 thread_local!(static THREAD_CALLSTACK: RefCell<Callstack> = RefCell::new(Callstack::new()));
 
 struct TrackerState {
