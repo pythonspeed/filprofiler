@@ -1,0 +1,1 @@
+Improved error reporting of memory corruption problems in application code or libraries. As a side-effect, Linux now uses the standard glibc memory allocation APIs.
