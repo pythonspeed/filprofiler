@@ -148,8 +148,17 @@ def stage_1():
     environ["__FIL_STATUS"] = "launcher"
     # Tracebacks when Rust crashes:
     environ["RUST_BACKTRACE"] = "1"
+    # Python tracebacks on segfaults:
+    environ["PYTHONFAULTHANDLER"] = "1"
     # Route all allocations from Python through malloc() directly:
     environ["PYTHONMALLOC"] = "malloc"
+
+    if environ.get("FIL_DEBUG"):
+        # Extra checks for glibc
+        # (https://www.gnu.org/software/libc/manual/html_node/Heap-Consistency-Checking.html)
+        environ["MALLOC_CHECK_"] = "1"
+        # Extra checks for macOS (maybe? not clear it adds much):
+        environ["MallocErrorAbort"] = "1"
 
     if sys.argv[1] == "python":
         # Tells IPython layer we're setup correctly:
