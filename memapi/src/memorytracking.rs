@@ -452,12 +452,20 @@ impl<'a> AllocationTracker {
         // Before we reduce memory, let's check if we've previously hit a peak:
         self.check_if_new_peak();
 
-        // Possibly this allocation doesn't exist; that's OK! It can if e.g. we
-        // didn't capture an allocation for some reason.
         if let Some(removed) = self.current_allocations.remove(&address) {
             self.remove_memory_usage(removed.callstack_id, removed.size());
             Some(removed.size())
         } else {
+            // This allocation doesn't exist; that may be OK if it's from some
+            // obscure API we don't support, or if we're in sampling mode, but
+            // it may also be a bug.
+            #[cfg(not(feature = "production"))]
+            if *crate::util::DEBUG_MODE {
+                eprintln!(
+                    "=fil-profile= Your program attempted to free an allocation at an address we don't know about:"
+                );
+                eprintln!("=| {:?}", backtrace::Backtrace::new());
+            }
             None
         }
     }
