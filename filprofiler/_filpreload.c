@@ -391,7 +391,11 @@ SYMBOL_PREFIX(realloc)(void *addr, size_t size) {
     set_will_i_be_reentrant(1);
     // Sometimes you'll get same address, so if we did add first and then
     // removed, it would remove the entry erroneously.
-    pymemprofile_free_allocation((size_t)addr);
+    //
+    // Sometimes address is 0, in which case this is equivalent to malloc().
+    if ((size_t)addr != 0) {
+      pymemprofile_free_allocation((size_t)addr);
+    }
     add_allocation((size_t)result, size);
     set_will_i_be_reentrant(0);
   }
