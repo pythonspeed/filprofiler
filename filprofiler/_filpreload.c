@@ -384,14 +384,26 @@ SYMBOL_PREFIX(calloc)(size_t nmemb, size_t size) {
 
 __attribute__((visibility("default"))) void *
 SYMBOL_PREFIX(realloc)(void *addr, size_t size) {
-  uint64_t currently_reentrant = maybe_set_reentrant_linux();
-  void *result = REAL_IMPL(realloc)(addr, size);
-  maybe_restore_reentrant_linux(currently_reentrant);
+  // We do removal bookkeeping first. Otherwise, as soon as the freeing happens
+  // another thread may allocate the same address, leading to a race condition
+  // in the bookkeeping metadata.
+  //
+  // If realloc() fails due to lack of memory, this will result in memory still
+  // existing but Fil thinking it's gone. However, at that point Fil will then
+  // exit with OOM report, so... not the end of the world, and unlikely in
+  // practice.
   if (should_track_memory()) {
     set_will_i_be_reentrant(1);
     // Sometimes you'll get same address, so if we did add first and then
     // removed, it would remove the entry erroneously.
     pymemprofile_free_allocation((size_t)addr);
+    set_will_i_be_reentrant(0);
+  }
+  uint64_t currently_reentrant = maybe_set_reentrant_linux();
+  void *result = REAL_IMPL(realloc)(addr, size);
+  maybe_restore_reentrant_linux(currently_reentrant);
+  if (should_track_memory()) {
+    set_will_i_be_reentrant(1);
     add_allocation((size_t)result, size);
     set_will_i_be_reentrant(0);
   }
@@ -412,14 +424,17 @@ SYMBOL_PREFIX(posix_memalign)(void **memptr, size_t alignment, size_t size) {
 }
 
 __attribute__((visibility("default"))) void SYMBOL_PREFIX(free)(void *addr) {
-  uint64_t currently_reentrant = maybe_set_reentrant_linux();
-  REAL_IMPL(free)(addr);
-  maybe_restore_reentrant_linux(currently_reentrant);
+  // We do bookkeeping first. Otherwise, as soon as the free() happens another
+  // thread may allocate the same address, leading to a race condition in the
+  // bookkeeping metadata.
   if (should_track_memory()) {
     set_will_i_be_reentrant(1);
     pymemprofile_free_allocation((size_t)addr);
     set_will_i_be_reentrant(0);
   }
+  uint64_t currently_reentrant = maybe_set_reentrant_linux();
+  REAL_IMPL(free)(addr);
+  maybe_restore_reentrant_linux(currently_reentrant);
 }
 
 // On Linux this is exposed via --wrap, to get both mmap() and mmap64() without
