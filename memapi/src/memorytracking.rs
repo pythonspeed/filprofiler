@@ -446,6 +446,14 @@ impl<'a> AllocationTracker {
                         "The allocation from this traceback disappeared:",
                         previous.callstack_id,
                     );
+                    self.print_traceback(
+                        "The current traceback that overwrote the disappearing allocation:",
+                        alloc.callstack_id,
+                    );
+                    eprintln!(
+                        "|= The current C/Rust backtrace: {:?}",
+                        backtrace::Backtrace::new()
+                    );
                 }
             }
         }
