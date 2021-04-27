@@ -480,13 +480,16 @@ __attribute__((visibility("default"))) int SYMBOL_PREFIX(munmap)(
 #endif
   }
 
-  int result = underlying_real_munmap(addr, length);
-  if (result != -1 && should_track_memory()) {
+  if (should_track_memory()) {
     set_will_i_be_reentrant(1);
     pymemprofile_free_anon_mmap((size_t)addr, length);
     set_will_i_be_reentrant(0);
   }
-  return result;
+
+  // if munmap() fails the above removal is worng, but that's highly unlikely,
+  // and we want to prevent threading race condition so need to remove metadata
+  // first.
+  return underlying_real_munmap(addr, length);
 }
 
 // Old glibc that Conda uses defines aligned_alloc() using inline that doesn't
