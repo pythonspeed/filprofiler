@@ -392,7 +392,7 @@ SYMBOL_PREFIX(realloc)(void *addr, size_t size) {
   // existing but Fil thinking it's gone. However, at that point Fil will then
   // exit with OOM report, so... not the end of the world, and unlikely in
   // practice.
-  if (should_track_memory()) {
+  if (should_track_memory() && ((size_t)addr != 0)) {
     set_will_i_be_reentrant(1);
     // Sometimes you'll get same address, so if we did add first and then
     // removed, it would remove the entry erroneously.

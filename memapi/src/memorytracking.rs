@@ -349,6 +349,10 @@ pub struct AllocationTracker {
     // Allocations that somehow disappeared. Not relevant for sampling profiler.
     #[cfg(not(feature = "production"))]
     missing_allocated_bytes: usize,
+
+    // free()/realloc() of unknown address. Not relevant for sampling profiler.
+    #[cfg(not(feature = "production"))]
+    failed_deallocations: usize,
 }
 
 impl<'a> AllocationTracker {
@@ -363,6 +367,7 @@ impl<'a> AllocationTracker {
             current_allocated_bytes: 0,
             peak_allocated_bytes: 0,
             missing_allocated_bytes: 0,
+            failed_deallocations: 0,
             default_path,
         }
     }
@@ -441,6 +446,14 @@ impl<'a> AllocationTracker {
                         "The allocation from this traceback disappeared:",
                         previous.callstack_id,
                     );
+                    self.print_traceback(
+                        "The current traceback that overwrote the disappearing allocation:",
+                        alloc.callstack_id,
+                    );
+                    eprintln!(
+                        "|= The current C/Rust backtrace: {:?}",
+                        backtrace::Backtrace::new()
+                    );
                 }
             }
         }
@@ -452,12 +465,21 @@ impl<'a> AllocationTracker {
         // Before we reduce memory, let's check if we've previously hit a peak:
         self.check_if_new_peak();
 
-        // Possibly this allocation doesn't exist; that's OK! It can if e.g. we
-        // didn't capture an allocation for some reason.
         if let Some(removed) = self.current_allocations.remove(&address) {
             self.remove_memory_usage(removed.callstack_id, removed.size());
             Some(removed.size())
         } else {
+            // This allocation doesn't exist; often this will be something
+            // allocated before Fil tracking was started, but it might also be a
+            // bug.
+            #[cfg(not(feature = "production"))]
+            if *crate::util::DEBUG_MODE {
+                self.failed_deallocations += 1;
+                eprintln!(
+                    "=fil-profile= Your program attempted to free an allocation at an address we don't know about:"
+                );
+                eprintln!("=| {:?}", backtrace::Backtrace::new());
+            }
             None
         }
     }
@@ -551,6 +573,9 @@ impl<'a> AllocationTracker {
             };
             if self.missing_allocated_bytes > 0 {
                 eprintln!("=fil-profile= WARNING: {:.2}% ({} bytes) of tracked memory somehow disappeared. If this is a small percentage you can just ignore this warning, since the missing allocations won't impact the profiling results. If the % is high, please run `export FIL_DEBUG=1` to get more output', re-run Fil on your script, and then file a bug report at https://github.com/pythonspeed/filprofiler/issues/new", self.missing_allocated_bytes as f64 * 100.0 / allocated_bytes as f64, self.missing_allocated_bytes);
+            }
+            if self.failed_deallocations > 0 {
+                eprintln!("=fil-profile= WARNING: Encountered {} deallocations of untracked allocations. A certain number are expected in normal operation, of allocations created before Fil started tracking, and even more if you're using the Fil API to turn tracking on and off.", self.failed_deallocations);
             }
         }
 
