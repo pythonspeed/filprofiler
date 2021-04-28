@@ -1,3 +1,11 @@
+# Fil 2021.04.4 (2021-04-28)
+
+
+### Bugfixes
+
+- Fixed race condition in threads that resulting in wrong allocation being removed in the tracking code. ([#175](https://github.com/pythonspeed/filprofiler/issues/175))
+
+
 # Fil 2021.04.3 (2021-04-15)
 
 
