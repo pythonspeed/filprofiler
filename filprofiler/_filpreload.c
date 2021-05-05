@@ -13,6 +13,7 @@
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <execinfo.h>
 
 // Macro to create the publicly exposed symbol:
 #ifdef __APPLE__
@@ -198,6 +199,19 @@ static void __attribute__((constructor)) constructor() {
   // unsetenv("DYLD_INSERT_LIBRARIES");
 
   initialized = 1;
+}
+
+static void print_backtrace(const char* command, size_t addr) {
+  return;
+  if (!initialized ||
+      !atomic_load_explicit(&tracking_allocations, memory_order_acquire)) {
+    return;
+  }
+  uint64_t currently_reentrant = maybe_set_reentrant_linux();
+  printf("Didn't track %s of address %ld\n", command, addr);
+  fflush(stdout);
+  pymemprofile_backtrace();
+  set_will_i_be_reentrant(currently_reentrant);
 }
 
 static void start_call(uint64_t function_id, uint16_t line_number) {
@@ -398,6 +412,10 @@ SYMBOL_PREFIX(realloc)(void *addr, size_t size) {
     // removed, it would remove the entry erroneously.
     pymemprofile_free_allocation((size_t)addr);
     set_will_i_be_reentrant(0);
+  } else {
+    if ((size_t)addr != 0) {
+      print_backtrace("realloc-freeing", (size_t)addr);
+    }
   }
   uint64_t currently_reentrant = maybe_set_reentrant_linux();
   void *result = REAL_IMPL(realloc)(addr, size);
@@ -431,6 +449,10 @@ __attribute__((visibility("default"))) void SYMBOL_PREFIX(free)(void *addr) {
     set_will_i_be_reentrant(1);
     pymemprofile_free_allocation((size_t)addr);
     set_will_i_be_reentrant(0);
+  } else {
+    if ((size_t)addr != 0) {
+      print_backtrace("freeing", (size_t)addr);
+    }
   }
   uint64_t currently_reentrant = maybe_set_reentrant_linux();
   REAL_IMPL(free)(addr);
@@ -459,6 +481,8 @@ fil_mmap_impl(void *addr, size_t length, int prot, int flags, int fd,
     add_anon_mmap((size_t)result, length);
     set_will_i_be_reentrant(0);
   }
+
+
   return result;
 }
 
@@ -559,7 +583,7 @@ static void *wrapper_pthread_start(void *nta) {
   pthread_cleanup_pop(1);
   return result;
 }
-
+/*
 // Override pthread_create so that new threads copy the current thread's Python
 // callstack.
 __attribute__((visibility("default"))) int
@@ -579,7 +603,7 @@ SYMBOL_PREFIX(pthread_create)(pthread_t *thread, const pthread_attr_t *attr,
   set_will_i_be_reentrant(0);
   return result;
 }
-
+*/
 #ifdef __APPLE__
 DYLD_INTERPOSE(SYMBOL_PREFIX(malloc), malloc)
 DYLD_INTERPOSE(SYMBOL_PREFIX(calloc), calloc)

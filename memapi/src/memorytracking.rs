@@ -431,6 +431,10 @@ impl<'a> AllocationTracker {
             // In production use (proposed commercial product) allocations are
             // only sampled, so missing allocations are common and not the sign
             // of an error.
+            println!(
+                "Allocation {} is being overwritten, we never noticed it being deallocated?",
+                address
+            );
             #[cfg(not(feature = "production"))]
             {
                 // I've seen this happen on macOS only in some threaded code

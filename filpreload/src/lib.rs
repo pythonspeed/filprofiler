@@ -273,3 +273,8 @@ pub unsafe extern "C" fn pymemprofile_clear_current_callstack() {
     let callstack = Callstack::new();
     set_current_callstack(&callstack);
 }
+
+#[no_mangle]
+pub extern "C" fn pymemprofile_backtrace() {
+    println!("{:?}", backtrace::Backtrace::new());
+}
