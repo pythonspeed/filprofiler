@@ -533,13 +533,6 @@ struct NewThreadArgs {
   void *arg;
 };
 
-// Called during thread shutdown. Makes sure we don't call back into the Rust
-// code, since that uses thread-local storage which will not be valid
-// momentarily.
-static void thread_shutdown_handler(void *arg) {
-  set_will_i_be_reentrant(1);
-}
-
 // Called as starting function for new threads. Sets callstack, then calls the
 // real starting function.
 static void *wrapper_pthread_start(void *nta) {
@@ -547,17 +540,13 @@ static void *wrapper_pthread_start(void *nta) {
   void* result = NULL;
   set_will_i_be_reentrant(1);
   pymemprofile_set_current_callstack(args->callstack);
+  set_will_i_be_reentrant(0);
   void *(*start_routine)(void *) = args->start_routine;
   void *arg = args->arg;
   REAL_IMPL(free)(args);
-  set_will_i_be_reentrant(0);
 
-  // Register shutdown handler:
-  pthread_cleanup_push(thread_shutdown_handler, NULL);
   // Run the underlying thread code:
-  result = start_routine(arg);
-  pthread_cleanup_pop(1);
-  return result;
+  return start_routine(arg);
 }
 
 // Override pthread_create so that new threads copy the current thread's Python
@@ -568,7 +557,6 @@ SYMBOL_PREFIX(pthread_create)(pthread_t *thread, const pthread_attr_t *attr,
   if (!likely(initialized) || am_i_reentrant()) {
     return underlying_real_pthread_create(thread, attr, start_routine, arg);
   }
-  set_will_i_be_reentrant(1);
   struct NewThreadArgs *wrapper_args =
       REAL_IMPL(malloc)(sizeof(struct NewThreadArgs));
   wrapper_args->callstack = pymemprofile_get_current_callstack();
@@ -576,7 +564,6 @@ SYMBOL_PREFIX(pthread_create)(pthread_t *thread, const pthread_attr_t *attr,
   wrapper_args->arg = arg;
   int result = underlying_real_pthread_create(
       thread, attr, &wrapper_pthread_start, (void *)wrapper_args);
-  set_will_i_be_reentrant(0);
   return result;
 }
 

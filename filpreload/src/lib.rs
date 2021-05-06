@@ -73,7 +73,16 @@ extern "C" {
 }
 
 /// Add a new allocation based off the current callstack.
-fn add_allocation(address: usize, size: usize, line_number: u16, is_mmap: bool) {
+///
+/// This can fail if the thread local with the Python stack is not available.
+/// This only happens during thread exit where an allocation can sometimes be
+/// triggered during thread-local cleanup for some reason.
+fn add_allocation(
+    address: usize,
+    size: usize,
+    line_number: u16,
+    is_mmap: bool,
+) -> Result<(), std::thread::AccessError> {
     let mut tracker_state = TRACKER_STATE.lock();
     let current_allocated_bytes = tracker_state.allocations.get_current_allocated_bytes();
 
@@ -109,12 +118,13 @@ fn add_allocation(address: usize, size: usize, line_number: u16, is_mmap: bool) 
     }
 
     let allocations = &mut tracker_state.allocations;
-    let callstack_id = THREAD_CALLSTACK.with(|tcs| {
+    // Will fail during thread shutdown, but not much we can do at that point.
+    let callstack_id = THREAD_CALLSTACK.try_with(|tcs| {
         let mut callstack = tcs.borrow_mut();
         callstack.id_for_new_allocation(line_number, |callstack| {
             allocations.get_callstack_id(callstack)
         })
-    });
+    })?;
 
     if is_mmap {
         allocations.add_anon_mmap(address, size, callstack_id);
@@ -125,7 +135,8 @@ fn add_allocation(address: usize, size: usize, line_number: u16, is_mmap: bool) 
     if oom {
         // Uh-oh, we're out of memory.
         allocations.oom_dump();
-    }
+    };
+    Ok(())
 }
 
 /// Free an existing allocation.
@@ -166,7 +177,7 @@ fn dump_peak_to_flamegraph(path: &str) {
 
 #[no_mangle]
 pub extern "C" fn pymemprofile_add_allocation(address: usize, size: usize, line_number: u16) {
-    add_allocation(address, size, line_number, false);
+    add_allocation(address, size, line_number, false).unwrap_or(());
 }
 
 #[no_mangle]
@@ -182,7 +193,7 @@ pub extern "C" fn pymemprofile_get_allocation_size(address: usize) -> usize {
 
 #[no_mangle]
 pub extern "C" fn pymemprofile_add_anon_mmap(address: usize, size: usize, line_number: u16) {
-    add_allocation(address, size, line_number, true);
+    add_allocation(address, size, line_number, true).unwrap_or(());
 }
 
 #[no_mangle]
