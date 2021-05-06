@@ -10,6 +10,10 @@ use std::path::PathBuf;
 use std::{collections::HashMap, io::Read};
 use std::{fs, io::Seek};
 
+extern "C" {
+    fn _exit(exit_code: std::os::raw::c_int);
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct FunctionId(u32);
 
@@ -696,7 +700,9 @@ impl<'a> AllocationTracker {
             "Current allocations at out-of-memory time",
             false,
         );
-        std::process::exit(53);
+        unsafe {
+            _exit(53);
+        }
     }
 
     /// Validate internal state is in a good state. This won't pass until
