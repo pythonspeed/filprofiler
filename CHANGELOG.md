@@ -1,3 +1,11 @@
+# Fil 2021.05.0 (2021-05-06)
+
+
+### Bugfixes
+
+- Fixed bug where certain allocations went missing during thread creation and cleanup. ([#179](https://github.com/pythonspeed/filprofiler/issues/179))
+
+
 # Fil 2021.04.4 (2021-04-28)
 
 
