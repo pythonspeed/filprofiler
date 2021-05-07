@@ -24,7 +24,7 @@ HOPEFULLY_UNIQUE_VAR = "__arghbldsada__"
 TEMPLATE = """\
 def __magic_run_with_fil():
 {}
-{}(__magic_run_with_fil)
+globals().update({}(__magic_run_with_fil))
 """
 
 
@@ -36,10 +36,12 @@ class FilMagics(Magics):
     def filprofile(self, line, cell):
         """Memory profile the code in the cell."""
         # Inject run_with_profile:
-
         self.shell.push({HOPEFULLY_UNIQUE_VAR: run_with_profile})
 
-        # Run the code.
+        # Pre-process the code:
+        cell = self.shell.transform_cell(cell) + "\nreturn locals()"
+
+        # Generate the code.
         #
         # We use a template that does the Fil setup inside the cell, rather
         # than here, so as to keep a whole pile of irrelevant IPython code
