@@ -1,0 +1,1 @@
+When using the Jupyter `%%filprofile` magic, locals defined in the cell are now stored in the Jupyter session as normal.
