@@ -27,7 +27,7 @@ test:
 .PHONY: test-rust
 test-rust:
 	cd memapi && env RUST_BACKTRACE=1 cargo test --no-default-features
-	cd filpreload && env RUST_BACKTRACE=1 cargo test --no-default-features
+	cd filpreload && env RUST_BACKTRACE=1 CFLAGS="$(shell python cflags.py) -fno-omit-frame-pointer" cargo test --no-default-features
 
 .PHONY: test-python
 test-python: build

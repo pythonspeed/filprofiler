@@ -1,5 +1,6 @@
 fn main() -> Result<(), std::io::Error> {
     println!("cargo:rerun-if-changed=src/_filpreload.c");
+    println!("cargo:rustc-cdylib-link-arg=-fuse-ld=lld");
     println!("cargo:rustc-cdylib-link-arg=-Wl,-export-dynamic");
     // TODO These should be Linux only:
     let cur_dir = std::env::current_dir()?;
