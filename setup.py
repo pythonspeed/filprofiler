@@ -41,15 +41,6 @@ setup(
     entry_points={
         "console_scripts": ["fil-profile=filprofiler._script:stage_1"],
     },
-    ext_modules=[
-        Extension(
-            name="filprofiler._filpreload",
-            sources=[join("filprofiler", "_filpreload.c")],
-            extra_objects=[join("target", "release", "libfilpreload.a")],
-            extra_compile_args=extra_compile_args,
-            extra_link_args=extra_link_args,
-        )
-    ],
     package_data={
         "filprofiler": ["licenses.txt"],
     },

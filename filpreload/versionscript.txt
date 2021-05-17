@@ -1,6 +1,5 @@
 {
   global:
-    pymemprofile_*;
     fil_*;
     register_fil_tracer;
     calloc;

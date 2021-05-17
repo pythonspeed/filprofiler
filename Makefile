@@ -5,14 +5,15 @@ MAKEFLAGS += --warn-undefined-variables
 MAKEFLAGS += --no-builtin-rules
 
 .PHONY: build
-build: target/release/libpymemprofile_api.a
+build: target/release/libfilpreload.so
+	cp target/release/libfilpreload.so filprofiler/_filpreload.so
 	pip install -e .
 	rm -rf build/
 	python setup.py build_ext --inplace
 	python setup.py install_data
 
-target/release/libpymemprofile_api.a: Cargo.lock memapi/Cargo.toml memapi/src/*.rs
-	cargo build --release
+target/release/libfilpreload.so: Cargo.lock memapi/Cargo.toml memapi/src/*.rs filpreload/src/*.rs filpreload/src/*.c
+	cd filpreload && CFLAGS="$(shell python cflags.py) -fno-omit-frame-pointer" cargo build --release
 
 venv:
 	python3 -m venv venv/
