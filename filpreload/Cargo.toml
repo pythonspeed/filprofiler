@@ -8,11 +8,14 @@ edition = "2018"
 
 [dependencies]
 lazy_static = "1.4.0"
-pymemprofile_api = {path = "../memapi"}
 parking_lot = "0.11.1"
-
+pyo3 = "0.13.2"
 [target.'cfg(target_os = "linux")'.dependencies]
 jemallocator = "0.3.2"
+
+[dependencies.pymemprofile_api]
+path = "../memapi"
+features = []
 
 [build-dependencies]
 cc = "1.0"
@@ -20,3 +23,7 @@ cc = "1.0"
 [lib]
 name = "filpreload"
 crate_type = ["cdylib"]
+
+[features]
+extension-module = ["pyo3/extension-module"]
+default = ["extension-module"]

@@ -214,6 +214,7 @@ dependencies = [
  "lazy_static",
  "parking_lot",
  "pymemprofile_api",
+ "pyo3",
 ]
 
 [[package]]

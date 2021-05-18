@@ -32,7 +32,3 @@ cgroups-rs = "0.2.3"
 
 [dev-dependencies]
 proptest = "1.0.0"
-
-[features]
-extension-module = ["pyo3/extension-module"]
-default = ["extension-module"]

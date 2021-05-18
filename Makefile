@@ -26,8 +26,8 @@ test:
 
 .PHONY: test-rust
 test-rust:
-	cd memapi && env RUST_BACKTRACE=1 cargo test --no-default-features
-	cd filpreload && eval `python ../cflags.py --link` && env RUST_BACKTRACE=1 cargo test --no-default-features
+	cd memapi && env RUST_BACKTRACE=1 cargo test
+	cd filpreload && eval `python ../cflags.py` && env RUST_BACKTRACE=1 cargo test --no-default-features
 
 .PHONY: test-python
 test-python: build
