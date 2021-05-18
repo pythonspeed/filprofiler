@@ -1,6 +1,5 @@
 fn main() -> Result<(), std::io::Error> {
     println!("cargo:rerun-if-changed=src/_filpreload.c");
-    println!("cargo:rustc-cdylib-link-arg=-Wl,-export-dynamic");
 
     #[cfg(target_os = "linux")]
     {
