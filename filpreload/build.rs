@@ -6,7 +6,7 @@ fn main() -> Result<(), std::io::Error> {
     {
         // On Linux GNU ld can't handle two version files (one from Rust, one from
         // us) at the same time without blowing up.
-        println!("cargo:rustc-cdylib-link-arg=-fuse-ld=lld");
+        println!("cargo:rustc-cdylib-link-arg=-fuse-ld=gold");
 
         // Use a versionscript to limit symbol visibility.
         let cur_dir = std::env::current_dir()?;
