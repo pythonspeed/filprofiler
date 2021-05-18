@@ -15,8 +15,6 @@ use jemallocator::Jemalloc;
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 
-// TODO probably need to re-export C symbols ala https://github.com/rust-lang/rfcs/issues/2771
-
 thread_local!(static THREAD_CALLSTACK: RefCell<Callstack> = RefCell::new(Callstack::new()));
 
 struct TrackerState {

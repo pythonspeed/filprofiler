@@ -5,11 +5,8 @@ MAKEFLAGS += --warn-undefined-variables
 MAKEFLAGS += --no-builtin-rules
 
 .PHONY: build
-build: target/release/libfilpreload.so
-	cp target/release/libfilpreload.so filprofiler/_filpreload.so
+build:
 	pip install -e .
-	rm -rf build/
-	python setup.py build_ext --inplace
 	python setup.py install_data
 
 target/release/libfilpreload.so: Cargo.lock memapi/Cargo.toml memapi/src/*.rs filpreload/src/*.rs filpreload/src/*.c
@@ -17,7 +14,7 @@ target/release/libfilpreload.so: Cargo.lock memapi/Cargo.toml memapi/src/*.rs fi
 
 venv:
 	python3 -m venv venv/
-	venv/bin/pip install --upgrade pip setuptools
+	venv/bin/pip install --upgrade pip setuptools setuptools-rust
 
 .PHONY: test
 test:
