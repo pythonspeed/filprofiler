@@ -1,6 +1,7 @@
-from os import environ
+from os import environ, getcwd
 from os.path import join
 from glob import glob
+import sys
 
 from setuptools import setup
 from setuptools_rust import RustExtension, Binding
@@ -16,6 +17,13 @@ def read(path):
 # Will be used by filpreload/build.rs's usage of cc to compile C code that uses
 # Python APIs.
 environ["CFLAGS"] = CFLAGS
+
+# Set public symbols to use for macOS. For some reason this doesn't work in
+# build.rs.
+if sys.platform.startswith("darwin"):
+    environ[
+        "RUSTFLAGS"
+    ] = f"-C link-arg=-Wl,-exported_symbols_list,{getcwd()}/filpreload/export_symbols.txt"
 
 setup(
     name="filprofiler",

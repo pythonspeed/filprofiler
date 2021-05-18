@@ -24,12 +24,6 @@ fn main() -> Result<(), std::io::Error> {
         println!("cargo:rustc-cdylib-link-arg=-Wl,--defsym=mmap64=fil_mmap_impl");
     };
 
-    #[cfg(target_os = "macos")]
-    {
-        // Symbols we want to be visible:
-        println!("cargo:rust-cdylib-link-arg=-Wl,-exported_symbols_list,exported_symbols.txt");
-    }
-
     cc::Build::new()
         .file("src/_filpreload.c")
         .compile("_filpreload");
