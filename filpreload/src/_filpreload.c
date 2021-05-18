@@ -537,7 +537,6 @@ struct NewThreadArgs {
 // real starting function.
 static void *wrapper_pthread_start(void *nta) {
   struct NewThreadArgs *args = (struct NewThreadArgs *)nta;
-  void* result = NULL;
   set_will_i_be_reentrant(1);
   pymemprofile_set_current_callstack(args->callstack);
   set_will_i_be_reentrant(0);
