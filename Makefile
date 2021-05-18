@@ -13,7 +13,7 @@ build: target/release/libfilpreload.so
 	python setup.py install_data
 
 target/release/libfilpreload.so: Cargo.lock memapi/Cargo.toml memapi/src/*.rs filpreload/src/*.rs filpreload/src/*.c
-	cd filpreload && CFLAGS="$(shell python cflags.py) -fno-omit-frame-pointer" cargo build --release
+	eval `python cflags.py` && cd filpreload && cargo build --release
 
 venv:
 	python3 -m venv venv/
@@ -27,7 +27,7 @@ test:
 .PHONY: test-rust
 test-rust:
 	cd memapi && env RUST_BACKTRACE=1 cargo test --no-default-features
-	cd filpreload && env RUST_BACKTRACE=1 CFLAGS="$(shell python cflags.py) -fno-omit-frame-pointer" cargo test --no-default-features
+	cd filpreload && eval `python ../cflags.py --link` && env RUST_BACKTRACE=1 cargo test --no-default-features
 
 .PHONY: test-python
 test-python: build
