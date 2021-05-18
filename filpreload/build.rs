@@ -1,5 +1,6 @@
 fn main() -> Result<(), std::io::Error> {
     println!("cargo:rerun-if-changed=src/_filpreload.c");
+    let cur_dir = std::env::current_dir()?;
 
     #[cfg(target_os = "linux")]
     {
@@ -8,7 +9,6 @@ fn main() -> Result<(), std::io::Error> {
         println!("cargo:rustc-cdylib-link-arg=-fuse-ld=gold");
 
         // Use a versionscript to limit symbol visibility.
-        let cur_dir = std::env::current_dir()?;
         println!(
             "cargo:rustc-cdylib-link-arg=-Wl,--version-script={}/versionscript.txt",
             cur_dir.to_string_lossy()
@@ -23,6 +23,12 @@ fn main() -> Result<(), std::io::Error> {
         println!("cargo:rustc-cdylib-link-arg=-Wl,--defsym=mmap=fil_mmap_impl");
         println!("cargo:rustc-cdylib-link-arg=-Wl,--defsym=mmap64=fil_mmap_impl");
     };
+
+    #[cfg(target_os = "macos")]
+    {
+        // Symbols we want to be visible:
+        println!("cargo:rust-cdylib-link-arg=-Wl,-exported_symbols_list,exported_symbols.txt");
+    }
 
     cc::Build::new()
         .file("src/_filpreload.c")
