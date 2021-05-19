@@ -5,18 +5,16 @@ MAKEFLAGS += --warn-undefined-variables
 MAKEFLAGS += --no-builtin-rules
 
 .PHONY: build
-build: target/release/libpymemprofile_api.a
+build:
 	pip install -e .
-	rm -rf build/
-	python setup.py build_ext --inplace
 	python setup.py install_data
 
-target/release/libpymemprofile_api.a: Cargo.lock memapi/Cargo.toml memapi/src/*.rs
-	cargo build --release
+target/release/libfilpreload.so: Cargo.lock memapi/Cargo.toml memapi/src/*.rs filpreload/src/*.rs filpreload/src/*.c
+	eval `python cflags.py` && cd filpreload && cargo build --release
 
 venv:
 	python3 -m venv venv/
-	venv/bin/pip install --upgrade pip setuptools
+	venv/bin/pip install --upgrade pip setuptools setuptools-rust
 
 .PHONY: test
 test:
@@ -25,8 +23,8 @@ test:
 
 .PHONY: test-rust
 test-rust:
-	cd memapi && env RUST_BACKTRACE=1 cargo test --no-default-features
-	cd filpreload && env RUST_BACKTRACE=1 cargo test --no-default-features
+	cd memapi && env RUST_BACKTRACE=1 cargo test
+	cd filpreload && eval `python ../cflags.py` && env RUST_BACKTRACE=1 cargo test --no-default-features
 
 .PHONY: test-python
 test-python: build

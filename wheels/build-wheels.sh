@@ -1,8 +1,13 @@
 #!/bin/bash
 set -euo pipefail
+
 mkdir /tmp/home
 mkdir /tmp/wheel
 export HOME=/tmp/home
+
+curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain stable -y
+export PATH="$HOME/.cargo/bin:$PATH"
+
 cd /src
 mkdir -p dist
 
@@ -12,13 +17,10 @@ rm -f filprofiler/_filpreload*.so
 rm -f filprofiler/_filpreload*.dylib
 rm -rf build
 
-/opt/python/cp36-cp36m/bin/python3 setup.py bdist_wheel -d /tmp/wheel
-
-/opt/python/cp37-cp37m/bin/python3 setup.py bdist_wheel -d /tmp/wheel
-
-/opt/python/cp38-cp38/bin/python3 setup.py bdist_wheel -d /tmp/wheel
-
-/opt/python/cp39-cp39/bin/python3 setup.py bdist_wheel -d /tmp/wheel
+for PYBIN in /opt/python/cp{36,37,38,39}*/bin; do
+    "${PYBIN}/pip" install -U setuptools wheel setuptools-rust
+    "${PYBIN}/python" setup.py bdist_wheel -d /tmp/wheel
+done
 
 auditwheel repair --plat manylinux2010_x86_64 -w dist/ /tmp/wheel/filprofiler*cp36*whl
 auditwheel repair --plat manylinux2010_x86_64 -w dist/ /tmp/wheel/filprofiler*cp37*whl

@@ -1,0 +1,19 @@
+# List of symbols to export for macOS. Prefixed with underscores.
+# See https://developer.apple.com/library/archive/documentation/DeveloperTools/Conceptual/DynamicLibraries/100-Articles/DynamicLibraryDesignGuidelines.html
+_register_fil_tracer
+_calloc
+_realloc
+_malloc
+_free
+_mmap
+_mmap64
+_munmap
+_posix_memalign
+_aligned_alloc
+_pthread_create
+_fork
+_fil_initialize_from_python
+_fil_start_tracking
+_fil_reset
+_fil_stop_tracking
+_fil_dump_peak_to_flamegraph

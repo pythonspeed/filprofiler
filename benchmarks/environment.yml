@@ -8,3 +8,5 @@ dependencies:
   - c-compiler=1.1.3
   - valgrind=3.15.0
   - rust=1.48.0
+  - setuptools-rust=0.12.1
+  - pip=21.1.1

@@ -176,33 +176,33 @@ fn dump_peak_to_flamegraph(path: &str) {
 }
 
 #[no_mangle]
-pub extern "C" fn pymemprofile_add_allocation(address: usize, size: usize, line_number: u16) {
+extern "C" fn pymemprofile_add_allocation(address: usize, size: usize, line_number: u16) {
     add_allocation(address, size, line_number, false).unwrap_or(());
 }
 
 #[no_mangle]
-pub extern "C" fn pymemprofile_free_allocation(address: usize) {
+extern "C" fn pymemprofile_free_allocation(address: usize) {
     free_allocation(address);
 }
 
 /// Returns allocation size, or 0 if not stored. Useful for tests, mostly.
 #[no_mangle]
-pub extern "C" fn pymemprofile_get_allocation_size(address: usize) -> usize {
+extern "C" fn pymemprofile_get_allocation_size(address: usize) -> usize {
     get_allocation_size(address)
 }
 
 #[no_mangle]
-pub extern "C" fn pymemprofile_add_anon_mmap(address: usize, size: usize, line_number: u16) {
+extern "C" fn pymemprofile_add_anon_mmap(address: usize, size: usize, line_number: u16) {
     add_allocation(address, size, line_number, true).unwrap_or(());
 }
 
 #[no_mangle]
-pub extern "C" fn pymemprofile_free_anon_mmap(address: usize, length: usize) {
+extern "C" fn pymemprofile_free_anon_mmap(address: usize, length: usize) {
     free_anon_mmap(address, length);
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn pymemprofile_add_function_location(
+unsafe extern "C" fn pymemprofile_add_function_location(
     filename: *const c_char,
     filename_length: u64,
     function_name: *const c_char,
@@ -223,7 +223,7 @@ pub unsafe extern "C" fn pymemprofile_add_function_location(
 /// # Safety
 /// Intended for use from C APIs, what can I say.
 #[no_mangle]
-pub unsafe extern "C" fn pymemprofile_start_call(
+unsafe extern "C" fn pymemprofile_start_call(
     parent_line_number: u16,
     function_id: u64,
     line_number: u16,
@@ -233,14 +233,14 @@ pub unsafe extern "C" fn pymemprofile_start_call(
 }
 
 #[no_mangle]
-pub extern "C" fn pymemprofile_finish_call() {
+extern "C" fn pymemprofile_finish_call() {
     finish_call();
 }
 
 /// # Safety
 /// Intended for use from C.
 #[no_mangle]
-pub unsafe extern "C" fn pymemprofile_reset(default_path: *const c_char) {
+unsafe extern "C" fn pymemprofile_reset(default_path: *const c_char) {
     let path = CStr::from_ptr(default_path)
         .to_str()
         .expect("Path wasn't UTF-8")
@@ -251,7 +251,7 @@ pub unsafe extern "C" fn pymemprofile_reset(default_path: *const c_char) {
 /// # Safety
 /// Intended for use from C.
 #[no_mangle]
-pub unsafe extern "C" fn pymemprofile_dump_peak_to_flamegraph(path: *const c_char) {
+unsafe extern "C" fn pymemprofile_dump_peak_to_flamegraph(path: *const c_char) {
     let path = CStr::from_ptr(path)
         .to_str()
         .expect("Path wasn't UTF-8")
@@ -262,7 +262,7 @@ pub unsafe extern "C" fn pymemprofile_dump_peak_to_flamegraph(path: *const c_cha
 /// # Safety
 /// Intended for use from C.
 #[no_mangle]
-pub unsafe extern "C" fn pymemprofile_get_current_callstack() -> *mut c_void {
+unsafe extern "C" fn pymemprofile_get_current_callstack() -> *mut c_void {
     let callstack = get_current_callstack();
     let callstack = Box::new(callstack);
     Box::into_raw(callstack) as *mut c_void
@@ -271,7 +271,7 @@ pub unsafe extern "C" fn pymemprofile_get_current_callstack() -> *mut c_void {
 /// # Safety
 /// Intended for use from C.
 #[no_mangle]
-pub unsafe extern "C" fn pymemprofile_set_current_callstack(callstack: *mut c_void) {
+unsafe extern "C" fn pymemprofile_set_current_callstack(callstack: *mut c_void) {
     // The callstack is a Box created via pymemprofile_get_callstack()
     let callstack = Box::<Callstack>::from_raw(callstack as *mut Callstack);
     set_current_callstack(&callstack);
@@ -280,7 +280,7 @@ pub unsafe extern "C" fn pymemprofile_set_current_callstack(callstack: *mut c_vo
 /// # Safety
 /// Intended for use from C.
 #[no_mangle]
-pub unsafe extern "C" fn pymemprofile_clear_current_callstack() {
+unsafe extern "C" fn pymemprofile_clear_current_callstack() {
     let callstack = Callstack::new();
     set_current_callstack(&callstack);
 }

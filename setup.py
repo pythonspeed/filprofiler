@@ -1,9 +1,12 @@
-from os import environ
+from os import environ, getcwd
 from os.path import join
 from glob import glob
-from setuptools import setup, Extension
-from distutils import sysconfig
 import sys
+
+from setuptools import setup
+from setuptools_rust import RustExtension, Binding
+
+from cflags import CFLAGS
 
 
 def read(path):
@@ -11,29 +14,16 @@ def read(path):
         return f.read()
 
 
-extra_compile_args = ["-fno-omit-frame-pointer"]
-extra_link_args = ["-export-dynamic"]
-if sys.platform == "darwin":
-    # Want a dynamiclib so that it can inserted with DYLD_INSERT_LIBRARIES:
-    config_vars = sysconfig.get_config_vars()
-    config_vars["LDSHARED"] = config_vars["LDSHARED"].replace("-bundle", "-dynamiclib")
-else:
-    # Linux
-    extra_link_args.extend(
-        [
-            # Indicate which symbols are public. macOS lld doesn't support version
-            # scripts.
-            "-Wl,--version-script=versionscript.txt",
-            # Make sure aligned_alloc() is public under its real name;
-            # workaround for old glibc headers in Conda.
-            "-Wl,--defsym=aligned_alloc=reimplemented_aligned_alloc",
-            # On 64-bit Linux, mmap() is another way of saying mmap64, or vice
-            # versa, so we point to function of our own.
-            "-Wl,--defsym=mmap=fil_mmap_impl",
-            "-Wl,--defsym=mmap64=fil_mmap_impl",
-        ]
-    )
+# Will be used by filpreload/build.rs's usage of cc to compile C code that uses
+# Python APIs.
+environ["CFLAGS"] = CFLAGS
 
+# Set public symbols to use for macOS. For some reason this doesn't work in
+# build.rs.
+if sys.platform.startswith("darwin"):
+    environ[
+        "RUSTFLAGS"
+    ] = f"-C link-arg=-Wl,-exported_symbols_list,{getcwd()}/filpreload/export_symbols.txt"
 
 setup(
     name="filprofiler",
@@ -41,15 +31,6 @@ setup(
     entry_points={
         "console_scripts": ["fil-profile=filprofiler._script:stage_1"],
     },
-    ext_modules=[
-        Extension(
-            name="filprofiler._filpreload",
-            sources=[join("filprofiler", "_filpreload.c")],
-            extra_objects=[join("target", "release", "libfilpreload.a")],
-            extra_compile_args=extra_compile_args,
-            extra_link_args=extra_link_args,
-        )
-    ],
     package_data={
         "filprofiler": ["licenses.txt"],
     },
@@ -59,10 +40,18 @@ setup(
             glob(join("data_kernelspec", "*")),
         ),
     ],
+    rust_extensions=[
+        RustExtension(
+            "filprofiler._filpreload",
+            path="filpreload/Cargo.toml",
+            debug=False,
+            binding=Binding.PyO3,
+        )
+    ],
     use_scm_version=True,
     install_requires=["threadpoolctl"],
-    setup_requires=["setuptools_scm"],
     extras_require={"dev": read("requirements-dev.txt").strip().splitlines()},
+    setup_requires=["setuptools_scm", "setuptools-rust"],
     description="A memory profiler for data batch processing applications.",
     classifiers=[
         "Intended Audience :: Developers",
