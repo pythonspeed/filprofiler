@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh -s -- --default-toolchain stable -y
+curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain stable -y
 export PATH="$HOME/.cargo/bin:$PATH"
 
 mkdir /tmp/home
