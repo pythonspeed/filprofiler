@@ -12,9 +12,6 @@ rm -f filprofiler/_filpreload*.so
 rm -f filprofiler/_filpreload*.dylib
 rm -rf build
 
-pip install setuptools_rust
-
-
 for PYBIN in /opt/python/cp{36,37,38,39}*/bin; do
     "${PYBIN}/pip" install -U setuptools wheel setuptools-rust
     "${PYBIN}/python" setup.py bdist_wheel -d /tmp/wheel
