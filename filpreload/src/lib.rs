@@ -3,7 +3,7 @@ use pymemprofile_api::memorytracking::{AllocationTracker, CallSiteId, Callstack,
 use pymemprofile_api::oom::{MemoryInfo, OutOfMemoryEstimator, RealMemoryInfo};
 use std::cell::RefCell;
 use std::ffi::CStr;
-use std::os::raw::{c_char, c_void};
+use std::os::raw::{c_char, c_int, c_void};
 
 #[macro_use]
 extern crate lazy_static;
@@ -69,7 +69,6 @@ fn set_current_callstack(callstack: &Callstack) {
 
 extern "C" {
     fn free(address: *mut c_void);
-    fn munmap(address: *mut c_void, size: usize);
 }
 
 /// Add a new allocation based off the current callstack.
@@ -106,7 +105,7 @@ fn add_allocation(
             unsafe {
                 let address = address as *mut c_void;
                 if is_mmap {
-                    munmap(address, size);
+                    (*pymemprofile_api::ffi::LIBC.munmap)(address, size);
                 } else {
                     free(address);
                 }
@@ -154,16 +153,10 @@ fn get_allocation_size(address: usize) -> usize {
     allocations.get_allocation_size(address)
 }
 
-/// Free an anonymous mmap().
-fn free_anon_mmap(address: usize, length: usize) {
-    let mut tracker_state = TRACKER_STATE.lock();
-
-    let allocations = &mut tracker_state.allocations;
-    allocations.free_anon_mmap(address, length);
-}
-
 /// Reset internal state.
 fn reset(default_path: String) {
+    // Make sure we initialize this static, to prevent deadlocks:
+    pymemprofile_api::ffi::initialize();
     let mut tracker_state = TRACKER_STATE.lock();
     tracker_state.allocations.reset(default_path);
 }
@@ -194,11 +187,6 @@ extern "C" fn pymemprofile_get_allocation_size(address: usize) -> usize {
 #[no_mangle]
 extern "C" fn pymemprofile_add_anon_mmap(address: usize, size: usize, line_number: u16) {
     add_allocation(address, size, line_number, true).unwrap_or(());
-}
-
-#[no_mangle]
-extern "C" fn pymemprofile_free_anon_mmap(address: usize, length: usize) {
-    free_anon_mmap(address, length);
 }
 
 #[no_mangle]
@@ -283,4 +271,58 @@ unsafe extern "C" fn pymemprofile_set_current_callstack(callstack: *mut c_void) 
 unsafe extern "C" fn pymemprofile_clear_current_callstack() {
     let callstack = Callstack::new();
     set_current_callstack(&callstack);
+}
+
+/// # A start at implementing public API from Rust
+
+/// Convert pointer into Rust closure.
+extern "C" fn trampoline<F>(user_data: *mut c_void)
+where
+    F: FnMut(),
+{
+    let user_data = unsafe { &mut *(user_data as *mut F) };
+    user_data();
+}
+
+/// C APIs in _filpreload.c.
+type CCallback = extern "C" fn(*mut c_void);
+extern "C" {
+    // Call function conditonally in non-reentrant way.
+    fn call_if_tracking(f: CCallback, user_data: *mut c_void) -> c_void;
+
+    // Return whether C code has initialized.
+    fn is_initialized() -> c_int;
+}
+
+struct FilMmapAPI;
+
+impl pymemprofile_api::mmap::MmapAPI for FilMmapAPI {
+    fn call_if_tracking<F: FnMut()>(&self, mut f: F) {
+        unsafe { call_if_tracking(trampoline::<F>, &mut f as *mut _ as *mut c_void) };
+    }
+
+    fn remove_mmap(&self, address: usize, length: usize) {
+        let mut tracker_state = TRACKER_STATE.lock();
+
+        let allocations = &mut tracker_state.allocations;
+        allocations.free_anon_mmap(address, length);
+    }
+
+    fn is_initialized(&self) -> bool {
+        return unsafe { is_initialized() == 1 };
+    }
+}
+
+/// On macOS we're using reimplemented_* prefix.
+#[cfg(target_os = "macos")]
+#[no_mangle]
+pub extern "C" fn reimplemented_munmap(addr: *mut c_void, len: usize) -> c_int {
+    return pymemprofile_api::mmap::munmap_wrapper(addr, len, FilMmapAPI {});
+}
+
+/// On Linux we're using same name as the API we're replacing.
+#[cfg(target_os = "linux")]
+#[no_mangle]
+pub extern "C" fn munmap(addr: *mut c_void, len: usize) -> c_int {
+    return pymemprofile_api::mmap::munmap_wrapper(addr, len, FilMmapAPI {});
 }
