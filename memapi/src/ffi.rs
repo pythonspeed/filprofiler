@@ -45,11 +45,9 @@ pub struct Libc {
 }
 
 #[cfg(target_os = "macos")]
-pub static LIBC: Lazy<Libc> = Lazy::new(|| unsafe {
-    Libc {
-        mmap: libc::mmap,
-        munmap: libc::munmap,
-    }
+pub static LIBC: Lazy<Libc> = Lazy::new(|| Libc {
+    mmap: libc::mmap,
+    munmap: libc::munmap,
 });
 
 // We're only loading thread-safe libc APIs.

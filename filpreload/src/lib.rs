@@ -105,7 +105,7 @@ fn add_allocation(
             unsafe {
                 let address = address as *mut c_void;
                 if is_mmap {
-                    (*pymemprofile_api::ffi::LIBC.munmap)(address, size);
+                    (pymemprofile_api::ffi::LIBC.munmap)(address, size);
                 } else {
                     free(address);
                 }
