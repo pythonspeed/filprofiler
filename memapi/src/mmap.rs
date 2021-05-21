@@ -32,5 +32,5 @@ pub fn munmap_wrapper<A: MmapAPI>(addr: *mut c_void, len: usize, api: A) -> c_in
     // If munmap() fails the above removal is wrong, but that's highly unlikley
     // to happen, and we want to prevent a threading race condition so need to
     // remove tracking metdata first.
-    unsafe { (*LIBC.munmap)(addr, len) }
+    unsafe { (LIBC.munmap)(addr, len) }
 }

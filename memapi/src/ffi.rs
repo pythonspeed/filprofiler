@@ -1,5 +1,9 @@
 // Calls into libc.
-use libc::{c_int, c_void, off64_t, size_t};
+#[cfg(target_os = "linux")]
+use libc::off64_t as off_t;
+#[cfg(target_os = "macos")]
+use libc::off_t;
+use libc::{c_int, c_void, size_t};
 use libloading::os::unix::{Library, Symbol};
 use once_cell::sync::Lazy;
 
@@ -9,7 +13,7 @@ type Mmap = unsafe extern "C" fn(
     prot: c_int,
     flags: c_int,
     fd: c_int,
-    offset: off64_t,
+    offset: off_t,
 ) -> *mut c_void;
 
 type Munmap = unsafe extern "C" fn(addr: *mut c_void, length: usize) -> c_int;
@@ -43,7 +47,7 @@ pub struct Libc {
 #[cfg(target_os = "macos")]
 pub static LIBC: Lazy<Libc> = Lazy::new(|| unsafe {
     Libc {
-        mmap: libc::mmap64,
+        mmap: libc::mmap,
         munmap: libc::munmap,
     }
 });
