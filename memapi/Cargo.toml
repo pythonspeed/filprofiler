@@ -35,3 +35,4 @@ cgroups-rs = "0.2.3"
 
 [dev-dependencies]
 proptest = "1.0.0"
+proc-maps = "0.1.8"
