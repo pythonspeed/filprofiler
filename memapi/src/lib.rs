@@ -1,4 +1,6 @@
+pub mod ffi;
 pub mod memorytracking;
+pub mod mmap;
 pub mod oom;
 mod python;
 mod rangemap;

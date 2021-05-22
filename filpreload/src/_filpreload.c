@@ -34,7 +34,6 @@
 // Underlying APIs we're wrapping:
 static void *(*underlying_real_mmap)(void *addr, size_t length, int prot,
                                      int flags, int fd, off_t offset) = 0;
-static int (*underlying_real_munmap)(void *addr, size_t length) = 0;
 static int (*underlying_real_pthread_create)(pthread_t *thread,
                                              const pthread_attr_t *attr,
                                              void *(*start_routine)(void *),
@@ -168,11 +167,6 @@ static void __attribute__((constructor)) constructor() {
   underlying_real_mmap = dlsym(RTLD_NEXT, "mmap");
   if (!underlying_real_mmap) {
     fprintf(stderr, "Couldn't load mmap(): %s\n", dlerror());
-    exit(1);
-  }
-  underlying_real_munmap = dlsym(RTLD_NEXT, "munmap");
-  if (!underlying_real_munmap) {
-    fprintf(stderr, "Couldn't load munmap(): %s\n", dlerror());
     exit(1);
   }
   underlying_real_pthread_create = dlsym(RTLD_NEXT, "pthread_create");
@@ -470,28 +464,6 @@ SYMBOL_PREFIX(mmap)(void *addr, size_t length, int prot, int flags, int fd,
 }
 #endif
 
-__attribute__((visibility("default"))) int SYMBOL_PREFIX(munmap)(
-      void *addr, size_t length) {
-    if (unlikely(!initialized)) {
-#ifdef __APPLE__
-    return munmap(addr, length);
-#else
-    return syscall(SYS_munmap, addr, length);
-#endif
-  }
-
-  if (should_track_memory()) {
-    set_will_i_be_reentrant(1);
-    pymemprofile_free_anon_mmap((size_t)addr, length);
-    set_will_i_be_reentrant(0);
-  }
-
-  // if munmap() fails the above removal is worng, but that's highly unlikely,
-  // and we want to prevent threading race condition so need to remove metadata
-  // first.
-  return underlying_real_munmap(addr, length);
-}
-
 // Old glibc that Conda uses defines aligned_alloc() using inline that doesn't
 // match this signature, which messes up the SYMBOL_PREFIX() stuff on Linux. So,
 // we do reimplemented_aligned_alloc, the name macOS technique uses, and then
@@ -567,6 +539,7 @@ SYMBOL_PREFIX(pthread_create)(pthread_t *thread, const pthread_attr_t *attr,
 }
 
 #ifdef __APPLE__
+extern int reimplemented_munmap(void *addr, size_t length);
 DYLD_INTERPOSE(SYMBOL_PREFIX(malloc), malloc)
 DYLD_INTERPOSE(SYMBOL_PREFIX(calloc), calloc)
 DYLD_INTERPOSE(SYMBOL_PREFIX(realloc), realloc)
@@ -578,3 +551,20 @@ DYLD_INTERPOSE(SYMBOL_PREFIX(posix_memalign), posix_memalign)
 DYLD_INTERPOSE(SYMBOL_PREFIX(pthread_create), pthread_create)
 DYLD_INTERPOSE(SYMBOL_PREFIX(fork), fork)
 #endif
+
+
+/////// RUST API ///////////
+
+// Call a function in non-reentrant way. For use from Rust code.
+void call_if_tracking(void (*f)(void *), void *user_data) {
+  if (should_track_memory()) {
+    set_will_i_be_reentrant(1);
+    f(user_data);
+    set_will_i_be_reentrant(0);
+  }
+}
+
+// Expose initialized to Rust()
+int is_initialized() {
+  return initialized;
+}
