@@ -42,7 +42,7 @@ pub struct FunctionLocations {
 
 impl FunctionLocations {
     /// Create a new tracker.
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             functions: Vec::with_capacity(8192),
         }
