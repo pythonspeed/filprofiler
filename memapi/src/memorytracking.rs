@@ -4,9 +4,9 @@ use ahash::RandomState as ARandomState;
 use im::Vector as ImVector;
 use inferno::flamegraph;
 use itertools::Itertools;
-use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
+use std::{borrow::Cow, io::Write};
 use std::{collections::HashMap, io::Read};
 use std::{fs, io::Seek};
 
@@ -222,16 +222,16 @@ impl<'a> CallstackInterner {
     /// Add a (possibly) new Function, returning its ID.
     pub fn get_or_insert_id<F: FnOnce() -> ()>(
         &mut self,
-        callstack: Callstack,
+        callstack: Cow<Callstack>,
         call_on_new: F,
     ) -> CallstackId {
         let max_id = &mut self.max_id;
-        if let Some(result) = self.callstack_to_id.get(&callstack) {
+        if let Some(result) = self.callstack_to_id.get(&*callstack) {
             *result
         } else {
             let new_id = *max_id;
             *max_id += 1;
-            self.callstack_to_id.insert(callstack, new_id);
+            self.callstack_to_id.insert(callstack.into_owned(), new_id);
             call_on_new();
             new_id
         }
@@ -424,7 +424,9 @@ impl<'a> AllocationTracker {
     pub fn get_callstack_id(&mut self, callstack: &Callstack) -> CallstackId {
         let current_memory_usage = &mut self.current_memory_usage;
         self.interner
-            .get_or_insert_id(callstack.clone(), || current_memory_usage.push_back(0))
+            .get_or_insert_id(Cow::Borrowed(callstack), || {
+                current_memory_usage.push_back(0)
+            })
     }
 
     /// Add a new allocation based off the current callstack.
@@ -821,6 +823,7 @@ mod tests {
     use im;
     use itertools::Itertools;
     use proptest::prelude::*;
+    use std::borrow::Cow;
     use std::collections::HashMap;
 
     proptest! {
@@ -833,6 +836,7 @@ mod tests {
 
         // Allocation sizes larger than 2 ** 31 are stored as MiBs, with some
         // loss of resolution.
+
         #[test]
         fn large_allocation(size in (HIGH_32BIT as usize)..(1 << 50)) {
             let allocation = Allocation::new(0, size as usize);
@@ -1009,23 +1013,23 @@ mod tests {
         let mut interner = CallstackInterner::new();
 
         let mut new = false;
-        let id1 = interner.get_or_insert_id(cs1.clone(), || new = true);
+        let id1 = interner.get_or_insert_id(Cow::Borrowed(&cs1), || new = true);
         assert!(new);
 
         new = false;
-        let id1b = interner.get_or_insert_id(cs1b.clone(), || new = true);
+        let id1b = interner.get_or_insert_id(Cow::Borrowed(&cs1b), || new = true);
         assert!(!new);
 
         new = false;
-        let id2 = interner.get_or_insert_id(cs2.clone(), || new = true);
+        let id2 = interner.get_or_insert_id(Cow::Borrowed(&cs2), || new = true);
         assert!(new);
 
         new = false;
-        let id3 = interner.get_or_insert_id(cs3.clone(), || new = true);
+        let id3 = interner.get_or_insert_id(Cow::Borrowed(&cs3), || new = true);
         assert!(new);
 
         new = false;
-        let id3b = interner.get_or_insert_id(cs3b.clone(), || new = true);
+        let id3b = interner.get_or_insert_id(Cow::Borrowed(&cs3b), || new = true);
         assert!(!new);
 
         assert_eq!(id1, id1b);
@@ -1045,35 +1049,44 @@ mod tests {
         let mut interner = CallstackInterner::new();
 
         let mut cs1 = Callstack::new();
-        let id0 = cs1.id_for_new_allocation(0, |cs| interner.get_or_insert_id(cs.clone(), || ()));
-        let id0b = cs1.id_for_new_allocation(0, |cs| interner.get_or_insert_id(cs.clone(), || ()));
+        let id0 =
+            cs1.id_for_new_allocation(0, |cs| interner.get_or_insert_id(Cow::Borrowed(&cs), || ()));
+        let id0b =
+            cs1.id_for_new_allocation(0, |cs| interner.get_or_insert_id(Cow::Borrowed(&cs), || ()));
         assert_eq!(id0, id0b);
 
         let fid1 = FunctionId::new(1u32);
 
         cs1.start_call(0, CallSiteId::new(fid1, 2));
-        let id1 = cs1.id_for_new_allocation(1, |cs| interner.get_or_insert_id(cs.clone(), || ()));
-        let id2 = cs1.id_for_new_allocation(2, |cs| interner.get_or_insert_id(cs.clone(), || ()));
-        let id1b = cs1.id_for_new_allocation(1, |cs| interner.get_or_insert_id(cs.clone(), || ()));
+        let id1 =
+            cs1.id_for_new_allocation(1, |cs| interner.get_or_insert_id(Cow::Borrowed(&cs), || ()));
+        let id2 =
+            cs1.id_for_new_allocation(2, |cs| interner.get_or_insert_id(Cow::Borrowed(&cs), || ()));
+        let id1b =
+            cs1.id_for_new_allocation(1, |cs| interner.get_or_insert_id(Cow::Borrowed(&cs), || ()));
         assert_eq!(id1, id1b);
         assert_ne!(id2, id0);
         assert_ne!(id2, id1);
 
         cs1.start_call(3, CallSiteId::new(fid1, 2));
-        let id3 = cs1.id_for_new_allocation(4, |cs| interner.get_or_insert_id(cs.clone(), || ()));
+        let id3 =
+            cs1.id_for_new_allocation(4, |cs| interner.get_or_insert_id(Cow::Borrowed(&cs), || ()));
         assert_ne!(id3, id0);
         assert_ne!(id3, id1);
         assert_ne!(id3, id2);
 
         cs1.finish_call();
-        let id2b = cs1.id_for_new_allocation(2, |cs| interner.get_or_insert_id(cs.clone(), || ()));
+        let id2b =
+            cs1.id_for_new_allocation(2, |cs| interner.get_or_insert_id(Cow::Borrowed(&cs), || ()));
         assert_eq!(id2, id2b);
-        let id1c = cs1.id_for_new_allocation(1, |cs| interner.get_or_insert_id(cs.clone(), || ()));
+        let id1c =
+            cs1.id_for_new_allocation(1, |cs| interner.get_or_insert_id(Cow::Borrowed(&cs), || ()));
         assert_eq!(id1, id1c);
 
         // Check for cache invalidation in start_call:
         cs1.start_call(1, CallSiteId::new(fid1, 1));
-        let id4 = cs1.id_for_new_allocation(1, |cs| interner.get_or_insert_id(cs.clone(), || ()));
+        let id4 =
+            cs1.id_for_new_allocation(1, |cs| interner.get_or_insert_id(Cow::Borrowed(&cs), || ()));
         assert_ne!(id4, id0);
         assert_ne!(id4, id1);
         assert_ne!(id4, id2);
@@ -1081,7 +1094,8 @@ mod tests {
 
         // Check for cache invalidation in finish_call:
         cs1.finish_call();
-        let id1d = cs1.id_for_new_allocation(1, |cs| interner.get_or_insert_id(cs.clone(), || ()));
+        let id1d =
+            cs1.id_for_new_allocation(1, |cs| interner.get_or_insert_id(Cow::Borrowed(&cs), || ()));
         assert_eq!(id1, id1d);
     }
 
