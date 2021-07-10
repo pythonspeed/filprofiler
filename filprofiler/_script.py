@@ -216,16 +216,8 @@ def stage_2():
             PARSER.print_help()
             sys.exit(2)
         script = rest[0]
-        # Make directory where script is importable:
-        sys.path.insert(0, dirname(abspath(script)))
-        with open(script, "rb") as script_file:
-            code = compile(script_file.read(), script, "exec")
-        globals_ = {
-            "__file__": script,
-            "__name__": "__main__",
-            "__package__": None,
-            "__cached__": None,
-        }
+        code = "run_path(script_path, run_name='__main__')"
+        globals_ = {"run_path": runpy.run_path, "script_path": script}
 
     # Only import here since we don't want the parent process accessing any of
     # the _filpread.so code.
