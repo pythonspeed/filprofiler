@@ -193,13 +193,10 @@ def test_minus_m():
     script = (dir / "malloc.py").absolute()
     output_dir = profile("-m", "malloc", "--size", "50", cwd=dir)
     allocations = get_allocations(output_dir)
-    stripped_allocations = {k[3:]: v for (k, v) in allocations.items()}
     script = str(script)
     path = ((script, "<module>", 32), (script, "main", 28))
 
-    assert match(stripped_allocations, {path: big}, as_mb) == pytest.approx(
-        50 + 10, 0.1
-    )
+    assert match(allocations, {path: big}, as_mb) == pytest.approx(50 + 10, 0.1)
 
 
 def test_minus_m_minus_m():
@@ -225,13 +222,10 @@ def test_minus_m_minus_m():
         cwd=dir,
     )
     allocations = get_allocations(output_dir)
-    stripped_allocations = {k[3:]: v for (k, v) in allocations.items()}
     script = str(script)
     path = ((script, "<module>", 32), (script, "main", 28))
 
-    assert match(stripped_allocations, {path: big}, as_mb) == pytest.approx(
-        50 + 10, 0.1
-    )
+    assert match(allocations, {path: big}, as_mb) == pytest.approx(50 + 10, 0.1)
 
 
 def test_ld_preload_disabled_for_subprocesses():
