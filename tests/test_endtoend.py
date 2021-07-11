@@ -13,7 +13,7 @@ from glob import glob
 from xml.etree import ElementTree
 
 import numpy.core.numeric
-from pampy import match, _ as ANY
+from pampy import match, _ as ANY, MatchError
 import pytest
 import psutil
 
@@ -469,15 +469,24 @@ def test_jupyter(tmpdir):
 
     # Allocations were tracked:
     allocations = get_allocations(output_dir)
-    print(allocations)
     path = (
-        (re.compile("<ipython-input-3-.*"), "__magic_run_with_fil", 3),
-        (re.compile("<ipython-input-2-.*"), "alloc", 4),
+        (re.compile(".*ipy*"), "__magic_run_with_fil", 3),
+        (re.compile(".*ipy.*"), "alloc", 4),
         (numpy.core.numeric.__file__, "ones", ANY),
     )
     assert match(allocations, {path: big}, as_mb) == pytest.approx(48, 0.1)
+    actual_path = None
+    for key in allocations:
+        try:
+            match(key, path, lambda x: x)
+        except MatchError:
+            continue
+        else:
+            actual_path = key
+    assert actual_path != None
+    assert actual_path[0][0] != actual_path[1][0]  # code is in different cells
     path2 = (
-        (re.compile("<ipython-input-3-.*"), "__magic_run_with_fil", 2),
+        (re.compile(".*ipy.*"), "__magic_run_with_fil", 2),
         (numpy.core.numeric.__file__, "ones", ANY),
     )
     assert match(allocations, {path2: big}, as_mb) == pytest.approx(20, 0.1)
