@@ -10,8 +10,7 @@ auditwheel
 twine
 ipython
 ipykernel
-# nbconvert 6 can't be used temporarily due to https://github.com/jupyter/nbconvert/issues/1440
-nbconvert<6
+nbconvert
 numexpr
 blosc
 psutil

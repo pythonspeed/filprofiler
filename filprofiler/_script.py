@@ -208,8 +208,8 @@ def stage_2():
             sys.exit(2)
         module = arguments.rest[1]
         sys.argv = [module] + arguments.rest[2:]
-        code = "run_module(module_name, run_name='__main__')"
-        globals_ = {"run_module": runpy.run_module, "module_name": module}
+        function = runpy.run_module
+        func_args = (module,)
     else:
         sys.argv = rest = arguments.rest
         if len(rest) == 0:
@@ -218,14 +218,10 @@ def stage_2():
         script = rest[0]
         # Make directory where script is importable:
         sys.path.insert(0, dirname(abspath(script)))
-        with open(script, "rb") as script_file:
-            code = compile(script_file.read(), script, "exec")
-        globals_ = {
-            "__file__": script,
-            "__name__": "__main__",
-            "__package__": None,
-            "__cached__": None,
-        }
+        function = runpy.run_path
+        func_args = (script,)
+
+    func_kwargs = {"run_name": "__main__"}
 
     # Only import here since we don't want the parent process accessing any of
     # the _filpread.so code.
@@ -244,7 +240,13 @@ def stage_2():
     if not exists(arguments.output_path):
         makedirs(arguments.output_path)
 
-    trace_until_exit(code, globals_, arguments.output_path, not arguments.no_browser)
+    trace_until_exit(
+        function,
+        func_args,
+        func_kwargs,
+        arguments.output_path,
+        not arguments.no_browser,
+    )
 
 
 if __name__ == "__main__":

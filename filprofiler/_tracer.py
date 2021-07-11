@@ -102,10 +102,9 @@ def create_report(output_path: Union[str, Path]) -> str:
     return render_report(output_path, now)
 
 
-def trace_until_exit(code, globals_, output_path: str, open_browser: bool):
+def trace_until_exit(function, args, kwargs, output_path: str, open_browser: bool):
     """
-    Given code (Python or code object), run it under the tracer until the
-    program exits.
+    Given function, run it under the tracer until the program exits.
     """
 
     def shutdown():
@@ -131,7 +130,7 @@ def trace_until_exit(code, globals_, output_path: str, open_browser: bool):
     atexit.register(shutdown)
     with disable_thread_pools():
         start_tracing(os.path.join(output_path, timestamp_now()))
-        exec(code, globals_, None)
+        function(*args, **kwargs)
 
 
 @contextmanager

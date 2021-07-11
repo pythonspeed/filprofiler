@@ -1,0 +1,1 @@
+Emulate Python's module running code more faithfully, to enable profiling things like Apache Beam.

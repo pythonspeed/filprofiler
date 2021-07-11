@@ -1,3 +1,5 @@
+use crate::python::get_runpy_path;
+
 use super::rangemap::RangeMap;
 use super::util::new_hashmap;
 use ahash::RandomState as ARandomState;
@@ -155,52 +157,76 @@ impl Callstack {
         separator: &'static str,
     ) -> String {
         if self.calls.is_empty() {
-            "[No Python stack]".to_string()
+            return "[No Python stack]".to_string();
+        }
+        let calls: Vec<(CallSiteId, (&str, &str))> = self
+            .calls
+            .iter()
+            .map(|id| (*id, functions.get_function_and_filename(id.function)))
+            .collect();
+        let skip_prefix = if cfg!(feature = "production") {
+            0
         } else {
-            self.calls
-                .iter()
-                .map(|id| {
-                    let (function, filename) = functions.get_function_and_filename(id.function);
-                    if to_be_post_processed {
-                        // Get Python code.
-                        let code = crate::python::get_source_line(filename, id.line_number)
-                            .unwrap_or_else(|_| "".to_string());
-                        // Leading whitespace is dropped by SVG, so we'd like to
-                        // replace it with non-breaking space. However, inferno
-                        // trims whitespace
-                        // (https://github.com/jonhoo/inferno/blob/de3f7d94d4718bfee57655c1fddd4d2714bc78d0/src/flamegraph/merge.rs#L126)
-                        // and that causes incorrect "unsorted lines" errors
-                        // which I can't be bothered to fix right now, so for
-                        // now do hack where we shove in some other character
-                        // that can be fixed in post-processing.
-                        let code = code.replace(" ", "\u{12e4}");
-                        // Semicolons are used as separator in the flamegraph
-                        // input format, so need to replace them with some other
-                        // character. We use "full-width semicolon", and then
-                        // replace it back in post-processing.
-                        let code = code.replace(";", "\u{ff1b}");
-                        // The \u{2800} is to ensure we don't have empty lines,
-                        // and that whitespace doesn't get trimmed from start;
-                        // we'll get rid of this in post-processing.
-                        format!(
-                            "{filename}:{line} ({function});\u{2800}{code}",
-                            filename = filename,
-                            line = id.line_number,
-                            function = function,
-                            code = &code.trim_end(),
-                        )
-                    } else {
-                        format!(
-                            "{filename}:{line} ({function})",
-                            filename = filename,
-                            line = id.line_number,
-                            function = function,
-                        )
-                    }
-                })
-                .join(separator)
+            // Due to implementation details we have some runpy() frames at the
+            // start; remove them.
+            runpy_prefix_length(calls.iter())
+        };
+        calls
+            .into_iter()
+            .skip(skip_prefix)
+            .map(|(id, (function, filename))| {
+                if to_be_post_processed {
+                    // Get Python code.
+                    let code = crate::python::get_source_line(filename, id.line_number)
+                        .unwrap_or_else(|_| "".to_string());
+                    // Leading whitespace is dropped by SVG, so we'd like to
+                    // replace it with non-breaking space. However, inferno
+                    // trims whitespace
+                    // (https://github.com/jonhoo/inferno/blob/de3f7d94d4718bfee57655c1fddd4d2714bc78d0/src/flamegraph/merge.rs#L126)
+                    // and that causes incorrect "unsorted lines" errors
+                    // which I can't be bothered to fix right now, so for
+                    // now do hack where we shove in some other character
+                    // that can be fixed in post-processing.
+                    let code = code.replace(" ", "\u{12e4}");
+                    // Semicolons are used as separator in the flamegraph
+                    // input format, so need to replace them with some other
+                    // character. We use "full-width semicolon", and then
+                    // replace it back in post-processing.
+                    let code = code.replace(";", "\u{ff1b}");
+                    // The \u{2800} is to ensure we don't have empty lines,
+                    // and that whitespace doesn't get trimmed from start;
+                    // we'll get rid of this in post-processing.
+                    format!(
+                        "{filename}:{line} ({function});\u{2800}{code}",
+                        filename = filename,
+                        line = id.line_number,
+                        function = function,
+                        code = &code.trim_end(),
+                    )
+                } else {
+                    format!(
+                        "{filename}:{line} ({function})",
+                        filename = filename,
+                        line = id.line_number,
+                        function = function,
+                    )
+                }
+            })
+            .join(separator)
+    }
+}
+
+fn runpy_prefix_length(calls: std::slice::Iter<(CallSiteId, (&str, &str))>) -> usize {
+    let mut length = 0;
+    let runpy_path = get_runpy_path();
+    for (_, (_, filename)) in calls {
+        if *filename == runpy_path {
+            length += 1;
+        } else {
+            return length;
         }
     }
+    0
 }
 
 pub type CallstackId = u32;
