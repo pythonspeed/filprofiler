@@ -164,7 +164,7 @@ impl Callstack {
             .iter()
             .map(|id| (*id, functions.get_function_and_filename(id.function)))
             .collect();
-        let skip_prefix = if cfg!(production) {
+        let skip_prefix = if cfg!(feature = "production") {
             0
         } else {
             // Due to implementation details we have some runpy() frames at the
