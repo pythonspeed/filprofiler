@@ -346,14 +346,16 @@ def get_systemd_run_args(available_memory):
         "--gid",
         str(os.getegid()),
         "-p",
-        f"MemoryLimit={available_memory // 2}B",
+        f"MemoryLimit={available_memory // 4}B",
+        "--scope",
+        "--same-dir",
     ]
     try:
         check_call(args + ["--user", "printf", "hello"])
-        args += ["--user", "--scope"]
+        args += ["--user"]
     except CalledProcessError:
         # cgroups v1 doesn't do --user :(
-        args = ["sudo", "--preserve-env=PATH"] + args + ["-t", "--same-dir"]
+        args = ["sudo", "--preserve-env=PATH"] + args
     return args
 
 
