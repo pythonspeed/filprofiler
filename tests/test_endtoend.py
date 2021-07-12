@@ -305,6 +305,27 @@ def test_out_of_memory_slow_leak():
     assert match(allocations, {expected_alloc: big}, as_mb) > 100
 
 
+@pytest.mark.skipif(
+    shutil.which("systemd-run") is None or glibc_version() < (2, 30),
+    reason="systemd-run not found, or old systemd probably",
+)
+def test_out_of_memory_detection_disabled():
+    """
+    If out-of-memory detection is disabled, we won't catch problems, the OS will.
+    """
+    available_memory = psutil.virtual_memory().available
+    script = TEST_SCRIPTS / "oom-slow.py"
+    try:
+        check_call(
+            get_systemd_run_args(available_memory // 4)
+            + ["fil-profile", "--disable-oom-detection", "run", str(script)]
+        )
+    except CalledProcessError as e:
+        assert e.returncode == -9  # killed by OS
+    else:
+        assert False, "process succeeded?!"
+
+
 def get_systemd_run_args(available_memory):
     """
     Figure out if we're on system with cgroups v2, or not, and return
@@ -319,14 +340,16 @@ def get_systemd_run_args(available_memory):
         "--gid",
         str(os.getegid()),
         "-p",
-        f"MemoryLimit={available_memory // 2}B",
+        f"MemoryLimit={available_memory // 4}B",
+        "--scope",
+        "--same-dir",
     ]
     try:
         check_call(args + ["--user", "printf", "hello"])
-        args += ["--user", "--scope"]
+        args += ["--user"]
     except CalledProcessError:
         # cgroups v1 doesn't do --user :(
-        args = ["sudo", "--preserve-env=PATH"] + args + ["-t", "--same-dir"]
+        args = ["sudo", "--preserve-env=PATH"] + args
     return args
 
 

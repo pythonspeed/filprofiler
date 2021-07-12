@@ -30,18 +30,18 @@ pub trait MemoryInfo {
 /// Second, we probably don't want to check every time, that's expensive. So
 /// check every 1% of allocations remaining until we run out of available memory
 /// (we don't even check for free()s, which just means more frequent checks).
-pub struct OutOfMemoryEstimator<M: MemoryInfo> {
+pub struct OutOfMemoryEstimator {
     // How many bytes it takes until we check again: whenever it's reset, it
     // starts as 1% of available memory.
     check_threshold_bytes: usize,
     // Minimum number of bytes we want to be available at any time.
     minimal_required_available_bytes: usize,
     // Pluggable way to get memory usage of the system and process.
-    pub memory_info: M,
+    pub memory_info: Box<dyn MemoryInfo + Sync + Send>,
 }
 
-impl<M: MemoryInfo> OutOfMemoryEstimator<M> {
-    pub fn new(memory_info: M) -> Self {
+impl OutOfMemoryEstimator {
+    pub fn new(memory_info: Box<dyn MemoryInfo + Sync + Send>) -> Self {
         Self {
             check_threshold_bytes: 0,
             // Either 100MB or 2% of available memory, whatever is bigger.
@@ -124,6 +124,10 @@ impl<M: MemoryInfo> OutOfMemoryEstimator<M> {
             debug_assert!(self.check_threshold_bytes < current_threshold);
             return false;
         }
+    }
+
+    pub fn print_info(&self) {
+        self.memory_info.print_info();
     }
 }
 
@@ -266,12 +270,35 @@ impl MemoryInfo for RealMemoryInfo {
     }
 }
 
+// Used to disable out-of-memory heuristic.
+pub struct InfiniteMemory {}
+
+impl MemoryInfo for InfiniteMemory {
+    fn total_memory(&self) -> usize {
+        2usize.pow(48u32)
+    }
+
+    fn get_available_memory(&self) -> usize {
+        2usize.pow(48u32)
+    }
+
+    fn get_resident_process_memory(&self) -> usize {
+        0
+    }
+
+    /// Print debugging info to stderr.
+    fn print_info(&self) {
+        eprintln!("=fil-profile= Out of memory detection is disabled.");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{MemoryInfo, OutOfMemoryEstimator};
     use proptest::prelude::*;
     use std::cell::Ref;
     use std::cell::RefCell;
+    use std::sync::Arc;
 
     struct FakeMemory {
         available_memory: RefCell<usize>,
@@ -280,12 +307,12 @@ mod tests {
     }
 
     impl FakeMemory {
-        fn new() -> Self {
-            FakeMemory {
+        fn new() -> Arc<Self> {
+            Arc::new(FakeMemory {
                 available_memory: RefCell::new(1_000_000_000),
                 checks: RefCell::new(vec![]),
                 swap: RefCell::new(0),
-            }
+            })
         }
 
         fn allocate(&self, size: usize) {
@@ -302,11 +329,11 @@ mod tests {
         }
 
         fn get_allocated(&self) -> usize {
-            self.total_memory() - *self.available_memory.borrow()
+            1_000_000_000 - *self.available_memory.borrow()
         }
     }
 
-    impl MemoryInfo for FakeMemory {
+    impl MemoryInfo for Arc<FakeMemory> {
         fn total_memory(&self) -> usize {
             1_000_000_000
         }
@@ -325,19 +352,24 @@ mod tests {
         fn print_info(&self) {}
     }
 
-    fn setup_estimator() -> OutOfMemoryEstimator<FakeMemory> {
+    unsafe impl Sync for FakeMemory {}
+
+    fn setup_estimator() -> (OutOfMemoryEstimator, Arc<FakeMemory>) {
         let fake_memory = FakeMemory::new();
-        OutOfMemoryEstimator::new(fake_memory)
+        (
+            OutOfMemoryEstimator::new(Box::new(fake_memory.clone())),
+            fake_memory,
+        )
     }
 
     proptest! {
         // Random allocations don't break invariants
         #[test]
         fn not_oom(allocated_sizes in prop::collection::vec(1..1000 as usize, 10..2000)) {
-            let mut estimator = setup_estimator();
+            let (mut estimator, memory_info) = setup_estimator();
             let mut allocated = 0;
             for size in allocated_sizes {
-                estimator.memory_info.allocate(size);
+                memory_info.allocate(size);
                 allocated += size;
                 let too_big = estimator.too_big_allocation(size, allocated);
                 prop_assert_eq!(too_big, estimator.memory_info.get_available_memory() <= estimator.minimal_required_available_bytes);
@@ -351,51 +383,48 @@ mod tests {
     // We're out of memory if we're below the threshold.
     #[test]
     fn oom_threshold() {
-        let mut estimator = setup_estimator();
-        assert!(!estimator.are_we_oom(estimator.memory_info.get_allocated()));
-        estimator.memory_info.allocate(500_000_000);
-        assert!(!estimator.are_we_oom(estimator.memory_info.get_allocated()));
-        estimator.memory_info.allocate(350_000_000);
-        assert!(!estimator.are_we_oom(estimator.memory_info.get_allocated()));
-        estimator.memory_info.allocate(50_000_000);
+        let (mut estimator, memory_info) = setup_estimator();
+        assert!(!estimator.are_we_oom(memory_info.get_allocated()));
+        memory_info.allocate(500_000_000);
+        assert!(!estimator.are_we_oom(memory_info.get_allocated()));
+        memory_info.allocate(350_000_000);
+        assert!(!estimator.are_we_oom(memory_info.get_allocated()));
+        memory_info.allocate(50_000_000);
         // Now that we're below the maximum, we've gone too far:
-        assert!(estimator.are_we_oom(estimator.memory_info.get_allocated()));
-        estimator.memory_info.allocate(40_000_000);
-        assert!(estimator.are_we_oom(estimator.memory_info.get_allocated()));
+        assert!(estimator.are_we_oom(memory_info.get_allocated()));
+        memory_info.allocate(40_000_000);
+        assert!(estimator.are_we_oom(memory_info.get_allocated()));
     }
 
     // We're out of memory if swap > available.
     #[test]
     fn oom_swap() {
-        let mut estimator = setup_estimator();
-        estimator.memory_info.allocate(500_000_001);
-        assert!(!estimator.are_we_oom(estimator.memory_info.get_allocated()));
+        let (mut estimator, memory_info) = setup_estimator();
+        memory_info.allocate(500_000_001);
+        assert!(!estimator.are_we_oom(memory_info.get_allocated()));
 
-        estimator.memory_info.add_swap(499_999_999);
-        assert!(!estimator.are_we_oom(estimator.memory_info.get_allocated()));
+        memory_info.add_swap(499_999_999);
+        assert!(!estimator.are_we_oom(memory_info.get_allocated()));
 
-        estimator.memory_info.add_swap(2);
-        assert!(estimator.are_we_oom(estimator.memory_info.get_allocated()));
+        memory_info.add_swap(2);
+        assert!(estimator.are_we_oom(memory_info.get_allocated()));
     }
 
     // The intervals between checking if out-of-memory shrink as we get closer
     // to running out of memory
     #[test]
     fn oom_estimator_shrinking_intervals() {
-        let mut estimator = setup_estimator();
+        let (mut estimator, memory_info) = setup_estimator();
         loop {
-            {
-                let memory = &mut estimator.memory_info;
-                memory.allocate(10_000);
-            }
-            if estimator.too_big_allocation(10_000, estimator.memory_info.get_allocated()) {
+            memory_info.allocate(10_000);
+
+            if estimator.too_big_allocation(10_000, memory_info.get_allocated()) {
                 break;
             }
             // by 100MB we should have detected OOM.
-            assert!(*(&estimator.memory_info).available_memory.borrow() >= 99_000_000);
+            assert!(*memory_info.available_memory.borrow() >= 99_000_000);
         }
-        let fake_memory = estimator.memory_info;
-        let checks = fake_memory.get_checks();
+        let checks = memory_info.get_checks();
         // Each check should come closer than the next:
         for pair in checks.windows(2) {
             assert!(pair[0] >= pair[1], "{} vs {}", pair[0], pair[1]);

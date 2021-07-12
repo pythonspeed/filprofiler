@@ -228,7 +228,12 @@ Fil uses three heuristics to determine if the process is close to running out of
 * The operating system or memory-limited cgroup (e.g. a Docker container) only has 100MB of RAM available.
 * The process swap is larger than available memory, indicating heavy swapping by the process.
   In general you want to avoid swapping, and e.g. [explicitly use `mmap()`](https://pythonspeed.com/articles/mmap-vs-zarr-hdf5/) if you expect to be using disk as a backfill for memory.
-  
+
+#### Disabling the out-of-memory detection
+
+Sometimes the out-of-memory detection heuristic will kick in too soon, shutting down the program even though in practice it could finish running.
+You can disable the heuristic by doing `fil-profile --disable-oom-detection run yourprogram.py`.
+
 ## <a name="reducing-memory-usage">Reducing memory usage in your code</a>
 
 You've found where memory usage is coming from—now what?
