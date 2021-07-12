@@ -1,6 +1,6 @@
 use parking_lot::Mutex;
 use pymemprofile_api::memorytracking::{AllocationTracker, CallSiteId, Callstack, FunctionId};
-use pymemprofile_api::oom::{MemoryInfo, OutOfMemoryEstimator, RealMemoryInfo};
+use pymemprofile_api::oom::{InfiniteMemory, OutOfMemoryEstimator, RealMemoryInfo};
 use std::cell::RefCell;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_void};
@@ -18,14 +18,20 @@ static GLOBAL: Jemalloc = Jemalloc;
 thread_local!(static THREAD_CALLSTACK: RefCell<Callstack> = RefCell::new(Callstack::new()));
 
 struct TrackerState {
-    oom: OutOfMemoryEstimator<RealMemoryInfo>,
+    oom: OutOfMemoryEstimator,
     allocations: AllocationTracker,
 }
 
 lazy_static! {
     static ref TRACKER_STATE: Mutex<TrackerState> = Mutex::new(TrackerState {
         allocations: AllocationTracker::new("/tmp".to_string()),
-        oom: OutOfMemoryEstimator::new(RealMemoryInfo::new()),
+        oom: OutOfMemoryEstimator::new(
+            if std::env::var("__FIL_DISABLE_OOM_DETECTION") == Ok("1".to_string()) {
+                Box::new(InfiniteMemory {})
+            } else {
+                Box::new(RealMemoryInfo::new())
+            }
+        ),
     });
 }
 
@@ -113,7 +119,7 @@ fn add_allocation(
         }
         tracker_state.allocations.oom_break_glass();
         eprintln!("=fil-profile= WARNING: Detected out-of-memory condition, exiting soon.");
-        tracker_state.oom.memory_info.print_info();
+        tracker_state.oom.print_info();
     }
 
     let allocations = &mut tracker_state.allocations;

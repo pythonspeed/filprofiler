@@ -30,18 +30,18 @@ pub trait MemoryInfo {
 /// Second, we probably don't want to check every time, that's expensive. So
 /// check every 1% of allocations remaining until we run out of available memory
 /// (we don't even check for free()s, which just means more frequent checks).
-pub struct OutOfMemoryEstimator<M: MemoryInfo> {
+pub struct OutOfMemoryEstimator {
     // How many bytes it takes until we check again: whenever it's reset, it
     // starts as 1% of available memory.
     check_threshold_bytes: usize,
     // Minimum number of bytes we want to be available at any time.
     minimal_required_available_bytes: usize,
     // Pluggable way to get memory usage of the system and process.
-    pub memory_info: M,
+    pub memory_info: Box<dyn MemoryInfo + Sync + Send>,
 }
 
-impl<M: MemoryInfo> OutOfMemoryEstimator<M> {
-    pub fn new(memory_info: M) -> Self {
+impl OutOfMemoryEstimator {
+    pub fn new(memory_info: Box<dyn MemoryInfo + Sync + Send>) -> Self {
         Self {
             check_threshold_bytes: 0,
             // Either 100MB or 2% of available memory, whatever is bigger.
@@ -124,6 +124,10 @@ impl<M: MemoryInfo> OutOfMemoryEstimator<M> {
             debug_assert!(self.check_threshold_bytes < current_threshold);
             return false;
         }
+    }
+
+    pub fn print_info(&self) {
+        self.memory_info.print_info();
     }
 }
 
@@ -263,6 +267,28 @@ impl MemoryInfo for RealMemoryInfo {
             "=fil-profile= Process memory info: {:?}",
             self.process.memory_info()
         );
+    }
+}
+
+// Used to disable out-of-memory heuristic.
+pub struct InfiniteMemory {}
+
+impl MemoryInfo for InfiniteMemory {
+    fn total_memory(&self) -> usize {
+        2usize.pow(48u32)
+    }
+
+    fn get_available_memory(&self) -> usize {
+        2usize.pow(48u32)
+    }
+
+    fn get_resident_process_memory(&self) -> usize {
+        0
+    }
+
+    /// Print debugging info to stderr.
+    fn print_info(&self) {
+        eprintln!("=fil-profile= Out of memory detection is disabled.");
     }
 }
 
