@@ -323,7 +323,7 @@ def test_out_of_memory_detection_disabled():
     script = TEST_SCRIPTS / "oom-slow.py"
     try:
         check_call(
-            get_systemd_run_args(available_memory)
+            get_systemd_run_args(available_memory // 4)
             + ["fil-profile", "--disable-oom-detection", "run", str(script)]
         )
     except CalledProcessError as e:
