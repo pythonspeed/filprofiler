@@ -1,4 +1,18 @@
-# Fil 2021.05.0 (2021-05-06)
+# Fil 2021.7.0 (2021-07-12)
+
+
+### Features
+
+- Added a `--disable-oom-detection` to disable the out-of-memory detection heuristic. ([#201](https://github.com/pythonspeed/filprofiler/issues/201))
+
+
+### Bugfixes
+
+- When using the Jupyter `%%filprofile` magic, locals defined in the cell are now stored in the Jupyter session as usual. ([#167](https://github.com/pythonspeed/filprofiler/issues/167))
+- Emulate Python's module running code more faithfully, to enable profiling things like Apache Beam. ([#202](https://github.com/pythonspeed/filprofiler/issues/202))
+
+
+# Fil 2021.5.0 (2021-05-06)
 
 
 ### Bugfixes
@@ -6,7 +20,7 @@
 - Fixed bug where certain allocations went missing during thread creation and cleanup. ([#179](https://github.com/pythonspeed/filprofiler/issues/179))
 
 
-# Fil 2021.04.4 (2021-04-28)
+# Fil 2021.4.4 (2021-04-28)
 
 
 ### Bugfixes
@@ -14,7 +28,7 @@
 - Fixed race condition in threads that resulting in wrong allocation being removed in the tracking code. ([#175](https://github.com/pythonspeed/filprofiler/issues/175))
 
 
-# Fil 2021.04.3 (2021-04-15)
+# Fil 2021.4.3 (2021-04-15)
 
 
 ### Bugfixes
@@ -22,7 +36,7 @@
 - **Major bugfix:** mmap() was usually not added correctly on Linux, and when it was, munmap() was ignored. ([#161](https://github.com/pythonspeed/filprofiler/issues/161))
 
 
-# Fil 2021.04.2 (2021-04-14)
+# Fil 2021.4.2 (2021-04-14)
 
 
 ### Features
@@ -37,7 +51,7 @@
 - Fixed potential problem with threads noticing profiling is enabled. ([#156](https://github.com/pythonspeed/filprofiler/issues/156))
 
 
-# Fil 2021.04.1 (2021-04-08)
+# Fil 2021.4.1 (2021-04-08)
 
 
 ### Bugfixes
@@ -45,13 +59,13 @@
 - Fixed bug where reverse SVG sometimes was generated empty, e.g. if source code used tabs. ([#150](https://github.com/pythonspeed/filprofiler/issues/150))
 
 
-# Fil 2021.04.0 (2021-04-01)
+# Fil 2021.4.0 (2021-04-01)
 
 ### Bugfixes
 - Fil no longer blows up if checking cgroup memory is not possible, e.g. on CentOS 7. ([#147](https://github.com/pythonspeed/filprofiler/issues/147))
 
 
-# Fil 2021.03.0 (2021-03-19)
+# Fil 2021.3.0 (2021-03-19)
 
 ### Features
 
