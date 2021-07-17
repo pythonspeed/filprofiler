@@ -24,6 +24,8 @@ fn main() -> Result<(), std::io::Error> {
         println!("cargo:rustc-cdylib-link-arg=-Wl,--defsym=mmap64=fil_mmap_impl");
     };
 
+    // Compilation options are taken from CFLAGS environment variable set in
+    // setup.py based on Python's build configuration.
     cc::Build::new()
         .file("src/_filpreload.c")
         .compile("_filpreload");
