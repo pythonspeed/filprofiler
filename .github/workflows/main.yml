@@ -73,7 +73,7 @@ jobs:
             deactivate
             python3.8 -m venv venv2
             . venv2/bin/activate
-            pip install -e .[dev]
+            pip install -r requirements-dev.txt
             pip install dist/*38*manylinux*.whl
             mv filprofiler filprofiler.disabled
             make test-python-no-deps
