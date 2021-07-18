@@ -1,1 +1,0 @@
-Fixed segfault on some Linux versions (regression in release 2021.7.0).

@@ -1,3 +1,11 @@
+# Fil 2021.7.1 (2021-07-18)
+
+
+### Bugfixes
+
+- Fixed segfault on some Linux versions (regression in release 2021.7.0). ([#208](https://github.com/pythonspeed/filprofiler/issues/208))
+
+
 # Fil 2021.7.0 (2021-07-12)
 
 
