@@ -377,11 +377,9 @@ pub struct AllocationTracker {
     default_path: String,
 
     // Allocations that somehow disappeared. Not relevant for sampling profiler.
-    #[cfg(not(feature = "fil4prod"))]
     missing_allocated_bytes: usize,
 
     // free()/realloc() of unknown address. Not relevant for sampling profiler.
-    #[cfg(not(feature = "fil4prod"))]
     failed_deallocations: usize,
 }
 
