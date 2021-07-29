@@ -164,7 +164,7 @@ impl Callstack {
             .iter()
             .map(|id| (*id, functions.get_function_and_filename(id.function)))
             .collect();
-        let skip_prefix = if cfg!(feature = "production") {
+        let skip_prefix = if cfg!(feature = "fil4prod") {
             0
         } else {
             // Due to implementation details we have some runpy() frames at the
@@ -377,11 +377,11 @@ pub struct AllocationTracker {
     default_path: String,
 
     // Allocations that somehow disappeared. Not relevant for sampling profiler.
-    #[cfg(not(feature = "production"))]
+    #[cfg(not(feature = "fil4prod"))]
     missing_allocated_bytes: usize,
 
     // free()/realloc() of unknown address. Not relevant for sampling profiler.
-    #[cfg(not(feature = "production"))]
+    #[cfg(not(feature = "fil4prod"))]
     failed_deallocations: usize,
 }
 
@@ -463,7 +463,7 @@ impl<'a> AllocationTracker {
             // In production use (proposed commercial product) allocations are
             // only sampled, so missing allocations are common and not the sign
             // of an error.
-            #[cfg(not(feature = "production"))]
+            #[cfg(not(feature = "fil4prod"))]
             {
                 // I've seen this happen on macOS only in some threaded code
                 // (malloc_on_thread_exit test). Not sure why, but difference was
@@ -504,7 +504,7 @@ impl<'a> AllocationTracker {
             // This allocation doesn't exist; often this will be something
             // allocated before Fil tracking was started, but it might also be a
             // bug.
-            #[cfg(not(feature = "production"))]
+            #[cfg(not(feature = "fil4prod"))]
             if *crate::util::DEBUG_MODE {
                 self.failed_deallocations += 1;
                 eprintln!(
@@ -596,7 +596,7 @@ impl<'a> AllocationTracker {
         to_be_post_processed: bool,
     ) {
         // Print warning if we're missing allocations.
-        #[cfg(not(feature = "production"))]
+        #[cfg(not(feature = "fil4prod"))]
         {
             let allocated_bytes = if peak {
                 self.peak_allocated_bytes
