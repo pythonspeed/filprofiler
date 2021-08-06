@@ -1212,6 +1212,7 @@ mod tests {
 
     #[test]
     fn combine_callstacks_and_sum_allocations() {
+        pyo3::prepare_freethreaded_python();
         let mut tracker = AllocationTracker::new(".".to_string());
         let fid1 = tracker
             .functions
