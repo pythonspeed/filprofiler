@@ -63,6 +63,14 @@ jobs:
             set -euo pipefail
             . venv/bin/activate
             make wheel
+            # Test wheel
+            deactivate
+            python -m venv venv2
+            . venv2/bin/activate
+            pip install -r requirements-dev.txt
+            pip install dist/*.whl
+            mv filprofiler filprofiler.disabled
+            make test-python-no-deps
       - name: "Build manylinux wheel"
         if: startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.8')
         run: |
