@@ -10,12 +10,72 @@ on:
     branches: ["master"]
 
 jobs:
-  tests:
+  macos:
     name: "${{ matrix.os }}: Python ${{ matrix.python-version }}"
     strategy:
       matrix:
         python-version: ["3.6", "3.7", "3.8", "3.9"]
-        os: ["ubuntu-20.04", "macos-latest"]
+        os: ["macos-latest"]
+
+    runs-on: "macos-latest"
+
+    env:
+      PYTHONFAULTHANDLER: "true"
+
+    steps:
+      - uses: "actions/checkout@v2"
+        with:
+          # We need tags to get the correct code version:
+          fetch-depth: 0
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          auto-update-conda: true
+          mamba-version: "*"
+          python-version: ${{ matrix.python-version }}
+          activate-environment: ""  # i.e. don't activate
+      - name: "Install dependencies and code"
+        run: |
+          set -euo pipefail
+          mamba activate test
+          mamba install -c conda-forge setuptools-rust rust gfortran
+          gfortran --version
+          make
+          pip install -e .[dev]
+      - name: "Run tests"
+        run: |
+          set -euo pipefail
+          conda activate test
+          make test
+      # Use Conda, so wheel works on older macOS
+      - name: "Build wheel"
+        run: |
+          set -euo pipefail
+          conda activate test
+          make wheel
+      - uses: "actions/setup-python@v2"
+        with:
+          python-version: "${{ matrix.python-version }}"
+      # This time use GHA's Python, for variety of testing
+      - name: "Test wheel"
+        run: |
+            set -euo pipefail
+            python -m venv venv2
+            . venv2/bin/activate
+            pip install -r requirements-dev.txt
+            pip install dist/*.whl
+            mv filprofiler filprofiler.disabled
+            make test-python-no-deps
+      - uses: actions/upload-artifact@v2
+        with:
+          name: "wheels"
+          path: dist/*.whl
+
+  linux:
+    name: "${{ matrix.os }}: Python ${{ matrix.python-version }}"
+    strategy:
+      matrix:
+        python-version: ["3.6", "3.7", "3.8", "3.9"]
+        os: ["ubuntu-20.04"]
 
     runs-on: "${{ matrix.os }}"
 
@@ -34,17 +94,9 @@ jobs:
         with:
           toolchain: stable
       - name: "Install gfortran"
-        if: contains(matrix.os, 'ubuntu')
         run: |
             sudo apt-get update
             sudo apt-get install -y gfortran
-      - name: Install gfortran 2
-        if: contains(matrix.os, 'macos')
-        run: |
-          set -euo pipefail
-          brew install gcc@9 || true
-          gfortran --version || sudo ln -s /usr/local/bin/gfortran-9 /usr/local/bin/gfortran
-          gfortran --version
       - name: "Install dependencies and code"
         run: |
           set -euo pipefail
@@ -57,20 +109,6 @@ jobs:
           set -euo pipefail
           . venv/bin/activate
           make test
-      - name: "Build wheel"
-        if: startsWith(matrix.os, 'mac')
-        run: |
-            set -euo pipefail
-            . venv/bin/activate
-            make wheel
-            # Test wheel
-            deactivate
-            python -m venv venv2
-            . venv2/bin/activate
-            pip install -r requirements-dev.txt
-            pip install dist/*.whl
-            mv filprofiler filprofiler.disabled
-            make test-python-no-deps
       - name: "Build manylinux wheel"
         if: startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.8')
         run: |
@@ -87,8 +125,34 @@ jobs:
             make test-python-no-deps
       - uses: actions/upload-artifact@v2
         with:
-          name: "${{ matrix.os }}-${{ matrix.python-version }}-wheel"
+          name: "wheels"
           path: dist/*.whl
+
+  pypi:
+    name: "Upload to PyPI"
+    needs:
+      - linux
+      - macos
+    runs-on: "ubuntu-latest"
+
+    steps:
+      - uses: "actions/setup-python@v2"
+        with:
+          python-version: "3.9"
+      - uses: actions/download-artifact@v2
+        with:
+          name: "wheels"
+          path: dist
+      - name: Publish distribution 📦 to PyPI
+        if: startsWith(github.event.ref, 'refs/tags')
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: |
+            set -euo pipefail
+            pip install twine
+            twine check dist/*.whl
+            twine upload --repository pypi dist/*.whl
       # - name: Publish distribution 📦 to Test PyPI
       #   if: (startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.8')) || startsWith(matrix.os, 'mac')
       #   env:
@@ -99,13 +163,3 @@ jobs:
       #       . venv/bin/activate
       #       twine check dist/*.whl
       #       twine upload --repository testpypi dist/*.whl
-      - name: Publish distribution 📦 to PyPI
-        if: startsWith(github.event.ref, 'refs/tags') && ((startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.8')) || startsWith(matrix.os, 'mac'))
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
-        run: |
-            set -euo pipefail
-            . venv/bin/activate
-            twine check dist/*.whl
-            twine upload --repository pypi dist/*.whl
