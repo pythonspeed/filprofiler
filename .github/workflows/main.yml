@@ -35,13 +35,18 @@ jobs:
         with:
           auto-update-conda: true
           activate-environment: ""  # i.e. don't activate
+      - name: Install gfortran 2
+        run: |
+          set -euo pipefail
+          brew install gcc@9 || true
+          gfortran --version || sudo ln -s /usr/local/bin/gfortran-9 /usr/local/bin/gfortran
+          gfortran --version
       - name: "Install dependencies and code"
         run: |
           set -euo pipefail
           conda create -n test
           conda activate test
-          conda install -c conda-forge python=${{ matrix.python-version }} setuptools-rust rust gfortran clang<12
-          gfortran --version
+          conda install -c conda-forge python=${{ matrix.python-version }} setuptools-rust rust clang<12
           make
           pip install -e .[dev]
       - name: "Run tests"
