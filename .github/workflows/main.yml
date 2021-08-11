@@ -31,13 +31,12 @@ jobs:
         with:
           auto-update-conda: true
           mamba-version: "*"
-          python-version: ${{ matrix.python-version }}
           activate-environment: ""  # i.e. don't activate
       - name: "Install dependencies and code"
         run: |
           set -euo pipefail
           mamba activate test
-          mamba install -c conda-forge setuptools-rust rust gfortran
+          mamba install -c conda-forge python=${{ matrix.python-version }} setuptools-rust rust gfortran
           gfortran --version
           make
           pip install -e .[dev]
