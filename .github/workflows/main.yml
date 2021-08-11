@@ -31,6 +31,9 @@ jobs:
         with:
           auto-update-conda: true
           activate-environment: ""  # i.e. don't activate
+      - name: "Install Conda bash settings"
+        run: |
+          conda init bash
       - name: "Install dependencies and code"
         run: |
           set -euo pipefail
