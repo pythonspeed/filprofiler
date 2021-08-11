@@ -30,13 +30,12 @@ jobs:
       - uses: conda-incubator/setup-miniconda@v2
         with:
           auto-update-conda: true
-          mamba-version: "*"
           activate-environment: ""  # i.e. don't activate
       - name: "Install dependencies and code"
         run: |
           set -euo pipefail
-          mamba activate test
-          mamba install -c conda-forge python=${{ matrix.python-version }} setuptools-rust rust gfortran
+          conda activate test
+          conda install -c conda-forge python=${{ matrix.python-version }} setuptools-rust rust gfortran
           gfortran --version
           make
           pip install -e .[dev]
