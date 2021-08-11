@@ -40,7 +40,7 @@ jobs:
           set -euo pipefail
           conda create -n test
           conda activate test
-          conda install -c conda-forge python=${{ matrix.python-version }} setuptools-rust rust gfortran cmake
+          conda install -c conda-forge python=${{ matrix.python-version }} setuptools-rust rust gfortran clang<12
           gfortran --version
           make
           pip install -e .[dev]
