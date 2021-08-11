@@ -38,6 +38,7 @@ jobs:
       - name: "Install dependencies and code"
         run: |
           set -euo pipefail
+          conda create -n test
           conda activate test
           conda install -c conda-forge python=${{ matrix.python-version }} setuptools-rust rust gfortran
           gfortran --version
