@@ -27,6 +27,6 @@ def main():
     result = pymalloc(size * MB)
     result = pyrealloc(result, (size + 10) * MB)  # <-- peak
     result = pyrealloc(result, (size - 5) * MB)
-
+    assert sys.modules["__main__"].main is main  # Make sure __main__ is correct.
 
 main()

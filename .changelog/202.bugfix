@@ -1,0 +1,1 @@
+Fix Apache Beam (and other libraries that depend on pickling `__main__` module) when using `filprofile run -m`.
