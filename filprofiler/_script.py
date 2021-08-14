@@ -229,6 +229,7 @@ def stage_2():
         sys.argv = [module] + arguments.rest[2:]
         function = runpy.run_module
         func_args = (module,)
+        func_kwargs = {"run_name": "__main__", "alter_sys": True}
     else:
         sys.argv = rest = arguments.rest
         if len(rest) == 0:
@@ -239,8 +240,7 @@ def stage_2():
         sys.path.insert(0, dirname(abspath(script)))
         function = runpy.run_path
         func_args = (script,)
-
-    func_kwargs = {"run_name": "__main__"}
+        func_kwargs = {"run_name": "__main__"}
 
     # Only import here since we don't want the parent process accessing any of
     # the _filpread.so code.
