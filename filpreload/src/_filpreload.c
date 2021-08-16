@@ -70,26 +70,28 @@ static void make_pthread_key() {
   pthread_key_create(&will_i_be_reentrant, (void *)0);
 }
 
+// 0 means not reentrant, other values means it is.
 static inline uint64_t am_i_reentrant() {
   (void)pthread_once(&will_i_be_reentrant_once, make_pthread_key);
-  return (int)pthread_getspecific(will_i_be_reentrant) > 0;
+  return (int)pthread_getspecific(will_i_be_reentrant);
 }
 
 static inline void increment_reentrancy() {
   int current = (int) pthread_getspecific(will_i_be_reentrant);
-  pthread_setspecific(will_i_be_reentrant, (void *)current + 1);
+  pthread_setspecific(will_i_be_reentrant, (void *)(current + 1));
 }
 
 static inline void decrement_reentrancy() {
   int current = (int)pthread_getspecific(will_i_be_reentrant);
-  pthread_setspecific(will_i_be_reentrant, (void *)current - 1);
+  pthread_setspecific(will_i_be_reentrant, (void *)(current - 1));
 }
 
 #elif __linux__
 #include <sys/syscall.h>
 static _Thread_local uint64_t will_i_be_reentrant = 0;
 
-static inline bool am_i_reentrant() { return will_i_be_reentrant > 0; }
+// 0 means not reentrant, other values means it is.
+static inline uint64_t am_i_reentrant() { return will_i_be_reentrant; }
 
 static inline void increment_reentrancy() { will_i_be_reentrant += 1; }
 static inline void decrement_reentrancy() { will_i_be_reentrant -= 1; }
@@ -293,13 +295,11 @@ __attribute__((visibility("default"))) void register_fil_tracer() {
 /// Dump the current peak memory usage to disk.
 __attribute__((visibility("default"))) void
 fil_dump_peak_to_flamegraph(const char *path) {
-  // This maybe called after we're done, when will_i_be_reentrant is permanently
-  // set to 1, or might be called mid-way through code run. Either way we want
-  // to prevent reentrant malloc() calls, but we want to run regardless.
-  int current_reentrant_status = am_i_reentrant();
+  // We want to prevent reentrant malloc() calls, but we want to run regardless
+  // of whether this particular call is reentrant.
   increment_reentrancy();
   pymemprofile_dump_peak_to_flamegraph(path);
-  set_will_i_be_reentrant(current_reentrant_status);
+  decrement_reentrancy();
 }
 
 // *** End APIs called by Python ***
