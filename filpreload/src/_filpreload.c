@@ -13,6 +13,7 @@
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 // Macro to create the publicly exposed symbol:
 #ifdef __APPLE__
@@ -69,37 +70,31 @@ static void make_pthread_key() {
   pthread_key_create(&will_i_be_reentrant, (void *)0);
 }
 
+// 0 means not reentrant, other values means it is.
 static inline uint64_t am_i_reentrant() {
   (void)pthread_once(&will_i_be_reentrant_once, make_pthread_key);
   return (int)pthread_getspecific(will_i_be_reentrant);
 }
 
-static inline void set_will_i_be_reentrant(uint64_t i) {
-  pthread_setspecific(will_i_be_reentrant, (void *)i);
+static inline void increment_reentrancy() {
+  int current = (int) pthread_getspecific(will_i_be_reentrant);
+  pthread_setspecific(will_i_be_reentrant, (void *)(current + 1));
 }
 
-static inline uint64_t maybe_set_reentrant_linux() {}
-static inline maybe_restore_reentrant_linux(uint64_t i) {}
+static inline void decrement_reentrancy() {
+  int current = (int)pthread_getspecific(will_i_be_reentrant);
+  pthread_setspecific(will_i_be_reentrant, (void *)(current - 1));
+}
+
 #elif __linux__
 #include <sys/syscall.h>
 static _Thread_local uint64_t will_i_be_reentrant = 0;
 
+// 0 means not reentrant, other values means it is.
 static inline uint64_t am_i_reentrant() { return will_i_be_reentrant; }
 
-static inline void set_will_i_be_reentrant(uint64_t i) { will_i_be_reentrant = i; }
-
-// On Linux we're using jemalloc, which can do mmap() calls, so if we're not
-// already being reentrant we want to make sure that mmap() doesn't get
-// double-counted.
-static inline uint64_t maybe_set_reentrant_linux() {
-  uint64_t currently = will_i_be_reentrant;
-  will_i_be_reentrant = 1;
-  return currently;
-}
-
-static inline void maybe_restore_reentrant_linux(uint64_t i) {
-  will_i_be_reentrant = i;
-}
+static inline void increment_reentrancy() { will_i_be_reentrant += 1; }
+static inline void decrement_reentrancy() { will_i_be_reentrant -= 1; }
 #endif
 
 // Return whether to pass malloc() etc. to Rust tracking code.
@@ -196,22 +191,22 @@ static void __attribute__((constructor)) constructor() {
 
 static void start_call(uint64_t function_id, uint16_t line_number) {
   if (should_track_memory()) {
-    set_will_i_be_reentrant(1);
+    increment_reentrancy();
     uint16_t parent_line_number = 0;
     if (current_frame != NULL && current_frame->f_back != NULL) {
       PyFrameObject *f = current_frame->f_back;
       parent_line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
     }
     pymemprofile_start_call(parent_line_number, function_id, line_number);
-    set_will_i_be_reentrant(0);
+    decrement_reentrancy();
   }
 }
 
 static void finish_call() {
   if (should_track_memory()) {
-    set_will_i_be_reentrant(1);
+    increment_reentrancy();
     pymemprofile_finish_call();
-    set_will_i_be_reentrant(0);
+    decrement_reentrancy();
   }
 }
 
@@ -239,9 +234,9 @@ fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
                                                      &filename_length);
       const char* function_name = PyUnicode_AsUTF8AndSize(frame->f_code->co_name,
                                                           &function_length);
-      set_will_i_be_reentrant(1);
+      increment_reentrancy();
       function_id = pymemprofile_add_function_location(filename, (uint64_t)filename_length, function_name, (uint64_t)function_length);
-      set_will_i_be_reentrant(0);
+      decrement_reentrancy();
       _PyCode_SetExtra((PyObject *)frame->f_code, extra_code_index,
                        (void *)function_id + 1);
     } else {
@@ -277,9 +272,9 @@ fil_start_tracking() {
 /// Clear previous allocations;
 __attribute__((visibility("default"))) void
 fil_reset(const char *default_path) {
-  set_will_i_be_reentrant(1);
+  increment_reentrancy();
   pymemprofile_reset(default_path);
-  set_will_i_be_reentrant(0);
+  decrement_reentrancy();
 }
 
 /// End memory tracing.
@@ -300,13 +295,11 @@ __attribute__((visibility("default"))) void register_fil_tracer() {
 /// Dump the current peak memory usage to disk.
 __attribute__((visibility("default"))) void
 fil_dump_peak_to_flamegraph(const char *path) {
-  // This maybe called after we're done, when will_i_be_reentrant is permanently
-  // set to 1, or might be called mid-way through code run. Either way we want
-  // to prevent reentrant malloc() calls, but we want to run regardless.
-  int current_reentrant_status = am_i_reentrant();
-  set_will_i_be_reentrant(1);
+  // We want to prevent reentrant malloc() calls, but we want to run regardless
+  // of whether this particular call is reentrant.
+  increment_reentrancy();
   pymemprofile_dump_peak_to_flamegraph(path);
-  set_will_i_be_reentrant(current_reentrant_status);
+  decrement_reentrancy();
 }
 
 // *** End APIs called by Python ***
@@ -351,27 +344,27 @@ __attribute__((visibility("default"))) pid_t SYMBOL_PREFIX(fork)(void) {
 // Override memory-allocation functions:
 __attribute__((visibility("default"))) void *
 SYMBOL_PREFIX(malloc)(size_t size) {
-  uint64_t currently_reentrant = maybe_set_reentrant_linux();
+  increment_reentrancy();
   void *result = REAL_IMPL(malloc)(size);
-  maybe_restore_reentrant_linux(currently_reentrant);
+  decrement_reentrancy();
   if (should_track_memory()) {
-    set_will_i_be_reentrant(1);
+    increment_reentrancy();
     add_allocation((size_t)result, size);
-    set_will_i_be_reentrant(0);
+    decrement_reentrancy();
   }
   return result;
 }
 
 __attribute__((visibility("default"))) void *
 SYMBOL_PREFIX(calloc)(size_t nmemb, size_t size) {
-  uint64_t currently_reentrant = maybe_set_reentrant_linux();
+  increment_reentrancy();
   void *result = REAL_IMPL(calloc)(nmemb, size);
-  maybe_restore_reentrant_linux(currently_reentrant);
+  decrement_reentrancy();
   size_t allocated = nmemb * size;
   if (should_track_memory()) {
-    set_will_i_be_reentrant(1);
+    increment_reentrancy();
     add_allocation((size_t)result, allocated);
-    set_will_i_be_reentrant(0);
+    decrement_reentrancy();
   }
   return result;
 }
@@ -387,32 +380,32 @@ SYMBOL_PREFIX(realloc)(void *addr, size_t size) {
   // exit with OOM report, so... not the end of the world, and unlikely in
   // practice.
   if (should_track_memory() && ((size_t)addr != 0)) {
-    set_will_i_be_reentrant(1);
+    increment_reentrancy();
     // Sometimes you'll get same address, so if we did add first and then
     // removed, it would remove the entry erroneously.
     pymemprofile_free_allocation((size_t)addr);
-    set_will_i_be_reentrant(0);
+    decrement_reentrancy();
   }
-  uint64_t currently_reentrant = maybe_set_reentrant_linux();
+  increment_reentrancy();
   void *result = REAL_IMPL(realloc)(addr, size);
-  maybe_restore_reentrant_linux(currently_reentrant);
+  decrement_reentrancy();
   if (should_track_memory()) {
-    set_will_i_be_reentrant(1);
+    increment_reentrancy();
     add_allocation((size_t)result, size);
-    set_will_i_be_reentrant(0);
+    decrement_reentrancy();
   }
   return result;
 }
 
 __attribute__((visibility("default"))) int
 SYMBOL_PREFIX(posix_memalign)(void **memptr, size_t alignment, size_t size) {
-  uint64_t currently_reentrant = maybe_set_reentrant_linux();
+  increment_reentrancy();
   int result = REAL_IMPL(posix_memalign)(memptr, alignment, size);
-  maybe_restore_reentrant_linux(currently_reentrant);
+  decrement_reentrancy();
   if (!result && should_track_memory()) {
-    set_will_i_be_reentrant(1);
+    increment_reentrancy();
     add_allocation((size_t)*memptr, size);
-    set_will_i_be_reentrant(0);
+    decrement_reentrancy();
   }
   return result;
 }
@@ -422,13 +415,13 @@ __attribute__((visibility("default"))) void SYMBOL_PREFIX(free)(void *addr) {
   // thread may allocate the same address, leading to a race condition in the
   // bookkeeping metadata.
   if (should_track_memory()) {
-    set_will_i_be_reentrant(1);
+    increment_reentrancy();
     pymemprofile_free_allocation((size_t)addr);
-    set_will_i_be_reentrant(0);
+    decrement_reentrancy();
   }
-  uint64_t currently_reentrant = maybe_set_reentrant_linux();
+  increment_reentrancy();
   REAL_IMPL(free)(addr);
-  maybe_restore_reentrant_linux(currently_reentrant);
+  decrement_reentrancy();
 }
 
 // On Linux this is exposed via --wrap, to get both mmap() and mmap64() without
@@ -449,9 +442,9 @@ fil_mmap_impl(void *addr, size_t length, int prot, int flags, int fd,
   // For now we only track anonymous mmap()s:
   if (result != MAP_FAILED && (flags & MAP_ANONYMOUS) &&
       should_track_memory()) {
-    set_will_i_be_reentrant(1);
+    increment_reentrancy();
     add_anon_mmap((size_t)result, length);
-    set_will_i_be_reentrant(0);
+    decrement_reentrancy();
   }
   return result;
 }
@@ -477,14 +470,14 @@ void *aligned_alloc(size_t alignment, size_t size);
 
 __attribute__((visibility("default"))) void *
 reimplemented_aligned_alloc(size_t alignment, size_t size) {
-  uint64_t currently_reentrant = maybe_set_reentrant_linux();
+  increment_reentrancy();
   void *result = REAL_IMPL(aligned_alloc)(alignment, size);
-  maybe_restore_reentrant_linux(currently_reentrant);
+  decrement_reentrancy();
 
   if (should_track_memory()) {
-    set_will_i_be_reentrant(1);
+    increment_reentrancy();
     add_allocation((size_t)result, size);
-    set_will_i_be_reentrant(0);
+    decrement_reentrancy();
   }
   return result;
 }
@@ -509,9 +502,9 @@ struct NewThreadArgs {
 // real starting function.
 static void *wrapper_pthread_start(void *nta) {
   struct NewThreadArgs *args = (struct NewThreadArgs *)nta;
-  set_will_i_be_reentrant(1);
+  increment_reentrancy();
   pymemprofile_set_current_callstack(args->callstack);
-  set_will_i_be_reentrant(0);
+  decrement_reentrancy();
   void *(*start_routine)(void *) = args->start_routine;
   void *arg = args->arg;
   REAL_IMPL(free)(args);
@@ -558,9 +551,9 @@ DYLD_INTERPOSE(SYMBOL_PREFIX(fork), fork)
 // Call a function in non-reentrant way. For use from Rust code.
 void call_if_tracking(void (*f)(void *), void *user_data) {
   if (should_track_memory()) {
-    set_will_i_be_reentrant(1);
+    increment_reentrancy();
     f(user_data);
-    set_will_i_be_reentrant(0);
+    decrement_reentrancy();
   }
 }
 
