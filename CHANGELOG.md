@@ -1,3 +1,12 @@
+# Fil 2021.8.0 (2021-08-17)
+
+
+### Bugfixes
+
+- Fix Apache Beam (and other libraries that depend on pickling `__main__` module) when using `filprofile run -m`. ([#202](https://github.com/pythonspeed/filprofiler/issues/202))
+- Fixed potential reentrancy bugs; unclear if this had any user-facing impacts, though. ([#215](https://github.com/pythonspeed/filprofiler/issues/215))
+
+
 # Fil 2021.7.1 (2021-07-18)
 
 

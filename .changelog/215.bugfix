@@ -1,1 +1,0 @@
-Fixed potential reentrancy bugs; unclear if this had any user-facing impacts, though.
