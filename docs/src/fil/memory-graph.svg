@@ -1,0 +1,419 @@
+<?xml version="1.0" standalone="no"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg version="1.1" width="1200" height="1688" onload="init(evt)" viewBox="0 0 1200 1688" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><!--Flame graph stack visualization. See https://github.com/brendangregg/FlameGraph for latest version, and http://www.brendangregg.com/flamegraphs.html for examples.--><!--NOTES: --><defs><linearGradient id="background" y1="0" y2="1" x1="0" x2="0"><stop stop-color="#eeeeee" offset="5%"/><stop stop-color="#eeeeb0" offset="95%"/></linearGradient></defs><style type="text/css">
+text { font-family:"mono"; font-size:16px; fill:rgb(0,0,0); }
+#title { text-anchor:middle; font-size:21px; }
+#search { opacity:0.1; cursor:pointer; }
+#search:hover, #search.show { opacity:1; }
+#subtitle { text-anchor:middle; font-color:rgb(160,160,160); }
+#unzoom { cursor:pointer; }
+#frames > *:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+.hide { display:none; }
+.parent { opacity:0.5; }
+</style><script type="text/ecmascript"><![CDATA[var nametype = 'Function:';
+var fontsize = 16;
+var fontwidth = 0.59;
+var xpad = 10;
+var inverted = true;
+var searchcolor = 'rgb(230,0,230)';
+var fluiddrawing = true;
+var truncate_text_right = false;]]><![CDATA["use strict";
+var details, searchbtn, unzoombtn, matchedtxt, svg, searching, frames;
+function init(evt) {
+    details = document.getElementById("details").firstChild;
+    searchbtn = document.getElementById("search");
+    unzoombtn = document.getElementById("unzoom");
+    matchedtxt = document.getElementById("matched");
+    svg = document.getElementsByTagName("svg")[0];
+    frames = document.getElementById("frames");
+    searching = 0;
+
+    // Use GET parameters to restore a flamegraph's state.
+    var restore_state = function() {
+        var params = get_params();
+        if (params.x && params.y)
+            zoom(find_group(document.querySelector('[x="' + params.x + '"][y="' + params.y + '"]')));
+        if (params.s)
+            search(params.s);
+    };
+
+    if (fluiddrawing) {
+        // Make width dynamic so the SVG fits its parent's width.
+        svg.removeAttribute("width");
+        // Edge requires us to have a viewBox that gets updated with size changes.
+        var isEdge = /Edge\/\d./i.test(navigator.userAgent);
+        if (!isEdge) {
+          svg.removeAttribute("viewBox");
+        }
+        var update_for_width_change = function() {
+            if (isEdge) {
+                svg.attributes.viewBox.value = "0 0 " + svg.width.baseVal.value + " " + svg.height.baseVal.value;
+            }
+
+            // Keep consistent padding on left and right of frames container.
+            frames.attributes.width.value = svg.width.baseVal.value - xpad * 2;
+
+            // Text truncation needs to be adjusted for the current width.
+            var el = frames.children;
+            for(var i = 0; i < el.length; i++) {
+                update_text(el[i]);
+            }
+
+            // Keep search elements at a fixed distance from right edge.
+            var svgWidth = svg.width.baseVal.value;
+            searchbtn.attributes.x.value = svgWidth - xpad - 100;
+            matchedtxt.attributes.x.value = svgWidth - xpad - 100;
+        };
+        window.addEventListener('resize', function() {
+            update_for_width_change();
+        });
+        // This needs to be done asynchronously for Safari to work.
+        setTimeout(function() {
+            unzoom();
+            update_for_width_change();
+            restore_state();
+        }, 0);
+    } else {
+        restore_state();
+    }
+}
+// event listeners
+window.addEventListener("click", function(e) {
+    var target = find_group(e.target);
+    if (target) {
+        if (target.nodeName == "a") {
+            if (e.ctrlKey === false) return;
+            e.preventDefault();
+        }
+        if (target.classList.contains("parent")) unzoom();
+        zoom(target);
+
+        // set parameters for zoom state
+        var el = target.querySelector("rect");
+        if (el && el.attributes && el.attributes.y && el.attributes._orig_x) {
+            var params = get_params()
+            params.x = el.attributes._orig_x.value;
+            params.y = el.attributes.y.value;
+            history.replaceState(null, null, parse_params(params));
+        }
+    }
+    else if (e.target.id == "unzoom") {
+        unzoom();
+
+        // remove zoom state
+        var params = get_params();
+        if (params.x) delete params.x;
+        if (params.y) delete params.y;
+        history.replaceState(null, null, parse_params(params));
+    }
+    else if (e.target.id == "search") search_prompt();
+}, false)
+// mouse-over for info
+// show
+window.addEventListener("mouseover", function(e) {
+    var target = find_group(e.target);
+    if (target) details.nodeValue = nametype + " " + g_to_text(target);
+}, false)
+// clear
+window.addEventListener("mouseout", function(e) {
+    var target = find_group(e.target);
+    if (target) details.nodeValue = ' ';
+}, false)
+// ctrl-F for search
+window.addEventListener("keydown",function (e) {
+    if (e.keyCode === 114 || (e.ctrlKey && e.keyCode === 70)) {
+        e.preventDefault();
+        search_prompt();
+    }
+}, false)
+// functions
+function get_params() {
+    var params = {};
+    var paramsarr = window.location.search.substr(1).split('&');
+    for (var i = 0; i < paramsarr.length; ++i) {
+        var tmp = paramsarr[i].split("=");
+        if (!tmp[0] || !tmp[1]) continue;
+        params[tmp[0]]  = decodeURIComponent(tmp[1]);
+    }
+    return params;
+}
+function parse_params(params) {
+    var uri = "?";
+    for (var key in params) {
+        uri += key + '=' + encodeURIComponent(params[key]) + '&';
+    }
+    if (uri.slice(-1) == "&")
+        uri = uri.substring(0, uri.length - 1);
+    if (uri == '?')
+        uri = window.location.href.split('?')[0];
+    return uri;
+}
+function find_child(node, selector) {
+    var children = node.querySelectorAll(selector);
+    if (children.length) return children[0];
+    return;
+}
+function find_group(node) {
+    var parent = node.parentElement;
+    if (!parent) return;
+    if (parent.id == "frames") return node;
+    return find_group(parent);
+}
+function orig_save(e, attr, val) {
+    if (e.attributes["_orig_" + attr] != undefined) return;
+    if (e.attributes[attr] == undefined) return;
+    if (val == undefined) val = e.attributes[attr].value;
+    e.setAttribute("_orig_" + attr, val);
+}
+function orig_load(e, attr) {
+    if (e.attributes["_orig_"+attr] == undefined) return;
+    e.attributes[attr].value = e.attributes["_orig_" + attr].value;
+    e.removeAttribute("_orig_" + attr);
+}
+function g_to_text(e) {
+    var text = find_child(e, "title").firstChild.nodeValue;
+    return (text)
+}
+function g_to_func(e) {
+    var func = g_to_text(e);
+    // if there's any manipulation we want to do to the function
+    // name before it's searched, do it here before returning.
+    return (func);
+}
+function update_text(e) {
+    var r = find_child(e, "rect");
+    var t = find_child(e, "text");
+    var w = parseFloat(r.attributes.width.value) * frames.attributes.width.value / 100 - 3;
+    var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+    t.attributes.x.value = format_percent((parseFloat(r.attributes.x.value) + (100 * 3 / frames.attributes.width.value)));
+    // Smaller than this size won't fit anything
+    if (w < 2 * fontsize * fontwidth) {
+        t.textContent = "";
+        return;
+    }
+    t.textContent = txt;
+    // Fit in full text width
+    if (/^ *\$/.test(txt) || t.getComputedTextLength() < w)
+        return;
+    if (truncate_text_right) {
+        // Truncate the right side of the text.
+        for (var x = txt.length - 2; x > 0; x--) {
+            if (t.getSubStringLength(0, x + 2) <= w) {
+                t.textContent = txt.substring(0, x) + "..";
+                return;
+            }
+        }
+    } else {
+        // Truncate the left side of the text.
+        for (var x = 2; x < txt.length; x++) {
+            if (t.getSubStringLength(x - 2, txt.length) <= w) {
+                t.textContent = ".." + txt.substring(x, txt.length);
+                return;
+            }
+        }
+    }
+    t.textContent = "";
+}
+// zoom
+function zoom_reset(e) {
+    if (e.attributes != undefined) {
+        orig_load(e, "x");
+        orig_load(e, "width");
+    }
+    if (e.childNodes == undefined) return;
+    for(var i = 0, c = e.childNodes; i < c.length; i++) {
+        zoom_reset(c[i]);
+    }
+}
+function zoom_child(e, x, ratio) {
+    if (e.attributes != undefined) {
+        if (e.attributes.x != undefined) {
+            orig_save(e, "x");
+            e.attributes.x.value = format_percent((parseFloat(e.attributes.x.value) - x) * ratio);
+            if (e.tagName == "text") {
+                e.attributes.x.value = format_percent(parseFloat(find_child(e.parentNode, "rect[x]").attributes.x.value) + (100 * 3 / frames.attributes.width.value));
+            }
+        }
+        if (e.attributes.width != undefined) {
+            orig_save(e, "width");
+            e.attributes.width.value = format_percent(parseFloat(e.attributes.width.value) * ratio);
+        }
+    }
+    if (e.childNodes == undefined) return;
+    for(var i = 0, c = e.childNodes; i < c.length; i++) {
+        zoom_child(c[i], x, ratio);
+    }
+}
+function zoom_parent(e) {
+    if (e.attributes) {
+        if (e.attributes.x != undefined) {
+            orig_save(e, "x");
+            e.attributes.x.value = "0.0%";
+        }
+        if (e.attributes.width != undefined) {
+            orig_save(e, "width");
+            e.attributes.width.value = "100.0%";
+        }
+    }
+    if (e.childNodes == undefined) return;
+    for(var i = 0, c = e.childNodes; i < c.length; i++) {
+        zoom_parent(c[i]);
+    }
+}
+function zoom(node) {
+    var attr = find_child(node, "rect").attributes;
+    var width = parseFloat(attr.width.value);
+    var xmin = parseFloat(attr.x.value);
+    var xmax = xmin + width;
+    var ymin = parseFloat(attr.y.value);
+    var ratio = 100 / width;
+    // XXX: Workaround for JavaScript float issues (fix me)
+    var fudge = 0.001;
+    unzoombtn.classList.remove("hide");
+    var el = frames.children;
+    for (var i = 0; i < el.length; i++) {
+        var e = el[i];
+        var a = find_child(e, "rect").attributes;
+        var ex = parseFloat(a.x.value);
+        var ew = parseFloat(a.width.value);
+        // Is it an ancestor
+        if (!inverted) {
+            var upstack = parseFloat(a.y.value) > ymin;
+        } else {
+            var upstack = parseFloat(a.y.value) < ymin;
+        }
+        if (upstack) {
+            // Direct ancestor
+            if (ex <= xmin && (ex+ew+fudge) >= xmax) {
+                e.classList.add("parent");
+                zoom_parent(e);
+                update_text(e);
+            }
+            // not in current path
+            else
+                e.classList.add("hide");
+        }
+        // Children maybe
+        else {
+            // no common path
+            if (ex < xmin || ex + fudge >= xmax) {
+                e.classList.add("hide");
+            }
+            else {
+                zoom_child(e, xmin, ratio);
+                update_text(e);
+            }
+        }
+    }
+}
+function unzoom() {
+    unzoombtn.classList.add("hide");
+    var el = frames.children;
+    for(var i = 0; i < el.length; i++) {
+        el[i].classList.remove("parent");
+        el[i].classList.remove("hide");
+        zoom_reset(el[i]);
+        update_text(el[i]);
+    }
+}
+// search
+function reset_search() {
+    var el = document.querySelectorAll("#frames rect");
+    for (var i = 0; i < el.length; i++) {
+        orig_load(el[i], "fill")
+    }
+    var params = get_params();
+    delete params.s;
+    history.replaceState(null, null, parse_params(params));
+}
+function search_prompt() {
+    if (!searching) {
+        var term = prompt("Enter a search term (regexp " +
+            "allowed, eg: ^ext4_)", "");
+        if (term != null) {
+            search(term)
+        }
+    } else {
+        reset_search();
+        searching = 0;
+        searchbtn.classList.remove("show");
+        searchbtn.firstChild.nodeValue = "Search"
+        matchedtxt.classList.add("hide");
+        matchedtxt.firstChild.nodeValue = ""
+    }
+}
+function search(term) {
+    var re = new RegExp(term);
+    var el = frames.children;
+    var matches = new Object();
+    var maxwidth = 0;
+    for (var i = 0; i < el.length; i++) {
+        var e = el[i];
+        var func = g_to_func(e);
+        var rect = find_child(e, "rect");
+        if (func == null || rect == null)
+            continue;
+        // Save max width. Only works as we have a root frame
+        var w = parseFloat(rect.attributes.width.value);
+        if (w > maxwidth)
+            maxwidth = w;
+        if (func.match(re)) {
+            // highlight
+            var x = parseFloat(rect.attributes.x.value);
+            orig_save(rect, "fill");
+            rect.attributes.fill.value = searchcolor;
+            // remember matches
+            if (matches[x] == undefined) {
+                matches[x] = w;
+            } else {
+                if (w > matches[x]) {
+                    // overwrite with parent
+                    matches[x] = w;
+                }
+            }
+            searching = 1;
+        }
+    }
+    if (!searching)
+        return;
+    var params = get_params();
+    params.s = term;
+    history.replaceState(null, null, parse_params(params));
+
+    searchbtn.classList.add("show");
+    searchbtn.firstChild.nodeValue = "Reset Search";
+    // calculate percent matched, excluding vertical overlap
+    var count = 0;
+    var lastx = -1;
+    var lastw = 0;
+    var keys = Array();
+    for (k in matches) {
+        if (matches.hasOwnProperty(k))
+            keys.push(k);
+    }
+    // sort the matched frames by their x location
+    // ascending, then width descending
+    keys.sort(function(a, b){
+        return a - b;
+    });
+    // Step through frames saving only the biggest bottom-up frames
+    // thanks to the sort order. This relies on the tree property
+    // where children are always smaller than their parents.
+    var fudge = 0.0001;    // JavaScript floating point
+    for (var k in keys) {
+        var x = parseFloat(keys[k]);
+        var w = matches[keys[k]];
+        if (x >= lastx + lastw - fudge) {
+            count += w;
+            lastx = x;
+            lastw = w;
+        }
+    }
+    // display matched percent
+    matchedtxt.classList.remove("hide");
+    var pct = 100 * count / maxwidth;
+    if (pct != 100) pct = pct.toFixed(1);
+    matchedtxt.firstChild.nodeValue = "Matched: " + pct + "%";
+}
+function format_percent(n) {
+    return n.toFixed(4) + "%";
+}
+]]></script><rect x="0" y="0" width="100%" height="1688" fill="url(#background)"/><text id="title" x="50.0000%" y="32.00">Peak Tracked Memory Usage (566.8 MiB)</text><text id="subtitle" x="50.0000%" y="64.00">Made with the Fil memory profiler. <a href="https://pythonspeed.com/products/filmemoryprofiler/" style="text-decoration: underline;" target="_parent">Try it on your code!</a></text><text id="details" x="10" y="84.00"> </text><text id="unzoom" class="hide" x="10" y="32.00">Reset Zoom</text><text id="search" x="1090" y="32.00">Search</text><text id="matched" x="1090" y="1675.00"> </text><svg id="frames" x="10" width="1180"><g><title>&lt;frozen importlib._bootstrap&gt;:1042 (_handle_fromlist) (727,846 bytes, 0.12%)</title><rect x="0.0925%" y="1134" width="0.1225%" height="21" fill="rgb(255,244,244)"/><text x="0.3425%" y="1147.50"></text></g><g><title>&#160;&#160;&#160;&#160; (727,846 bytes, 0.12%)</title><rect x="0.0925%" y="1156" width="0.1225%" height="21" fill="rgb(255,244,244)"/><text x="0.3425%" y="1169.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:219 (_call_with_frames_removed) (727,414 bytes, 0.12%)</title><rect x="0.0925%" y="1178" width="0.1224%" height="21" fill="rgb(255,244,244)"/><text x="0.3425%" y="1191.50"></text></g><g><title>&#160;&#160;&#160;&#160; (727,414 bytes, 0.12%)</title><rect x="0.0925%" y="1200" width="0.1224%" height="21" fill="rgb(255,244,244)"/><text x="0.3425%" y="1213.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:991 (_find_and_load) (726,742 bytes, 0.12%)</title><rect x="0.0927%" y="1222" width="0.1223%" height="21" fill="rgb(255,244,244)"/><text x="0.3427%" y="1235.50"></text></g><g><title>&#160;&#160;&#160;&#160; (726,742 bytes, 0.12%)</title><rect x="0.0927%" y="1244" width="0.1223%" height="21" fill="rgb(255,244,244)"/><text x="0.3427%" y="1257.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:975 (_find_and_load_unlocked) (725,606 bytes, 0.12%)</title><rect x="0.0929%" y="1266" width="0.1221%" height="21" fill="rgb(255,244,244)"/><text x="0.3429%" y="1279.50"></text></g><g><title>&#160;&#160;&#160;&#160; (725,606 bytes, 0.12%)</title><rect x="0.0929%" y="1288" width="0.1221%" height="21" fill="rgb(255,244,244)"/><text x="0.3429%" y="1301.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:671 (_load_unlocked) (725,259 bytes, 0.12%)</title><rect x="0.0929%" y="1310" width="0.1220%" height="21" fill="rgb(255,244,244)"/><text x="0.3429%" y="1323.50"></text></g><g><title>&#160;&#160;&#160;&#160; (725,259 bytes, 0.12%)</title><rect x="0.0929%" y="1332" width="0.1220%" height="21" fill="rgb(255,244,244)"/><text x="0.3429%" y="1345.50"></text></g><g><title>&lt;frozen importlib._bootstrap_external&gt;:783 (exec_module) (715,749 bytes, 0.12%)</title><rect x="0.0945%" y="1354" width="0.1204%" height="21" fill="rgb(255,244,244)"/><text x="0.3445%" y="1367.50"></text></g><g><title>&#160;&#160;&#160;&#160; (715,749 bytes, 0.12%)</title><rect x="0.0945%" y="1376" width="0.1204%" height="21" fill="rgb(255,244,244)"/><text x="0.3445%" y="1389.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:219 (_call_with_frames_removed) (715,717 bytes, 0.12%)</title><rect x="0.0945%" y="1398" width="0.1204%" height="21" fill="rgb(255,244,244)"/><text x="0.3445%" y="1411.50"></text></g><g><title>&#160;&#160;&#160;&#160; (715,717 bytes, 0.12%)</title><rect x="0.0945%" y="1420" width="0.1204%" height="21" fill="rgb(255,244,244)"/><text x="0.3445%" y="1433.50"></text></g><g><title>/home/itamarst/Devel/memory-profiler/venv/lib64/python3.8/site-packages/numpy/core/multiarray.py:14 (&lt;module&gt;) (728,600 bytes, 0.12%)</title><rect x="0.0924%" y="1090" width="0.1226%" height="21" fill="rgb(255,244,244)"/><text x="0.3424%" y="1103.50"></text></g><g><title>&#160;&#160;&#160;&#160;from . import overrides (728,600 bytes, 0.12%)</title><rect x="0.0924%" y="1112" width="0.1226%" height="21" fill="rgb(255,244,244)"/><text x="0.3424%" y="1125.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:1042 (_handle_fromlist) (893,268 bytes, 0.15%)</title><rect x="0.0766%" y="782" width="0.1503%" height="21" fill="rgb(255,244,244)"/><text x="0.3266%" y="795.50"></text></g><g><title>&#160;&#160;&#160;&#160; (893,268 bytes, 0.15%)</title><rect x="0.0766%" y="804" width="0.1503%" height="21" fill="rgb(255,244,244)"/><text x="0.3266%" y="817.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:219 (_call_with_frames_removed) (892,836 bytes, 0.15%)</title><rect x="0.0767%" y="826" width="0.1502%" height="21" fill="rgb(255,244,244)"/><text x="0.3267%" y="839.50"></text></g><g><title>&#160;&#160;&#160;&#160; (892,836 bytes, 0.15%)</title><rect x="0.0767%" y="848" width="0.1502%" height="21" fill="rgb(255,244,244)"/><text x="0.3267%" y="861.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:991 (_find_and_load) (892,212 bytes, 0.15%)</title><rect x="0.0768%" y="870" width="0.1501%" height="21" fill="rgb(255,244,244)"/><text x="0.3268%" y="883.50"></text></g><g><title>&#160;&#160;&#160;&#160; (892,212 bytes, 0.15%)</title><rect x="0.0768%" y="892" width="0.1501%" height="21" fill="rgb(255,244,244)"/><text x="0.3268%" y="905.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:975 (_find_and_load_unlocked) (885,650 bytes, 0.15%)</title><rect x="0.0779%" y="914" width="0.1490%" height="21" fill="rgb(255,244,244)"/><text x="0.3279%" y="927.50"></text></g><g><title>&#160;&#160;&#160;&#160; (885,650 bytes, 0.15%)</title><rect x="0.0779%" y="936" width="0.1490%" height="21" fill="rgb(255,244,244)"/><text x="0.3279%" y="949.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:671 (_load_unlocked) (884,862 bytes, 0.15%)</title><rect x="0.0780%" y="958" width="0.1489%" height="21" fill="rgb(255,244,244)"/><text x="0.3280%" y="971.50"></text></g><g><title>&#160;&#160;&#160;&#160; (884,862 bytes, 0.15%)</title><rect x="0.0780%" y="980" width="0.1489%" height="21" fill="rgb(255,244,244)"/><text x="0.3280%" y="993.50"></text></g><g><title>&lt;frozen importlib._bootstrap_external&gt;:783 (exec_module) (821,721 bytes, 0.14%)</title><rect x="0.0887%" y="1002" width="0.1383%" height="21" fill="rgb(255,244,244)"/><text x="0.3387%" y="1015.50"></text></g><g><title>&#160;&#160;&#160;&#160; (821,721 bytes, 0.14%)</title><rect x="0.0887%" y="1024" width="0.1383%" height="21" fill="rgb(255,244,244)"/><text x="0.3387%" y="1037.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:219 (_call_with_frames_removed) (821,257 bytes, 0.14%)</title><rect x="0.0887%" y="1046" width="0.1382%" height="21" fill="rgb(255,244,244)"/><text x="0.3387%" y="1059.50"></text></g><g><title>&#160;&#160;&#160;&#160; (821,257 bytes, 0.14%)</title><rect x="0.0887%" y="1068" width="0.1382%" height="21" fill="rgb(255,244,244)"/><text x="0.3387%" y="1081.50"></text></g><g><title>/home/itamarst/Devel/memory-profiler/venv/lib64/python3.8/site-packages/numpy/core/__init__.py:24 (&lt;module&gt;) (894,022 bytes, 0.15%)</title><rect x="0.0765%" y="738" width="0.1504%" height="21" fill="rgb(255,244,244)"/><text x="0.3265%" y="751.50"></text></g><g><title>&#160;&#160;&#160;&#160;from . import multiarray (894,022 bytes, 0.15%)</title><rect x="0.0765%" y="760" width="0.1504%" height="21" fill="rgb(255,244,244)"/><text x="0.3265%" y="773.50"></text></g><g><title>&lt;frozen importlib._bootstrap_external&gt;:580 (_compile_bytecode) (606,562 bytes, 0.10%)</title><rect x="0.2435%" y="1618" width="0.1021%" height="21" fill="rgb(255,245,245)"/><text x="0.4935%" y="1631.50"></text></g><g><title>&#160;&#160;&#160;&#160; (606,562 bytes, 0.10%)</title><rect x="0.2435%" y="1640" width="0.1021%" height="21" fill="rgb(255,245,245)"/><text x="0.4935%" y="1653.50"></text></g><g><title>&lt;frozen importlib._bootstrap_external&gt;:779 (exec_module) (606,946 bytes, 0.10%)</title><rect x="0.2435%" y="1530" width="0.1021%" height="21" fill="rgb(255,245,245)"/><text x="0.4935%" y="1543.50"></text></g><g><title>&#160;&#160;&#160;&#160; (606,946 bytes, 0.10%)</title><rect x="0.2435%" y="1552" width="0.1021%" height="21" fill="rgb(255,245,245)"/><text x="0.4935%" y="1565.50"></text></g><g><title>&lt;frozen importlib._bootstrap_external&gt;:911 (get_code) (606,610 bytes, 0.10%)</title><rect x="0.2435%" y="1574" width="0.1021%" height="21" fill="rgb(255,245,245)"/><text x="0.4935%" y="1587.50"></text></g><g><title>&#160;&#160;&#160;&#160; (606,610 bytes, 0.10%)</title><rect x="0.2435%" y="1596" width="0.1021%" height="21" fill="rgb(255,245,245)"/><text x="0.4935%" y="1609.50"></text></g><g><title>/home/itamarst/Devel/memory-profiler/venv/lib64/python3.8/site-packages/numpy/core/_type_aliases.py:32 (&lt;module&gt;) (613,079 bytes, 0.10%)</title><rect x="0.2432%" y="1354" width="0.1032%" height="21" fill="rgb(255,245,245)"/><text x="0.4932%" y="1367.50"></text></g><g><title>&#160;&#160;&#160;&#160;from numpy.core._dtype import _kind_name (613,079 bytes, 0.10%)</title><rect x="0.2432%" y="1376" width="0.1032%" height="21" fill="rgb(255,245,245)"/><text x="0.4932%" y="1389.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:991 (_find_and_load) (612,399 bytes, 0.10%)</title><rect x="0.2433%" y="1398" width="0.1030%" height="21" fill="rgb(255,245,245)"/><text x="0.4933%" y="1411.50"></text></g><g><title>&#160;&#160;&#160;&#160; (612,399 bytes, 0.10%)</title><rect x="0.2433%" y="1420" width="0.1030%" height="21" fill="rgb(255,245,245)"/><text x="0.4933%" y="1433.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:975 (_find_and_load_unlocked) (611,802 bytes, 0.10%)</title><rect x="0.2434%" y="1442" width="0.1029%" height="21" fill="rgb(255,245,245)"/><text x="0.4934%" y="1455.50"></text></g><g><title>&#160;&#160;&#160;&#160; (611,802 bytes, 0.10%)</title><rect x="0.2434%" y="1464" width="0.1029%" height="21" fill="rgb(255,245,245)"/><text x="0.4934%" y="1477.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:671 (_load_unlocked) (611,458 bytes, 0.10%)</title><rect x="0.2435%" y="1486" width="0.1029%" height="21" fill="rgb(255,245,245)"/><text x="0.4935%" y="1499.50"></text></g><g><title>&#160;&#160;&#160;&#160; (611,458 bytes, 0.10%)</title><rect x="0.2435%" y="1508" width="0.1029%" height="21" fill="rgb(255,245,245)"/><text x="0.4935%" y="1521.50"></text></g><g><title>/home/itamarst/Devel/memory-profiler/venv/lib64/python3.8/site-packages/numpy/core/numerictypes.py:111 (&lt;module&gt;) (665,105 bytes, 0.11%)</title><rect x="0.2361%" y="1090" width="0.1119%" height="21" fill="rgb(255,245,245)"/><text x="0.4861%" y="1103.50"></text></g><g><title>&#160;&#160;&#160;&#160;from ._type_aliases import ( (665,105 bytes, 0.11%)</title><rect x="0.2361%" y="1112" width="0.1119%" height="21" fill="rgb(255,245,245)"/><text x="0.4861%" y="1125.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:991 (_find_and_load) (664,951 bytes, 0.11%)</title><rect x="0.2361%" y="1134" width="0.1119%" height="21" fill="rgb(255,245,245)"/><text x="0.4861%" y="1147.50"></text></g><g><title>&#160;&#160;&#160;&#160; (664,951 bytes, 0.11%)</title><rect x="0.2361%" y="1156" width="0.1119%" height="21" fill="rgb(255,245,245)"/><text x="0.4861%" y="1169.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:975 (_find_and_load_unlocked) (664,523 bytes, 0.11%)</title><rect x="0.2362%" y="1178" width="0.1118%" height="21" fill="rgb(255,245,245)"/><text x="0.4862%" y="1191.50"></text></g><g><title>&#160;&#160;&#160;&#160; (664,523 bytes, 0.11%)</title><rect x="0.2362%" y="1200" width="0.1118%" height="21" fill="rgb(255,245,245)"/><text x="0.4862%" y="1213.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:671 (_load_unlocked) (664,220 bytes, 0.11%)</title><rect x="0.2363%" y="1222" width="0.1118%" height="21" fill="rgb(255,245,245)"/><text x="0.4863%" y="1235.50"></text></g><g><title>&#160;&#160;&#160;&#160; (664,220 bytes, 0.11%)</title><rect x="0.2363%" y="1244" width="0.1118%" height="21" fill="rgb(255,245,245)"/><text x="0.4863%" y="1257.50"></text></g><g><title>&lt;frozen importlib._bootstrap_external&gt;:783 (exec_module) (651,905 bytes, 0.11%)</title><rect x="0.2383%" y="1266" width="0.1097%" height="21" fill="rgb(255,245,245)"/><text x="0.4883%" y="1279.50"></text></g><g><title>&#160;&#160;&#160;&#160; (651,905 bytes, 0.11%)</title><rect x="0.2383%" y="1288" width="0.1097%" height="21" fill="rgb(255,245,245)"/><text x="0.4883%" y="1301.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:219 (_call_with_frames_removed) (651,817 bytes, 0.11%)</title><rect x="0.2383%" y="1310" width="0.1097%" height="21" fill="rgb(255,245,245)"/><text x="0.4883%" y="1323.50"></text></g><g><title>&#160;&#160;&#160;&#160; (651,817 bytes, 0.11%)</title><rect x="0.2383%" y="1332" width="0.1097%" height="21" fill="rgb(255,245,245)"/><text x="0.4883%" y="1345.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:671 (_load_unlocked) (796,835 bytes, 0.13%)</title><rect x="0.2290%" y="958" width="0.1341%" height="21" fill="rgb(255,244,244)"/><text x="0.4790%" y="971.50"></text></g><g><title>&#160;&#160;&#160;&#160; (796,835 bytes, 0.13%)</title><rect x="0.2290%" y="980" width="0.1341%" height="21" fill="rgb(255,244,244)"/><text x="0.4790%" y="993.50"></text></g><g><title>&lt;frozen importlib._bootstrap_external&gt;:783 (exec_module) (772,597 bytes, 0.13%)</title><rect x="0.2331%" y="1002" width="0.1300%" height="21" fill="rgb(255,244,244)"/><text x="0.4831%" y="1015.50"></text></g><g><title>&#160;&#160;&#160;&#160; (772,597 bytes, 0.13%)</title><rect x="0.2331%" y="1024" width="0.1300%" height="21" fill="rgb(255,244,244)"/><text x="0.4831%" y="1037.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:219 (_call_with_frames_removed) (772,565 bytes, 0.13%)</title><rect x="0.2331%" y="1046" width="0.1300%" height="21" fill="rgb(255,244,244)"/><text x="0.4831%" y="1059.50"></text></g><g><title>&#160;&#160;&#160;&#160; (772,565 bytes, 0.13%)</title><rect x="0.2331%" y="1068" width="0.1300%" height="21" fill="rgb(255,244,244)"/><text x="0.4831%" y="1081.50"></text></g><g><title>/home/itamarst/Devel/memory-profiler/venv/lib64/python3.8/site-packages/numpy/core/__init__.py:76 (&lt;module&gt;) (797,798 bytes, 0.13%)</title><rect x="0.2289%" y="738" width="0.1342%" height="21" fill="rgb(255,244,244)"/><text x="0.4789%" y="751.50"></text></g><g><title>&#160;&#160;&#160;&#160;from . import numerictypes as nt (797,798 bytes, 0.13%)</title><rect x="0.2289%" y="760" width="0.1342%" height="21" fill="rgb(255,244,244)"/><text x="0.4789%" y="773.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:1042 (_handle_fromlist) (797,644 bytes, 0.13%)</title><rect x="0.2289%" y="782" width="0.1342%" height="21" fill="rgb(255,244,244)"/><text x="0.4789%" y="795.50"></text></g><g><title>&#160;&#160;&#160;&#160; (797,644 bytes, 0.13%)</title><rect x="0.2289%" y="804" width="0.1342%" height="21" fill="rgb(255,244,244)"/><text x="0.4789%" y="817.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:219 (_call_with_frames_removed) (797,644 bytes, 0.13%)</title><rect x="0.2289%" y="826" width="0.1342%" height="21" fill="rgb(255,244,244)"/><text x="0.4789%" y="839.50"></text></g><g><title>&#160;&#160;&#160;&#160; (797,644 bytes, 0.13%)</title><rect x="0.2289%" y="848" width="0.1342%" height="21" fill="rgb(255,244,244)"/><text x="0.4789%" y="861.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:991 (_find_and_load) (797,644 bytes, 0.13%)</title><rect x="0.2289%" y="870" width="0.1342%" height="21" fill="rgb(255,244,244)"/><text x="0.4789%" y="883.50"></text></g><g><title>&#160;&#160;&#160;&#160; (797,644 bytes, 0.13%)</title><rect x="0.2289%" y="892" width="0.1342%" height="21" fill="rgb(255,244,244)"/><text x="0.4789%" y="905.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:975 (_find_and_load_unlocked) (797,209 bytes, 0.13%)</title><rect x="0.2290%" y="914" width="0.1341%" height="21" fill="rgb(255,244,244)"/><text x="0.4790%" y="927.50"></text></g><g><title>&#160;&#160;&#160;&#160; (797,209 bytes, 0.13%)</title><rect x="0.2290%" y="936" width="0.1341%" height="21" fill="rgb(255,244,244)"/><text x="0.4790%" y="949.50"></text></g><g><title>/home/itamarst/Devel/memory-profiler/venv/lib64/python3.8/site-packages/numpy/core/__init__.py:78 (&lt;module&gt;) (683,042 bytes, 0.11%)</title><rect x="0.3631%" y="738" width="0.1149%" height="21" fill="rgb(255,244,244)"/><text x="0.6131%" y="751.50"></text></g><g><title>&#160;&#160;&#160;&#160;from . import numeric (683,042 bytes, 0.11%)</title><rect x="0.3631%" y="760" width="0.1149%" height="21" fill="rgb(255,244,244)"/><text x="0.6131%" y="773.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:1042 (_handle_fromlist) (682,888 bytes, 0.11%)</title><rect x="0.3631%" y="782" width="0.1149%" height="21" fill="rgb(255,244,244)"/><text x="0.6131%" y="795.50"></text></g><g><title>&#160;&#160;&#160;&#160; (682,888 bytes, 0.11%)</title><rect x="0.3631%" y="804" width="0.1149%" height="21" fill="rgb(255,244,244)"/><text x="0.6131%" y="817.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:219 (_call_with_frames_removed) (682,888 bytes, 0.11%)</title><rect x="0.3631%" y="826" width="0.1149%" height="21" fill="rgb(255,244,244)"/><text x="0.6131%" y="839.50"></text></g><g><title>&#160;&#160;&#160;&#160; (682,888 bytes, 0.11%)</title><rect x="0.3631%" y="848" width="0.1149%" height="21" fill="rgb(255,244,244)"/><text x="0.6131%" y="861.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:991 (_find_and_load) (682,888 bytes, 0.11%)</title><rect x="0.3631%" y="870" width="0.1149%" height="21" fill="rgb(255,244,244)"/><text x="0.6131%" y="883.50"></text></g><g><title>&#160;&#160;&#160;&#160; (682,888 bytes, 0.11%)</title><rect x="0.3631%" y="892" width="0.1149%" height="21" fill="rgb(255,244,244)"/><text x="0.6131%" y="905.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:975 (_find_and_load_unlocked) (682,466 bytes, 0.11%)</title><rect x="0.3632%" y="914" width="0.1148%" height="21" fill="rgb(255,244,244)"/><text x="0.6132%" y="927.50"></text></g><g><title>&#160;&#160;&#160;&#160; (682,466 bytes, 0.11%)</title><rect x="0.3632%" y="936" width="0.1148%" height="21" fill="rgb(255,244,244)"/><text x="0.6132%" y="949.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:671 (_load_unlocked) (682,169 bytes, 0.11%)</title><rect x="0.3632%" y="958" width="0.1148%" height="21" fill="rgb(255,244,244)"/><text x="0.6132%" y="971.50"></text></g><g><title>&#160;&#160;&#160;&#160; (682,169 bytes, 0.11%)</title><rect x="0.3632%" y="980" width="0.1148%" height="21" fill="rgb(255,244,244)"/><text x="0.6132%" y="993.50"></text></g><g><title>/home/itamarst/Devel/memory-profiler/venv/lib64/python3.8/site-packages/numpy/__init__.py:142 (&lt;module&gt;) (3,254,789 bytes, 0.55%)</title><rect x="0.0083%" y="386" width="0.5476%" height="21" fill="rgb(255,238,238)"/><text x="0.2583%" y="399.50"></text></g><g><title>&#160;&#160;&#160;&#160;from . import core (3,254,789 bytes, 0.55%)</title><rect x="0.0083%" y="408" width="0.5476%" height="21" fill="rgb(255,238,238)"/><text x="0.2583%" y="421.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:1042 (_handle_fromlist) (3,254,635 bytes, 0.55%)</title><rect x="0.0084%" y="430" width="0.5476%" height="21" fill="rgb(255,238,238)"/><text x="0.2584%" y="443.50"></text></g><g><title>&#160;&#160;&#160;&#160; (3,254,635 bytes, 0.55%)</title><rect x="0.0084%" y="452" width="0.5476%" height="21" fill="rgb(255,238,238)"/><text x="0.2584%" y="465.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:219 (_call_with_frames_removed) (3,254,635 bytes, 0.55%)</title><rect x="0.0084%" y="474" width="0.5476%" height="21" fill="rgb(255,238,238)"/><text x="0.2584%" y="487.50"></text></g><g><title>&#160;&#160;&#160;&#160; (3,254,635 bytes, 0.55%)</title><rect x="0.0084%" y="496" width="0.5476%" height="21" fill="rgb(255,238,238)"/><text x="0.2584%" y="509.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:991 (_find_and_load) (3,254,635 bytes, 0.55%)</title><rect x="0.0084%" y="518" width="0.5476%" height="21" fill="rgb(255,238,238)"/><text x="0.2584%" y="531.50"></text></g><g><title>&#160;&#160;&#160;&#160; (3,254,635 bytes, 0.55%)</title><rect x="0.0084%" y="540" width="0.5476%" height="21" fill="rgb(255,238,238)"/><text x="0.2584%" y="553.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:975 (_find_and_load_unlocked) (3,254,073 bytes, 0.55%)</title><rect x="0.0085%" y="562" width="0.5475%" height="21" fill="rgb(255,238,238)"/><text x="0.2585%" y="575.50"></text></g><g><title>&#160;&#160;&#160;&#160; (3,254,073 bytes, 0.55%)</title><rect x="0.0085%" y="584" width="0.5475%" height="21" fill="rgb(255,238,238)"/><text x="0.2585%" y="597.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:671 (_load_unlocked) (3,253,834 bytes, 0.55%)</title><rect x="0.0085%" y="606" width="0.5475%" height="21" fill="rgb(255,238,238)"/><text x="0.2585%" y="619.50"></text></g><g><title>&#160;&#160;&#160;&#160; (3,253,834 bytes, 0.55%)</title><rect x="0.0085%" y="628" width="0.5475%" height="21" fill="rgb(255,238,238)"/><text x="0.2585%" y="641.50"></text></g><g><title>&lt;frozen importlib._bootstrap_external&gt;:783 (exec_module) (3,249,936 bytes, 0.55%)</title><rect x="0.0091%" y="650" width="0.5468%" height="21" fill="rgb(255,238,238)"/><text x="0.2591%" y="663.50"></text></g><g><title>&#160;&#160;&#160;&#160; (3,249,936 bytes, 0.55%)</title><rect x="0.0091%" y="672" width="0.5468%" height="21" fill="rgb(255,238,238)"/><text x="0.2591%" y="685.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:219 (_call_with_frames_removed) (3,249,904 bytes, 0.55%)</title><rect x="0.0092%" y="694" width="0.5468%" height="21" fill="rgb(255,238,238)"/><text x="0.2592%" y="707.50"></text></g><g><title>&#160;&#160;&#160;&#160; (3,249,904 bytes, 0.55%)</title><rect x="0.0092%" y="716" width="0.5468%" height="21" fill="rgb(255,238,238)"/><text x="0.2592%" y="729.50"></text></g><g><title>/home/itamarst/Devel/memory-profiler/venv/lib64/python3.8/site-packages/numpy/lib/__init__.py:27 (&lt;module&gt;) (773,491 bytes, 0.13%)</title><rect x="0.5849%" y="738" width="0.1301%" height="21" fill="rgb(255,244,244)"/><text x="0.8349%" y="751.50"></text></g><g><title>&#160;&#160;&#160;&#160;from .index_tricks import * (773,491 bytes, 0.13%)</title><rect x="0.5849%" y="760" width="0.1301%" height="21" fill="rgb(255,244,244)"/><text x="0.8349%" y="773.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:991 (_find_and_load) (773,337 bytes, 0.13%)</title><rect x="0.5849%" y="782" width="0.1301%" height="21" fill="rgb(255,244,244)"/><text x="0.8349%" y="795.50"></text></g><g><title>&#160;&#160;&#160;&#160; (773,337 bytes, 0.13%)</title><rect x="0.5849%" y="804" width="0.1301%" height="21" fill="rgb(255,244,244)"/><text x="0.8349%" y="817.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:975 (_find_and_load_unlocked) (772,975 bytes, 0.13%)</title><rect x="0.5850%" y="826" width="0.1301%" height="21" fill="rgb(255,244,244)"/><text x="0.8350%" y="839.50"></text></g><g><title>&#160;&#160;&#160;&#160; (772,975 bytes, 0.13%)</title><rect x="0.5850%" y="848" width="0.1301%" height="21" fill="rgb(255,244,244)"/><text x="0.8350%" y="861.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:671 (_load_unlocked) (772,675 bytes, 0.13%)</title><rect x="0.5850%" y="870" width="0.1300%" height="21" fill="rgb(255,244,244)"/><text x="0.8350%" y="883.50"></text></g><g><title>&#160;&#160;&#160;&#160; (772,675 bytes, 0.13%)</title><rect x="0.5850%" y="892" width="0.1300%" height="21" fill="rgb(255,244,244)"/><text x="0.8350%" y="905.50"></text></g><g><title>&lt;frozen importlib._bootstrap_external&gt;:783 (exec_module) (735,056 bytes, 0.12%)</title><rect x="0.5914%" y="914" width="0.1237%" height="21" fill="rgb(255,244,244)"/><text x="0.8414%" y="927.50"></text></g><g><title>&#160;&#160;&#160;&#160; (735,056 bytes, 0.12%)</title><rect x="0.5914%" y="936" width="0.1237%" height="21" fill="rgb(255,244,244)"/><text x="0.8414%" y="949.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:219 (_call_with_frames_removed) (735,024 bytes, 0.12%)</title><rect x="0.5914%" y="958" width="0.1237%" height="21" fill="rgb(255,244,244)"/><text x="0.8414%" y="971.50"></text></g><g><title>&#160;&#160;&#160;&#160; (735,024 bytes, 0.12%)</title><rect x="0.5914%" y="980" width="0.1237%" height="21" fill="rgb(255,244,244)"/><text x="0.8414%" y="993.50"></text></g><g><title>/home/itamarst/Devel/memory-profiler/venv/lib64/python3.8/site-packages/numpy/__init__.py:145 (&lt;module&gt;) (1,820,670 bytes, 0.31%)</title><rect x="0.5591%" y="386" width="0.3063%" height="21" fill="rgb(255,241,241)"/><text x="0.8091%" y="399.50"></text></g><g><title>&#160;&#160;&#160;&#160;from . import lib (1,820,670 bytes, 0.31%)</title><rect x="0.5591%" y="408" width="0.3063%" height="21" fill="rgb(255,241,241)"/><text x="0.8091%" y="421.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:1042 (_handle_fromlist) (1,820,516 bytes, 0.31%)</title><rect x="0.5591%" y="430" width="0.3063%" height="21" fill="rgb(255,241,241)"/><text x="0.8091%" y="443.50"></text></g><g><title>&#160;&#160;&#160;&#160; (1,820,516 bytes, 0.31%)</title><rect x="0.5591%" y="452" width="0.3063%" height="21" fill="rgb(255,241,241)"/><text x="0.8091%" y="465.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:219 (_call_with_frames_removed) (1,820,516 bytes, 0.31%)</title><rect x="0.5591%" y="474" width="0.3063%" height="21" fill="rgb(255,241,241)"/><text x="0.8091%" y="487.50"></text></g><g><title>&#160;&#160;&#160;&#160; (1,820,516 bytes, 0.31%)</title><rect x="0.5591%" y="496" width="0.3063%" height="21" fill="rgb(255,241,241)"/><text x="0.8091%" y="509.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:991 (_find_and_load) (1,820,516 bytes, 0.31%)</title><rect x="0.5591%" y="518" width="0.3063%" height="21" fill="rgb(255,241,241)"/><text x="0.8091%" y="531.50"></text></g><g><title>&#160;&#160;&#160;&#160; (1,820,516 bytes, 0.31%)</title><rect x="0.5591%" y="540" width="0.3063%" height="21" fill="rgb(255,241,241)"/><text x="0.8091%" y="553.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:975 (_find_and_load_unlocked) (1,820,020 bytes, 0.31%)</title><rect x="0.5592%" y="562" width="0.3062%" height="21" fill="rgb(255,241,241)"/><text x="0.8092%" y="575.50"></text></g><g><title>&#160;&#160;&#160;&#160; (1,820,020 bytes, 0.31%)</title><rect x="0.5592%" y="584" width="0.3062%" height="21" fill="rgb(255,241,241)"/><text x="0.8092%" y="597.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:671 (_load_unlocked) (1,819,782 bytes, 0.31%)</title><rect x="0.5592%" y="606" width="0.3062%" height="21" fill="rgb(255,241,241)"/><text x="0.8092%" y="619.50"></text></g><g><title>&#160;&#160;&#160;&#160; (1,819,782 bytes, 0.31%)</title><rect x="0.5592%" y="628" width="0.3062%" height="21" fill="rgb(255,241,241)"/><text x="0.8092%" y="641.50"></text></g><g><title>&lt;frozen importlib._bootstrap_external&gt;:783 (exec_module) (1,818,214 bytes, 0.31%)</title><rect x="0.5595%" y="650" width="0.3059%" height="21" fill="rgb(255,241,241)"/><text x="0.8095%" y="663.50"></text></g><g><title>&#160;&#160;&#160;&#160; (1,818,214 bytes, 0.31%)</title><rect x="0.5595%" y="672" width="0.3059%" height="21" fill="rgb(255,241,241)"/><text x="0.8095%" y="685.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:219 (_call_with_frames_removed) (1,818,182 bytes, 0.31%)</title><rect x="0.5595%" y="694" width="0.3059%" height="21" fill="rgb(255,241,241)"/><text x="0.8095%" y="707.50"></text></g><g><title>&#160;&#160;&#160;&#160; (1,818,182 bytes, 0.31%)</title><rect x="0.5595%" y="716" width="0.3059%" height="21" fill="rgb(255,241,241)"/><text x="0.8095%" y="729.50"></text></g><g><title>/home/itamarst/Devel/memory-profiler/venv/lib64/python3.8/site-packages/numpy/ma/__init__.py:44 (&lt;module&gt;) (616,286 bytes, 0.10%)</title><rect x="1.0695%" y="738" width="0.1037%" height="21" fill="rgb(255,245,245)"/><text x="1.3195%" y="751.50"></text></g><g><title>&#160;&#160;&#160;&#160;from . import core (616,286 bytes, 0.10%)</title><rect x="1.0695%" y="760" width="0.1037%" height="21" fill="rgb(255,245,245)"/><text x="1.3195%" y="773.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:1042 (_handle_fromlist) (616,132 bytes, 0.10%)</title><rect x="1.0695%" y="782" width="0.1037%" height="21" fill="rgb(255,245,245)"/><text x="1.3195%" y="795.50"></text></g><g><title>&#160;&#160;&#160;&#160; (616,132 bytes, 0.10%)</title><rect x="1.0695%" y="804" width="0.1037%" height="21" fill="rgb(255,245,245)"/><text x="1.3195%" y="817.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:219 (_call_with_frames_removed) (616,132 bytes, 0.10%)</title><rect x="1.0695%" y="826" width="0.1037%" height="21" fill="rgb(255,245,245)"/><text x="1.3195%" y="839.50"></text></g><g><title>&#160;&#160;&#160;&#160; (616,132 bytes, 0.10%)</title><rect x="1.0695%" y="848" width="0.1037%" height="21" fill="rgb(255,245,245)"/><text x="1.3195%" y="861.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:991 (_find_and_load) (615,956 bytes, 0.10%)</title><rect x="1.0696%" y="870" width="0.1036%" height="21" fill="rgb(255,245,245)"/><text x="1.3196%" y="883.50"></text></g><g><title>&#160;&#160;&#160;&#160; (615,956 bytes, 0.10%)</title><rect x="1.0696%" y="892" width="0.1036%" height="21" fill="rgb(255,245,245)"/><text x="1.3196%" y="905.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:975 (_find_and_load_unlocked) (613,468 bytes, 0.10%)</title><rect x="1.0700%" y="914" width="0.1032%" height="21" fill="rgb(255,245,245)"/><text x="1.3200%" y="927.50"></text></g><g><title>&#160;&#160;&#160;&#160; (613,468 bytes, 0.10%)</title><rect x="1.0700%" y="936" width="0.1032%" height="21" fill="rgb(255,245,245)"/><text x="1.3200%" y="949.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:671 (_load_unlocked) (613,178 bytes, 0.10%)</title><rect x="1.0700%" y="958" width="0.1032%" height="21" fill="rgb(255,245,245)"/><text x="1.3200%" y="971.50"></text></g><g><title>&#160;&#160;&#160;&#160; (613,178 bytes, 0.10%)</title><rect x="1.0700%" y="980" width="0.1032%" height="21" fill="rgb(255,245,245)"/><text x="1.3200%" y="993.50"></text></g><g><title>/home/itamarst/Devel/memory-profiler/venv/lib64/python3.8/site-packages/numpy/__init__.py:154 (&lt;module&gt;) (751,296 bytes, 0.13%)</title><rect x="1.0691%" y="386" width="0.1264%" height="21" fill="rgb(255,244,244)"/><text x="1.3191%" y="399.50"></text></g><g><title>&#160;&#160;&#160;&#160;from . import ma (751,296 bytes, 0.13%)</title><rect x="1.0691%" y="408" width="0.1264%" height="21" fill="rgb(255,244,244)"/><text x="1.3191%" y="421.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:1042 (_handle_fromlist) (751,142 bytes, 0.13%)</title><rect x="1.0691%" y="430" width="0.1264%" height="21" fill="rgb(255,244,244)"/><text x="1.3191%" y="443.50"></text></g><g><title>&#160;&#160;&#160;&#160; (751,142 bytes, 0.13%)</title><rect x="1.0691%" y="452" width="0.1264%" height="21" fill="rgb(255,244,244)"/><text x="1.3191%" y="465.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:219 (_call_with_frames_removed) (751,142 bytes, 0.13%)</title><rect x="1.0691%" y="474" width="0.1264%" height="21" fill="rgb(255,244,244)"/><text x="1.3191%" y="487.50"></text></g><g><title>&#160;&#160;&#160;&#160; (751,142 bytes, 0.13%)</title><rect x="1.0691%" y="496" width="0.1264%" height="21" fill="rgb(255,244,244)"/><text x="1.3191%" y="509.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:991 (_find_and_load) (751,142 bytes, 0.13%)</title><rect x="1.0691%" y="518" width="0.1264%" height="21" fill="rgb(255,244,244)"/><text x="1.3191%" y="531.50"></text></g><g><title>&#160;&#160;&#160;&#160; (751,142 bytes, 0.13%)</title><rect x="1.0691%" y="540" width="0.1264%" height="21" fill="rgb(255,244,244)"/><text x="1.3191%" y="553.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:975 (_find_and_load_unlocked) (750,547 bytes, 0.13%)</title><rect x="1.0692%" y="562" width="0.1263%" height="21" fill="rgb(255,244,244)"/><text x="1.3192%" y="575.50"></text></g><g><title>&#160;&#160;&#160;&#160; (750,547 bytes, 0.13%)</title><rect x="1.0692%" y="584" width="0.1263%" height="21" fill="rgb(255,244,244)"/><text x="1.3192%" y="597.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:671 (_load_unlocked) (750,310 bytes, 0.13%)</title><rect x="1.0693%" y="606" width="0.1262%" height="21" fill="rgb(255,244,244)"/><text x="1.3193%" y="619.50"></text></g><g><title>&#160;&#160;&#160;&#160; (750,310 bytes, 0.13%)</title><rect x="1.0693%" y="628" width="0.1262%" height="21" fill="rgb(255,244,244)"/><text x="1.3193%" y="641.50"></text></g><g><title>&lt;frozen importlib._bootstrap_external&gt;:783 (exec_module) (748,816 bytes, 0.13%)</title><rect x="1.0695%" y="650" width="0.1260%" height="21" fill="rgb(255,244,244)"/><text x="1.3195%" y="663.50"></text></g><g><title>&#160;&#160;&#160;&#160; (748,816 bytes, 0.13%)</title><rect x="1.0695%" y="672" width="0.1260%" height="21" fill="rgb(255,244,244)"/><text x="1.3195%" y="685.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:219 (_call_with_frames_removed) (748,784 bytes, 0.13%)</title><rect x="1.0695%" y="694" width="0.1260%" height="21" fill="rgb(255,244,244)"/><text x="1.3195%" y="707.50"></text></g><g><title>&#160;&#160;&#160;&#160; (748,784 bytes, 0.13%)</title><rect x="1.0695%" y="716" width="0.1260%" height="21" fill="rgb(255,244,244)"/><text x="1.3195%" y="729.50"></text></g><g><title>&lt;frozen importlib._bootstrap_external&gt;:783 (exec_module) (7,117,424 bytes, 1.20%)</title><rect x="0.0019%" y="298" width="1.1975%" height="21" fill="rgb(255,233,233)"/><text x="0.2519%" y="311.50"></text></g><g><title>&#160;&#160;&#160;&#160; (7,117,424 bytes, 1.20%)</title><rect x="0.0019%" y="320" width="1.1975%" height="21" fill="rgb(255,233,233)"/><text x="0.2519%" y="333.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:219 (_call_with_frames_removed) (7,117,392 bytes, 1.20%)</title><rect x="0.0019%" y="342" width="1.1975%" height="21" fill="rgb(255,233,233)"/><text x="0.2519%" y="355.50"></text></g><g><title>&#160;&#160;&#160;&#160; (7,117,392 bytes, 1.20%)</title><rect x="0.0019%" y="364" width="1.1975%" height="21" fill="rgb(255,233,233)"/><text x="0.2519%" y="377.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:671 (_load_unlocked) (7,125,179 bytes, 1.20%)</title><rect x="0.0006%" y="254" width="1.1989%" height="21" fill="rgb(255,233,233)"/><text x="0.2506%" y="267.50"></text></g><g><title>&#160;&#160;&#160;&#160; (7,125,179 bytes, 1.20%)</title><rect x="0.0006%" y="276" width="1.1989%" height="21" fill="rgb(255,233,233)"/><text x="0.2506%" y="289.50"></text></g><g><title>example.py:1 (&lt;module&gt;) (7,127,837 bytes, 1.20%)</title><rect x="0.0001%" y="122" width="1.1993%" height="21" fill="rgb(255,233,233)"/><text x="0.2501%" y="135.50"></text></g><g><title>&#160;&#160;&#160;&#160;import numpy as np (7,127,837 bytes, 1.20%)</title><rect x="0.0001%" y="144" width="1.1993%" height="21" fill="rgb(255,233,233)"/><text x="0.2501%" y="157.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:991 (_find_and_load) (7,127,285 bytes, 1.20%)</title><rect x="0.0002%" y="166" width="1.1992%" height="21" fill="rgb(255,233,233)"/><text x="0.2502%" y="179.50"></text></g><g><title>&#160;&#160;&#160;&#160; (7,127,285 bytes, 1.20%)</title><rect x="0.0002%" y="188" width="1.1992%" height="21" fill="rgb(255,233,233)"/><text x="0.2502%" y="201.50"></text></g><g><title>&lt;frozen importlib._bootstrap&gt;:975 (_find_and_load_unlocked) (7,125,765 bytes, 1.20%)</title><rect x="0.0005%" y="210" width="1.1990%" height="21" fill="rgb(255,233,233)"/><text x="0.2505%" y="223.50"></text></g><g><title>&#160;&#160;&#160;&#160; (7,125,765 bytes, 1.20%)</title><rect x="0.0005%" y="232" width="1.1990%" height="21" fill="rgb(255,233,233)"/><text x="0.2505%" y="245.50"></text></g><g><title>example.py:8 (make_two_arrays) (83,886,232 bytes, 14.11%)</title><rect x="1.1995%" y="210" width="14.1144%" height="21" fill="rgb(255,193,193)"/><text x="1.4495%" y="223.50">example.py:8 (m..</text></g><g><title>&#160;&#160;&#160;&#160;arr1 = np.zeros((1024, 1024, 10)) (83,886,232 bytes, 14.11%)</title><rect x="1.1995%" y="232" width="14.1144%" height="21" fill="rgb(255,193,193)"/><text x="1.4495%" y="245.50">TB@@example.py:..</text></g><g><title>example.py:13 (main) (167,772,440 bytes, 28.23%)</title><rect x="1.1995%" y="166" width="28.2287%" height="21" fill="rgb(255,170,170)"/><text x="1.4495%" y="179.50">example.py:13 (main)</text></g><g><title>&#160;&#160;&#160;&#160;arr1, arr2 = make_two_arrays() (167,772,440 bytes, 28.23%)</title><rect x="1.1995%" y="188" width="28.2287%" height="21" fill="rgb(255,170,170)"/><text x="1.4495%" y="201.50">&#160;&#160;&#160;&#160;arr1, arr2 = make_two_arrays()</text></g><g><title>example.py:9 (make_two_arrays) (83,886,208 bytes, 14.11%)</title><rect x="15.3138%" y="210" width="14.1144%" height="21" fill="rgb(255,193,193)"/><text x="15.5638%" y="223.50">example.py:9 (m..</text></g><g><title>&#160;&#160;&#160;&#160;arr2 = np.ones((1024, 1024, 10)) (83,886,208 bytes, 14.11%)</title><rect x="15.3138%" y="232" width="14.1144%" height="21" fill="rgb(255,193,193)"/><text x="15.5638%" y="245.50">TB@@example.py:..</text></g><g><title>/home/itamarst/Devel/memory-profiler/venv/lib64/python3.8/site-packages/numpy/core/numeric.py:207 (ones) (83,886,208 bytes, 14.11%)</title><rect x="15.3138%" y="254" width="14.1144%" height="21" fill="rgb(255,193,193)"/><text x="15.5638%" y="267.50">/home/itamarst/..</text></g><g><title>&#160;&#160;&#160;&#160;a = empty(shape, dtype, order) (83,886,208 bytes, 14.11%)</title><rect x="15.3138%" y="276" width="14.1144%" height="21" fill="rgb(255,193,193)"/><text x="15.5638%" y="289.50">TB@@/home/itama..</text></g><g><title>example.py:14 (main) (419,430,528 bytes, 70.57%)</title><rect x="29.4282%" y="166" width="70.5717%" height="21" fill="rgb(255,124,124)"/><text x="29.6782%" y="179.50">example.py:14 (main)</text></g><g><title>&#160;&#160;&#160;&#160;another_arr = make_big_array() (419,430,528 bytes, 70.57%)</title><rect x="29.4282%" y="188" width="70.5717%" height="21" fill="rgb(255,124,124)"/><text x="29.6782%" y="201.50">&#160;&#160;&#160;&#160;another_arr = make_big_array()</text></g><g><title>example.py:5 (make_big_array) (419,430,528 bytes, 70.57%)</title><rect x="29.4282%" y="210" width="70.5717%" height="21" fill="rgb(255,124,124)"/><text x="29.6782%" y="223.50">example.py:5 (make_big_array)</text></g><g><title>&#160;&#160;&#160;&#160;return np.zeros((1024, 1024, 50)) (419,430,528 bytes, 70.57%)</title><rect x="29.4282%" y="232" width="70.5717%" height="21" fill="rgb(255,124,124)"/><text x="29.6782%" y="245.50">&#160;&#160;&#160;&#160;return np.zeros((1024, 1024, 50))</text></g><g><title>example.py:16 (&lt;module&gt;) (587,203,064 bytes, 98.80%)</title><rect x="1.1995%" y="122" width="98.8005%" height="21" fill="rgb(255,100,100)"/><text x="1.4495%" y="135.50">example.py:16 (&lt;module&gt;)</text></g><g><title>&#160;&#160;&#160;&#160;main() (587,203,064 bytes, 98.80%)</title><rect x="1.1995%" y="144" width="98.8005%" height="21" fill="rgb(255,100,100)"/><text x="1.4495%" y="157.50">&#160;&#160;&#160;&#160;main()</text></g><g><title>all (594,332,101 bytes, 100%)</title><rect x="0.0000%" y="100" width="100.0000%" height="21" fill="rgb(255,100,100)"/><text x="0.2500%" y="113.50"></text></g></svg></svg>

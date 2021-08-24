@@ -53,48 +53,6 @@ Fil will therefore tell you, in an easy to understand way:
 
 This allows you to [optimize that code in a variety of ways](https://pythonspeed.com/datascience/).
 
-## Installation
-
-Assuming you're on macOS or Linux, and are using Python 3.6 or later, you can use either Conda or pip (or any tool that is pip-compatible and can install `manylinux2010` wheels).
-
-### Conda
-
-To install on Conda:
-
-```console
-$ conda install -c conda-forge filprofiler
-```
-
-### Pip
-
-To install the latest version of Fil you'll need Pip 19 or newer.
-You can check like this:
-
-```console
-$ pip --version
-pip 19.3.0
-```
-
-If you're using something older than v19, you can upgrade by doing:
-
-```console
-$ pip install --upgrade pip
-```
-
-If _that_ doesn't work, try running your code in a virtualenv:
-
-```console
-$ python3 -m venv venv/
-$ . venv/bin/activate
-(venv) $ pip install --upgrade pip
-```
-
-Assuming you have a new enough version of pip:
-
-```console
-$ pip install filprofiler
-```
-
 ## Using Fil
 
 ### <a name="peak-jupyter">Profiling in Jupyter</a>
