@@ -29,76 +29,7 @@ For more information, including an example of the output, see https://pythonspee
     * [Fil and threading, with notes on NumPy and Zarr](#threading)
     * [What Fil tracks](#what-fil-tracks)
 
-## <a name="other-tools">Fil vs. other Python memory tools</a>
-
-There are two distinct patterns of Python usage, each with its own source of memory problems.
-
-In a long-running server, memory usage can grow indefinitely due to memory leaks.
-That is, some memory is not being freed.
-
-* If the issue is in Python code, tools like [`tracemalloc`](https://docs.python.org/3/library/tracemalloc.html) and [Pympler](https://pypi.org/project/Pympler/) can tell you which objects are leaking and what is preventing them from being leaked.
-* If you're leaking memory in C code, you can use tools like [Valgrind](https://valgrind.org).
-
-Fil, however, is not aimed at memory leaks, but at the other use case: data processing applications.
-These applications load in data, process it somehow, and then finish running.
-
-The problem with these applications is that they can, on purpose or by mistake, allocate huge amounts of memory.
-It might get freed soon after, but if you allocate 16GB RAM and only have 8GB in your computer, the lack of leaks doesn't help you.
-
-Fil will therefore tell you, in an easy to understand way:
-
-1. Where peak memory usage is, also known as the high-water mark.
-2. What code was responsible for allocating the memory that was present at that peak moment.
-3. This includes C/Fortran/C++/whatever extensions that don't use Python's memory allocation API (`tracemalloc` only does Python memory APIs).
-
-This allows you to [optimize that code in a variety of ways](https://pythonspeed.com/datascience/).
-
 ## Using Fil
-
-### <a name="peak-jupyter">Profiling in Jupyter</a>
-
-To measure peak memory usage of some code in Jupyter you need to do three things:
-
-1. Use an alternative kernel, "Python 3 with Fil".
-   You can choose this kernel when you create a new notebook, or you can switch an existing notebook in the Kernel menu; there should be a "Change Kernel" option in there in both Jupyter Notebook and JupyterLab.
-2. Load the extension by doing `%load_ext filprofiler`.
-3. Add the `%%filprofile` magic to the top of the cell with the code you wish to profile.
-
-
-![Screenshot of JupyterLab](https://raw.githubusercontent.com/pythonspeed/filprofiler/master/images/jupyter.png)
-
-### <a name="peak-python">Profiling complete Python programs</a>
-
-Instead of doing:
-
-```console
-$ python yourscript.py --input-file=yourfile
-```
-
-Just do:
-
-```
-$ fil-profile run yourscript.py --input-file=yourfile
-```
-
-And it will generate a report and automatically try to open it in for you in a browser.
-Reports will be stored in the `fil-result/` directory in your current working directory.
-
-If your program is usually run as `python -m yourapp.yourmodule --args`, you can do that with Fil too:
-
-```
-$ fil-profile run -m yourapp.yourmodule --args
-```
-
-As of version 0.11, you can use `python -m` to run Fil:
-
-```
-$ python -m filprofiler run yourscript.py --input-file=yourfile
-```
-
-As of version 2021.04.2, you can disable opening reports in a browser by using the `--no-browser` option (see `fil-profile --help` for details).
-You will want to view the SVG report in a browser, since they rely heavily on JavaScript.
-If you want to serve the report files from a static directory from a web server, you can use `python -m http.server`.
 
 ### <a name="code">API for profiling specific Python functions</a>
 
@@ -198,15 +129,6 @@ You've found where memory usage is coming from—now what?
 
 If you're using data processing or scientific computing libraries, I have written a relevant [guide to reducing memory usage](https://pythonspeed.com/datascience/).
 
-## How Fil works
-
-Fil uses the `LD_PRELOAD`/`DYLD_INSERT_LIBRARIES` mechanism to preload a shared library at process startup.
-This shared library captures all memory allocations and deallocations and keeps track of them.
-
-At the same time, the Python tracing infrastructure (used e.g. by `cProfile` and `coverage.py`) to figure out which Python callstack/backtrace is responsible for each allocation.
-
-For performance reasons, only the largest allocations are reported, with a minimum of 99% of allocated memory reported.
-The remaining <1% is highly unlikely to be relevant when trying to reduce usage; it's effectively noise.
 
 ### Fil and threading, with notes on NumPy and Zarr {#threading}
 
