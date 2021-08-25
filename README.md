@@ -1,14 +1,14 @@
 # The Fil memory profiler for Python
 
-Your code reads some data, processes it, and uses too much memory.
-In order to reduce memory usage, you need to figure out:
+Your Python code reads some data, processes it, and uses too much memory; maybe it even dies due to an out-of-memory error.
+In order to reduce memory usage, you first need to figure out:
 
 1. Where peak memory usage is, also known as the high-water mark.
 2. What code was responsible for allocating the memory that was present at that peak moment.
 
 That's exactly what Fil will help you find.
 Fil an open source memory profiler designed for data processing applications written in Python, and includes native support for Jupyter.
-Fil runs on Linux and macOS.
+Fil runs on Linux and macOS, and supports Python 3.6 and later.
 
 ## Getting help
 
