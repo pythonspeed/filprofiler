@@ -15,11 +15,13 @@
     - [Profiling functions](./fil/api.md)
     - [Debugging out-of-memory crashes](./fil/oom.md)
     - [Debugging memory leaks](./fil/leaks.md)
+    - [Disabling browser pop-up reports](./fil/disabling-browser.md)
 - [Reference](./fil/reference.md)
     - [What Fil tracks](./fil/what-it-tracks.md)
-    - [Threading in NumPy (BLAS), Zarr, numexpr](./fil/threading.md)
-    - [Disabling browser](./fil/disabling-browser.md)
-
+    - [How threads are tracked](./fil/threading.md)
+    - [Behavior impacts on NumPy (BLAS), Zarr, BLOSC, OpenMP, numexpr](./fil/threadpool-disabled.md)
+    - [Known limitations](./fil/limitations.md)
+    - [Getting help](./fil/help.md)
 # Fil for Production ($)
 
 - [Coming soon!]()
