@@ -1,6 +1,7 @@
 # Getting started with Fil
 
-In this section you'll learn:
+In this section you'll learn how to:
 
-* How to install Fil.
-* How to run Fil and interpret the results.
+* [Install Fil](installation.md).
+* [Run Fil for the first time](trying.md).
+* [Interpret the results](interpreting-output.md).

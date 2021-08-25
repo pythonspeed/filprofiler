@@ -11,7 +11,6 @@ Fil an open source memory profiler designed for data processing applications wri
 
 Fil comes in two editions:
 
-* An open source version, designed for offline profiling.
-  It tracks all allocations, and runs on Linux and macOS, but has enough of a performance impact that you won't want to use it on production workloads.
-* A commercial production version, that is fast enough to run on _all_ your production data processing batch jobs.
-  As a trade-off, it only runs on Linux, and samples memory allocations: unlike the more generally useful open source edition, the production version is optimized for data-intensive programs that allocate large amounts of memory.
+* **The open source edition:** designed for offline profiling.
+  It has enough of a performance impact that you won't want to use it on production workloads, but it can profile even small amounts of memory.
+* **The commercial, production version:** optimized for data-intensive programs that allocate large amounts of memory, is is fast enough to run on all your production data processing batch jobs.

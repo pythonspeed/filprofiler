@@ -1,4 +1,4 @@
-# Disabling browser pop-up report
+# Disabling browser pop-up reports
 
 By default, Fil will open the result of a profiling run in a browser.
 
