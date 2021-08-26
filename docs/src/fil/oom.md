@@ -18,6 +18,8 @@ Fil uses three heuristics to determine if the process is close to running out of
 * The process swap is larger than available memory, indicating heavy swapping by the process.
   In general you want to avoid swapping, and e.g. [explicitly use `mmap()`](https://pythonspeed.com/articles/mmap-vs-zarr-hdf5/) if you expect to be using disk as a backfill for memory.
 
+For a more detailed example of out-of-memory detection with Fil, see this article on [debugging out-of-memory crashes](https://pythonspeed.com/articles/crash-out-of-memory/).
+
 #### Disabling the out-of-memory detection
 
 Sometimes the out-of-memory detection heuristic will kick in too soon, shutting down the program even though in practice it could finish running.

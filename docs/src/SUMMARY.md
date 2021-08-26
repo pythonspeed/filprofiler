@@ -1,6 +1,6 @@
 # Summary
 
-[Introduction](./README.md)
+[Fil: A memory profiler for Python](./README.md)
 
 # Fil for Dev (open source)
 
@@ -24,6 +24,7 @@
     - [Behavior impacts on NumPy (BLAS), Zarr, BLOSC, OpenMP, numexpr](./fil/threadpool-disabled.md)
     - [Known limitations](./fil/limitations.md)
     - [Getting help](./fil/help.md)
+
 # Fil for Production ($)
 
 - [Coming soon!]()
