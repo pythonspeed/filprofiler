@@ -19,6 +19,7 @@ tt {
   font-family: 'Rosario';
   font-style: normal;
   font-weight: 400;
+  font-display: swap;
   src: url('https://pythonspeed.com/public/fonts/rosario-v13-latin-regular.eot'); /* IE9 Compat Modes */
   src: local('Rosario'), local('Rosario-Regular'),
        url('https://pythonspeed.com/public/fonts/rosario-v13-latin-regular.eot?#iefix') format('embedded-opentype'), /* IE6-IE8 */
@@ -33,6 +34,7 @@ tt {
   font-family: 'Rosario';
   font-style: italic;
   font-weight: 400;
+  font-display: swap;
   src: url('https://pythonspeed.com/public/fonts/rosario-v13-latin-italic.eot'); /* IE9 Compat Modes */
   src: local('Rosario Italic'), local('Rosario-Italic'),
        url('https://pythonspeed.com/public/fonts/rosario-v13-latin-italic.eot?#iefix') format('embedded-opentype'), /* IE6-IE8 */
@@ -47,6 +49,7 @@ tt {
     font-family: 'RosarioInitial';
     font-style: normal;
     font-weight: 400;
+    font-display: swap;
     src: url('https://pythonspeed.com/public/fonts/rosario-v13-latin-regular.woff2') format('woff2');
 }
 
@@ -55,6 +58,7 @@ tt {
   font-family: 'Rosario';
   font-style: normal;
   font-weight: 700;
+  font-display: swap;
   src: url('https://pythonspeed.com/public/fonts/rosario-v13-latin-700.eot'); /* IE9 Compat Modes */
   src: local('Rosario Bold'), local('Rosario-Bold'),
        url('https://pythonspeed.com/public/fonts/rosario-v13-latin-700.eot?#iefix') format('embedded-opentype'), /* IE6-IE8 */
