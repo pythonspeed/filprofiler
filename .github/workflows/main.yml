@@ -101,3 +101,17 @@ jobs:
             . venv/bin/activate
             twine check dist/*.whl
             twine upload --repository pypi dist/*.whl
+  docs:
+    name: "Documentation check"
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: "actions/checkout@v2"
+      - name: "Run mdbook"
+        run: |
+          set -euo pipefail
+          wget https://github.com/rust-lang/mdBook/releases/download/v0.4.12/mdbook-v0.4.12-x86_64-unknown-linux-gnu.tar.gz
+          tar xvfz mdbook*.tar.gz
+          sudo mv mdbook /usr/local/bin/
+          chmod +x /usr/local/bin/mdbook
+          cd docs
+          mdbook build

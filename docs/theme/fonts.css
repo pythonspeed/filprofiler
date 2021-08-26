@@ -1,0 +1,91 @@
+:root {
+    font-size: 14px !important;
+}
+
+html {
+    font-family: "Rosario", sans-serif !important;
+    line-height: 1.4 !important;
+}
+
+code,
+pre,
+tt {
+    font-family: "Ubuntu Mono", monospace !important;
+    font-size: 0.9 !important;
+}
+
+/* rosario-regular - latin */
+@font-face {
+  font-family: 'Rosario';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('https://pythonspeed.com/public/fonts/rosario-v13-latin-regular.eot'); /* IE9 Compat Modes */
+  src: local('Rosario'), local('Rosario-Regular'),
+       url('https://pythonspeed.com/public/fonts/rosario-v13-latin-regular.eot?#iefix') format('embedded-opentype'), /* IE6-IE8 */
+       url('https://pythonspeed.com/public/fonts/rosario-v13-latin-regular.woff2') format('woff2'), /* Super Modern Browsers */
+       url('https://pythonspeed.com/public/fonts/rosario-v13-latin-regular.woff') format('woff'), /* Modern Browsers */
+       url('https://pythonspeed.com/public/fonts/rosario-v13-latin-regular.ttf') format('truetype'), /* Safari, Android, iOS */
+       url('https://pythonspeed.com/public/fonts/rosario-v13-latin-regular.svg#Rosario') format('svg'); /* Legacy iOS */
+}
+
+/* rosario-italic - latin */
+@font-face {
+  font-family: 'Rosario';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('https://pythonspeed.com/public/fonts/rosario-v13-latin-italic.eot'); /* IE9 Compat Modes */
+  src: local('Rosario Italic'), local('Rosario-Italic'),
+       url('https://pythonspeed.com/public/fonts/rosario-v13-latin-italic.eot?#iefix') format('embedded-opentype'), /* IE6-IE8 */
+       url('https://pythonspeed.com/public/fonts/rosario-v13-latin-italic.woff2') format('woff2'), /* Super Modern Browsers */
+       url('https://pythonspeed.com/public/fonts/rosario-v13-latin-italic.woff') format('woff'), /* Modern Browsers */
+       url('https://pythonspeed.com/public/fonts/rosario-v13-latin-italic.ttf') format('truetype'), /* Safari, Android, iOS */
+       url('https://pythonspeed.com/public/fonts/rosario-v13-latin-italic.svg#Rosario') format('svg'); /* Legacy iOS */
+}
+
+/* Loaded initially, for flash of faux text. */
+@font-face {
+    font-family: 'RosarioInitial';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('https://pythonspeed.com/public/fonts/rosario-v13-latin-regular.woff2') format('woff2');
+}
+
+/* rosario-700 - latin */
+@font-face {
+  font-family: 'Rosario';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('https://pythonspeed.com/public/fonts/rosario-v13-latin-700.eot'); /* IE9 Compat Modes */
+  src: local('Rosario Bold'), local('Rosario-Bold'),
+       url('https://pythonspeed.com/public/fonts/rosario-v13-latin-700.eot?#iefix') format('embedded-opentype'), /* IE6-IE8 */
+       url('https://pythonspeed.com/public/fonts/rosario-v13-latin-700.woff2') format('woff2'), /* Super Modern Browsers */
+       url('https://pythonspeed.com/public/fonts/rosario-v13-latin-700.woff') format('woff'), /* Modern Browsers */
+       url('https://pythonspeed.com/public/fonts/rosario-v13-latin-700.ttf') format('truetype'), /* Safari, Android, iOS */
+       url('https://pythonspeed.com/public/fonts/rosario-v13-latin-700.svg#Rosario') format('svg'); /* Legacy iOS */
+}
+
+/* ubuntu-mono-regular - latin */
+@font-face {
+    font-family: 'Ubuntu Mono';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 400;
+    src: local('Ubuntu Mono'), local('UbuntuMono-Regular'),
+         url('https://pythonspeed.com/public/fonts/ubuntu-mono-v8-latin-regular.woff2') format('woff2'), /* Chrome 26+, Opera 23+, Firefox 39+ */
+         url('https://pythonspeed.com/public/fonts/ubuntu-mono-v8-latin-regular.woff') format('woff'); /* Chrome 6+, Firefox 3.6+, IE 9+, Safari 5.1+ */
+}
+
+/* ubuntu-mono-700 - latin */
+@font-face {
+    font-family: 'Ubuntu Mono';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 700;
+    src: local('Ubuntu Mono Bold'), local('UbuntuMono-Bold'),
+         url('https://pythonspeed.com/public/fonts/ubuntu-mono-v8-latin-700.woff2') format('woff2'), /* Chrome 26+, Opera 23+, Firefox 39+ */
+         url('https://pythonspeed.com/public/fonts/ubuntu-mono-v8-latin-700.woff') format('woff'); /* Chrome 6+, Firefox 3.6+, IE 9+, Safari 5.1+ */
+}

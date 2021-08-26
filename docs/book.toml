@@ -1,0 +1,14 @@
+[book]
+authors = ["Itamar Turner-Trauring"]
+language = "en"
+multilingual = false
+src = "src"
+
+[build]
+create-missing = false
+
+[preprocessor.index]
+
+[output.html]
+additional-css = ["theme/fonts.css"]
+curly-quotes = true
