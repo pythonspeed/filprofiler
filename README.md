@@ -12,7 +12,7 @@ Fil runs on Linux and macOS, and supports Python 3.6 and later.
 
 ## Getting help
 
-* For more information, you can **[read the documentation](docs/src/SUMMARY.md)** (a nicer, rendered version will be linked real soon).
+* For more information, you can **[read the documentation](https://pythonspeed.com/fil/docs/)**.
 * If you need help or have any questions, feel free to file an issue or [start a discussion](https://github.com/pythonspeed/filprofiler/discussions).
 **When in doubt, please ask—I love questions.**
 
