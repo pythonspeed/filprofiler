@@ -112,6 +112,7 @@ jobs:
           cd docs
           ./build.sh
       - name: Publish
+        if: startsWith(github.event.ref, 'refs/tags')
         env:
           PUBLISH_DOCS_HOOK: ${{ secrets.PUBLISH_DOCS_HOOK }}
         run: |
