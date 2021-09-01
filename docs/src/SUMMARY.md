@@ -27,4 +27,6 @@
 
 # Fil for Production ($)
 
-- [Coming soon!]()
+- [Understanding Fil4prod](./fil4prod/understanding.md)
+    - [Fil4prod vs. open source Fil](./fil4prod/difference-opensource.md)
+    - [Why it's reliable enough for production](./fil4prod/reliable.md)
