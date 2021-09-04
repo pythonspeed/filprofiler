@@ -20,6 +20,8 @@ extern "C" {
 pub struct FunctionId(u32);
 
 impl FunctionId {
+    pub const UNKNOWN: Self = Self(u32::MAX);
+
     pub fn new(id: u32) -> Self {
         FunctionId(id)
     }
@@ -63,6 +65,9 @@ impl FunctionLocations {
 
     /// Get the function name and filename.
     fn get_function_and_filename(&self, id: FunctionId) -> (&str, &str) {
+        if id == FunctionId::UNKNOWN {
+            return ("UNKNOWN", "UNKNOWN DUE TO BUG");
+        }
         let location = &self.functions[id.0 as usize];
         (&location.function_name, &location.filename)
     }
@@ -842,7 +847,7 @@ fn write_flamegraph(
 mod tests {
     use super::{
         filter_to_useful_callstacks, Allocation, AllocationTracker, CallSiteId, Callstack,
-        CallstackInterner, FunctionId, HIGH_32BIT, MIB,
+        CallstackInterner, FunctionId, FunctionLocations, HIGH_32BIT, MIB,
     };
     use im;
     use itertools::Itertools;
@@ -1269,6 +1274,14 @@ mod tests {
         result2.sort();
         expected2.sort();
         assert_eq!(expected2, result2);
+    }
+
+    #[test]
+    fn test_unknown_function_id() {
+        let func_locations = FunctionLocations::new();
+        let (function, filename) = func_locations.get_function_and_filename(FunctionId::UNKNOWN);
+        assert_eq!(filename, "UNKNOWN DUE TO BUG");
+        assert_eq!(function, "UNKNOWN");
     }
 
     // TODO test to_lines(false)
