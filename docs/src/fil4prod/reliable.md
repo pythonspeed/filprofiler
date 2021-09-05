@@ -157,6 +157,11 @@ Fil4prod uses [pre- and post-contracts](https://docs.rs/contracts/), plus debug 
 Of course, these are disabled in the release build for performance reasons.
 So to ensure correctness, the end-to-end tests are actually run twice: once with the release build, and once with debug assertions enabled.
 
+### Panic injection testing
+
+Some of Fil4prod's test make certain "failpoints" panic, using a technique similar to [`fail`](https://docs.rs/fail/).
+This allows testing that unexpected failures in Fil4prod won't impact the running program.
+
 ## Environmental assertions on startup
 
 Fil4prod has certain environmental invariants: for example, matching the appropriate version of Python.
@@ -186,26 +191,13 @@ There's only so far internal processes can get you: testing software in producti
 [Rudra](https://github.com/sslab-gatech/Rudra) is a static analyzer for Rust that can catch certain unsoundness issues in `unsafe` code.
 I should run it on Fil4prod.
 
-### Better handling of errors in shutdown report generation
-
-Right now if Fil4prod fails while writing out the profiling report on exit, I suspect it will either freeze or crash.
-What should actually happen is that the process exits as normal: profiling should not interfere with normal program behavior.
-
 ### Other potential approaches to panic reduction
 
 1. [`no_panic`](https://docs.rs/no-panic/) allows marking functions as not panicking, which is then checked by the compiler.
 2. [`findpanics`](https://github.com/philipc/findpanics) is a tool that finds panics using binary analysis of compiled code.
 3. [`std::panic::catch_unwind`](https://doc.rust-lang.org/std/panic/fn.catch_unwind.html) on critical entry points would allow catching remaining panics.
 
-### Panic injection testing
-
-Fil4prod delegates some of its processing to a thread.
-If that thread panics the Python program should continue running, unaffected, although there won't be a memory profiling report dumped at the end.
-This is not tested at the moment.
-
 ### Try to reduce `unsafe` in third-party libraries
 
 All other things being equal, a library using `unsafe` is more likely to have unsoundness bugs than a library that doesn't use `safe`.
 It may be possible to switch some of Fil4prod's dependencies to safer alternatives.
-
-`cargo-crev`?
