@@ -66,7 +66,9 @@ Normal integer arithmetic is also avoided to avoid bugs caused by overflows; sat
 ```
 
 Clippy is run as part of CI.
+
 See Next Steps at the end of this document for other potential approaches.
+
 
 ### Caveat: `unsafe` in libraries
 
@@ -111,6 +113,10 @@ impl Allocation {
 
 The use of `Option` means any time I try to get at the underlying pointer, Rust's compiler will complain if the `None` case isn't handled, so long as the `unwrap()` and `expect()` APIs aren't used.
 (An even more succinct implementation would use [`std::ptr::NonNull::new()`](https://doc.rust-lang.org/std/ptr/struct.NonNull.html#method.new).)
+
+One approach I haven't taken is trying [Miri](https://github.com/rust-lang/miri), a tool that will catch some bugs in `unsafe` code.
+From the documentation, it seems like it won't work with FFI.
+Since FFI is the only reason Fil4prod uses `unsafe`, it seems like Miri would be both be difficult or impossible to use, and not particularly helpful.
 
 ### Caveat: Rust limitations
 
