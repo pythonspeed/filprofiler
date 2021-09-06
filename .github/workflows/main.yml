@@ -44,7 +44,7 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@v1
         with:
-          key: "${{ matrix.os }}-{{ matrix.python-version }}"
+          key: "${{ matrix.os }}-${{ matrix.python-version }}"
       - name: "Install gfortran"
         if: contains(matrix.os, 'ubuntu')
         run: |
