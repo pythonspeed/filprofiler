@@ -149,7 +149,7 @@ Some points worth covering:
 
 One useful technique when testing is coverage mark: the ability to mark a certain branch in the code, and then have a test assert "_that_ branch was called in this test."
 Much of what Fil4prod does is pretending to be exactly the same as normal `malloc()` while doing something slightly different internally for tracking purposes.
-Coverage mark make sure black box test are hitting the right code path.
+Coverage marks allow me to ensure black-box tests are hitting the right code path.
 
 For more details [see here](https://ferrous-systems.com/blog/coverage-marks/).
 
