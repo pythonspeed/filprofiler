@@ -5,6 +5,13 @@ on:
   pull_request:
     branches: ["master"]
 
+env:
+  # Should speed up build. See
+  # https://matklad.github.io/2021/09/04/fast-rust-builds.html
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUSTUP_MAX_RETRIES: 10
+
 jobs:
   benchmarks:
     name: "Benchmarks"
