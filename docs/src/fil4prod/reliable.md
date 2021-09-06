@@ -99,7 +99,7 @@ The goal then is to avoid panics as much as possible.
 Sometimes this is done by using non-panicking APIs.
 In the case of `Option<T>`, there are other APIs to extract `T` that will not panic.
 
-In other cases, by appropriate error handling.
+In other cases, panics can be avoided by appropriate error handling.
 In a normal program, shutting down might be fine if log initialization fails, but Fil4prod should just keep running and live without logs.
 
 In order to enforce a lack of panics, the [Clippy linter](https://github.com/rust-lang/rust-clippy/) is used to catch Rust APIs that can cause panics.
@@ -124,7 +124,7 @@ Clippy is run as part of CI.
 
 See Next Steps at the end of this document for other potential approaches.
 
-### When panics do happen
+### When panics might happen anyway
 
 Given the use of third-party libraries, there are parts of the code where it's much harder to prove that panics are impossible.
 In these situations, I use [`std::panic::catch_unwind`](https://doc.rust-lang.org/std/panic/fn.catch_unwind.html) to catch panics that do occur.
