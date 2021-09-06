@@ -9,3 +9,6 @@ members = [
 # Needed for profiling, disable for real release:
 #debug = true
 lto = true
+
+[profile.dev]
+debug = 1  # less info, but faster
