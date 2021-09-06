@@ -84,7 +84,7 @@ jobs:
             python3.8 -m venv venv2
             . venv2/bin/activate
             pip install -r requirements-dev.txt
-            pip install dist/*38*manylinux*.whl
+            pip install dist/*-cp38-*manylinux*.whl
             mv filprofiler filprofiler.disabled
             make test-python-no-deps
       - uses: actions/upload-artifact@v2
