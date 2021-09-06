@@ -34,42 +34,6 @@ Rust fulfills both these criteria, but comes with many other benefits compared t
 * Similarly, `Result` objects (the main way to get errors) must be handled, you can't just drop them on the floor.
 * No `NULL` or `nil`; there's `Option<T>`, but the branch coverage requirement means both cases will be handled, and it's explicitly nullable, vs. e.g. C or C++ where any pointer can be `NULL`.
 
-### Preventing panics
-
-Certain APIs in Rust will panic if the data is in an unexpected state, e.g. `Option<T>::unwrap()` will panic if the value is `None`.
-However, the goal is graceful failure, so even if Fil4prod fails the Python program nonetheless runs as usual.
-While panics in Fil's internal thread can be handled gracefully, panics in the application threads could take down the whole program.
-The goal then is to avoid panics.
-
-Sometimes this is done by using non-panicking APIs.
-In the case of `Option<T>`, there are other APIs to extract `T` that will not panic.
-
-In other cases, by appropriate error handling.
-In a normal program, shutting down might be fine if log initialization fails, but Fil4prod should just keep running and live without logs.
-
-In order to enforce a lack of panics, the [Clippy linter](https://github.com/rust-lang/rust-clippy/) is used to catch Rust APIs that can cause panics.
-Normal integer arithmetic is also avoided to avoid bugs caused by overflows; saturating APIs are used instead.
-
-```rust
-#![deny(
-    clippy::expect_used,
-    clippy::unwrap_used,
-    clippy::ok_expect,
-    clippy::integer_division,
-    clippy::indexing_slicing,
-    clippy::integer_arithmetic,
-    clippy::panic,
-    clippy::match_on_vec_items,
-    clippy::manual_strip,
-    clippy::await_holding_refcell_ref
-)]
-```
-
-Clippy is run as part of CI.
-
-See Next Steps at the end of this document for other potential approaches.
-
-
 ### Caveat: `unsafe` in libraries
 
 Rust has an escape hatch from its safety model: `unsafe`.
@@ -124,6 +88,48 @@ Since FFI is the only reason Fil4prod uses `unsafe`, it seems like Miri would be
 * Implementing C-style variable arguments to function is not yet supported; this is necessary for capturing `mremap()`.
 
 Hopefully both issues will be fixed in stable Rust; for now there's a tiny bit of C code required.
+
+## Preventing panics in Rust
+
+Certain APIs in Rust will panic if the data is in an unexpected state, e.g. `Option<T>::unwrap()` will panic if the value is `None`.
+Unlike a segfault, panics are thread-specific and can be recovered from.
+But while panics in Fil's internal thread can be handled gracefully, panics in the application threads could take down the whole program if they hit FFI boundaries.
+The goal then is to avoid panics as much as possible.
+
+Sometimes this is done by using non-panicking APIs.
+In the case of `Option<T>`, there are other APIs to extract `T` that will not panic.
+
+In other cases, by appropriate error handling.
+In a normal program, shutting down might be fine if log initialization fails, but Fil4prod should just keep running and live without logs.
+
+In order to enforce a lack of panics, the [Clippy linter](https://github.com/rust-lang/rust-clippy/) is used to catch Rust APIs that can cause panics.
+Normal integer arithmetic is also avoided to avoid bugs caused by overflows; saturating APIs are used instead.
+
+```rust
+#![deny(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::ok_expect,
+    clippy::integer_division,
+    clippy::indexing_slicing,
+    clippy::integer_arithmetic,
+    clippy::panic,
+    clippy::match_on_vec_items,
+    clippy::manual_strip,
+    clippy::await_holding_refcell_ref
+)]
+```
+
+Clippy is run as part of CI.
+
+See Next Steps at the end of this document for other potential approaches.
+
+### When panics do happen
+
+Given the use of third-party libraries, there are parts of the code where it's much harder to prove that panics are impossible.
+In these situations, I use [`std::panic::catch_unwind`](https://doc.rust-lang.org/std/panic/fn.catch_unwind.html) to catch panics that do occur.
+
+When this happens, profiling is disabled but (if all goes well) the user's Python program should continues as normal.
 
 ## Prototyping
 
@@ -201,7 +207,7 @@ I should run it on Fil4prod.
 
 1. [`no_panic`](https://docs.rs/no-panic/) allows marking functions as not panicking, which is then checked by the compiler.
 2. [`findpanics`](https://github.com/philipc/findpanics) is a tool that finds panics using binary analysis of compiled code.
-3. [`std::panic::catch_unwind`](https://doc.rust-lang.org/std/panic/fn.catch_unwind.html) on critical entry points would allow catching remaining panics.
+   [`rustig`](https://github.com/Technolution/rustig) is similar, but seems even less maintained.
 
 ### Try to reduce `unsafe` in third-party libraries
 
