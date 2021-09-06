@@ -177,7 +177,7 @@ This allows testing that unexpected failures in Fil4prod won't impact the runnin
 ## Environmental assertions on startup
 
 Fil4prod has certain environmental invariants: for example, matching the appropriate version of Python.
-Serving in its admirable role as a prototype, Fil had a build system bug where code compiled against Python 3.6 was packaged for Python 3.9, leading to segfaults.
+This can happen: the open source version of Fil had a build system bug where code compiled against Python 3.6 was packaged for Python 3.9, leading to segfaults.
 
 In addition, for performance reasons Fil4prod sometimes requires [transgressive programming](https://pythonspeed.com/articles/transgressive-programming/), violating abstraction boundaries and relying on internal details of glibc and CPython.
 These details are only likely to change every few years, with a major release, so it's highly unlikely users will encounter them, but this is still a risk factor.
@@ -189,7 +189,7 @@ This is much better than segfaulting later in some arbitrary part of user code, 
 ## Dependency due diligence
 
 In selecting libraries to depend on, I try to pick reasonable dependencies; for example, all other things being equal, a library with a large user base is likely better than a library almost no one uses.
-But there are also some automated tests, in particular using [Rust's advisory database](https://rustsec.org/) to ensure no dependencies have security advisories, soundness issues, or are unmaintained.
+But there are also some automated tests, in particular using [Rust's advisory database](https://rustsec.org/) to ensure no dependencies have known security advisories, soundness issues, or are unmaintained.
 
 ## Next steps, a partial list
 
