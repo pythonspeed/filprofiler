@@ -15,7 +15,6 @@ env:
   # https://matklad.github.io/2021/09/04/fast-rust-builds.html
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
-  RUSTFLAGS: "-D warnings -W rust-2021-compatibility"
   RUSTUP_MAX_RETRIES: 10
 
 
