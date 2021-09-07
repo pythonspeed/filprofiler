@@ -27,7 +27,7 @@ Writing a memory profiler has certain constraints:
 To expand on reentrancy: if you're capturing `malloc()` calls, having the profiler then call `malloc()` itself is both a performance problem and a potential for recursively blowing up the stack.
 So it's best to know exactly when allocation and memory freeing happens so that it can be done safely.
 
-Rust fulfills both these criteria, but comes with many other benefits compared to C or C+:
+Rust fulfills both these criteria, but comes with many other benefits compared to C or C++:
 
 * Memory safety and thread safety.
 * Enforces handling all possible values of enums; Rust's compiler will complain if you don't handle all cases.
@@ -206,6 +206,7 @@ I should run it on Fil4prod.
 ### Other potential approaches to panic reduction
 
 1. [`no_panic`](https://docs.rs/no-panic/) allows marking functions as not panicking, which is then checked by the compiler.
+   There is also [`dont_panic`](https://github.com/Kixunil/dont_panic), [`panic-never`](https://github.com/japaric/panic-never), and [`assert_panic_free`](https://docs.rs/assert_panic_free).
 2. [`findpanics`](https://github.com/philipc/findpanics) is a tool that finds panics using binary analysis of compiled code.
    [`rustig`](https://github.com/Technolution/rustig) is similar, but seems even less maintained.
 
