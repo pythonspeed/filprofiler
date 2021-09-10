@@ -27,7 +27,7 @@ Writing a memory profiler has certain constraints:
 To expand on reentrancy: if you're capturing `malloc()` calls, having the profiler then call `malloc()` itself is both a performance problem and a potential for recursively blowing up the stack.
 So it's best to know exactly when allocation and memory freeing happens so that it can be done safely.
 
-Rust fulfills both these criteria, but comes with many other benefits compared to C or C+:
+Rust fulfills both these criteria, but comes with many other benefits compared to C or C++:
 
 * Memory safety and thread safety.
 * Enforces handling all possible values of enums; Rust's compiler will complain if you don't handle all cases.
@@ -122,14 +122,15 @@ Normal integer arithmetic is also avoided to avoid bugs caused by overflows; sat
 
 Clippy is run as part of CI.
 
-See Next Steps at the end of this document for other potential approaches.
+Additionally [`assert_panic_free`](https://docs.rs/assert_panic_free) is used to assert that there are no panics in critical code paths (see also: [`no_panic`](https://docs.rs/no-panic/), [`dont_panic`](https://github.com/Kixunil/dont_panic), [`panic-never`](https://github.com/japaric/panic-never)).
+Unfortunately the way it works is not ideal, insofar as it doesn't identify which particular code had a panic, and since it can't always deduce correctly whether code is panic free.
 
 ### When panics might happen anyway
 
 Given the use of third-party libraries, there are parts of the code where it's much harder to prove that panics are impossible.
-In these situations, I use [`std::panic::catch_unwind`](https://doc.rust-lang.org/std/panic/fn.catch_unwind.html) to catch panics that do occur.
+In these situations, I use [`std::panic::catch_unwind`](https://doc.rust-lang.org/std/panic/fn.catch_unwind.html) to catch any panics that might occur.
 
-When this happens, profiling is disabled but (if all goes well) the user's Python program should continues as normal.
+In addition, a [panic hook](https://doc.rust-lang.org/std/panic/fn.set_hook.html) is used to disable profiling on panics; when this happens, the user's Python program should hopefully continue as normal.
 
 ## Prototyping
 
@@ -205,9 +206,8 @@ I should run it on Fil4prod.
 
 ### Other potential approaches to panic reduction
 
-1. [`no_panic`](https://docs.rs/no-panic/) allows marking functions as not panicking, which is then checked by the compiler.
-2. [`findpanics`](https://github.com/philipc/findpanics) is a tool that finds panics using binary analysis of compiled code.
-   [`rustig`](https://github.com/Technolution/rustig) is similar, but seems even less maintained.
+[`findpanics`](https://github.com/philipc/findpanics) is a tool that finds panics using binary analysis of compiled code.
+[`rustig`](https://github.com/Technolution/rustig) is similar, but seems even less maintained.
 
 ### Try to reduce `unsafe` in third-party libraries
 
