@@ -1,7 +1,7 @@
 from os import environ, getcwd
 from os.path import join
 from glob import glob
-import sys
+import platform
 
 from setuptools import setup
 from setuptools_rust import RustExtension, Binding
@@ -18,9 +18,15 @@ def read(path):
 # Python APIs.
 environ["CFLAGS"] = CFLAGS
 
+# 'Darwin' or 'Linux'
+system = platform.system()
+
+# 'x86_64', 'arm64' (Apple M1) or 'aarch64' (AWS Graviton, Ubuntu Linux)
+machine = platform.machine()
+
 # Set public symbols to use for macOS. For some reason this doesn't work in
 # build.rs.
-if sys.platform.startswith("darwin"):
+if platform == 'Darwin' and machine == 'x86_64':
     environ[
         "RUSTFLAGS"
     ] = f"-C link-arg=-Wl,-exported_symbols_list,{getcwd()}/filpreload/export_symbols.txt"
