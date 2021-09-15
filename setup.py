@@ -25,7 +25,8 @@ system = platform.system()
 machine = platform.machine()
 
 # Set public symbols to use for macOS. For some reason this doesn't work in
-# build.rs.
+# build.rs. Currently the exported symbols list breaks on macOS ARM for
+# unclear reasons, possibly the ABI is different (no `_` prefix to symbols maybe?)
 if platform == 'Darwin' and machine == 'x86_64':
     environ[
         "RUSTFLAGS"
