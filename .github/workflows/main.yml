@@ -41,7 +41,7 @@ jobs:
           python-version: "${{ matrix.python-version }}"
       - uses: "actions-rs/toolchain@v1"
         with:
-          toolchain: stable
+          toolchain: 1.54
       - uses: Swatinem/rust-cache@v1
         with:
           key: "${{ matrix.os }}-${{ matrix.python-version }}"
