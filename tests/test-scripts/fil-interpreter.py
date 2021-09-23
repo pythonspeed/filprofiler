@@ -10,7 +10,7 @@ import os
 from ctypes import c_void_p
 import re
 from pathlib import Path
-from subprocess import check_output
+from subprocess import check_output, check_call
 import multiprocessing
 
 import pytest
@@ -241,6 +241,19 @@ def test_subprocess(tmpdir):
     finally:
         stop_tracing(tmpdir)
     assert output == b"hello"
+
+
+def test_subprocess_2(tmpdir):
+    """
+    Test a process that, on macOS, would fail (see
+    https://github.com/pythonspeed/filprofiler/issues/230).  Brew processes are
+    compiled or linked differently somehow.
+    """
+    start_tracing(tmpdir)
+    try:
+        check_call(["gfortran", "--version"])
+    finally:
+        stop_tracing(tmpdir)
 
 
 @pytest.mark.parametrize("mode", ["spawn", "forkserver", "fork"])

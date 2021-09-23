@@ -182,8 +182,11 @@ static void __attribute__((constructor)) constructor() {
   // Drop LD_PRELOAD and DYLD_INSERT_LIBRARIES so that subprocesses don't have
   // this preloaded.
   unsetenv("LD_PRELOAD");
+
   // Enabling this breaks things. Don't trust CI being green, check this
-  // manually (see https://github.com/pythonspeed/filprofiler/issues/137).
+  // manually (see https://github.com/pythonspeed/filprofiler/issues/137). So
+  // instead we do it in the Python code, post-constructor, where apparently it
+  // is fine to do.
   // unsetenv("DYLD_INSERT_LIBRARIES");
 
   initialized = 1;

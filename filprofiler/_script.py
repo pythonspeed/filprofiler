@@ -212,6 +212,10 @@ def stage_2():
 
     Presumes LD_PRELOAD etc. has been set by stage_1().
     """
+    # Make sure subprocesses don't get our code injected:
+    if "DYLD_INSERT_LIBRARIES" in environ:
+        environ.pop("DYLD_INSERT_LIBRARIES")
+
     arguments = PARSER.parse_args()
     if arguments.license:
         print(LICENSE)
