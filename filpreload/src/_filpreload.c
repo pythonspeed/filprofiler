@@ -142,6 +142,12 @@ extern void *pymemprofile_get_current_callstack();
 extern void pymemprofile_set_current_callstack(void *callstack);
 extern void pymemprofile_clear_current_callstack();
 
+/// Called after constructor is done.
+static int fil_initialize_from_python(void* ignore) {
+  unsetenv("DYLD_INSERT_LIBRARIES");
+  return 0;
+}
+
 static void __attribute__((constructor)) constructor() {
   if (initialized) {
     return;
@@ -179,15 +185,21 @@ static void __attribute__((constructor)) constructor() {
   // to ensure we don't get unpleasant reentrancy issues.
   pymemprofile_reset("/tmp");
 
-  // Drop LD_PRELOAD and DYLD_INSERT_LIBRARIES so that subprocesses don't have
-  // this preloaded.
+  // Drop LD_PRELOAD so that subprocesses don't have this preloaded.
   unsetenv("LD_PRELOAD");
 
   // Enabling this breaks things. Don't trust CI being green, check this
   // manually (see https://github.com/pythonspeed/filprofiler/issues/137). So
-  // instead we do it in the Python code, post-constructor, where apparently it
-  // is fine to do.
+  // instead we do it post-constructor where apparently it is fine to do
+  // (see fil_initialize_from_python below).
   // unsetenv("DYLD_INSERT_LIBRARIES");
+
+  // Schedule setup for start of Python.
+  Py_Initialize();  // Python will call this again on startup; that's fine.
+
+  // Now we can Python APIs:
+  extra_code_index = _PyEval_RequestCodeExtraIndex(NULL);
+  Py_AddPendingCall(&fil_initialize_from_python, NULL);
 
   initialized = 1;
 }
@@ -259,12 +271,6 @@ fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
 }
 
 // *** APIs called by Python ***
-
-/// Called after Python gets going, allowing us to call some necessary Python
-/// APIs.
-__attribute__((visibility("default"))) void fil_initialize_from_python() {
-  extra_code_index = _PyEval_RequestCodeExtraIndex(NULL);
-}
 
 /// Start memory tracing.
 __attribute__((visibility("default"))) void

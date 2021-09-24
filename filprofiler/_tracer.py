@@ -42,7 +42,6 @@ try:
     else:
         # macOS.
         preload = PyDLL(library_path("_filpreload"))
-    preload.fil_initialize_from_python()
 except Exception as e:
     raise SystemExit(
         f"""\
