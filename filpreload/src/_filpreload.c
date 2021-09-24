@@ -179,11 +179,13 @@ static void __attribute__((constructor)) constructor() {
   // to ensure we don't get unpleasant reentrancy issues.
   pymemprofile_reset("/tmp");
 
-  // Drop LD_PRELOAD and DYLD_INSERT_LIBRARIES so that subprocesses don't have
-  // this preloaded.
+  // Drop LD_PRELOAD so that Linux subprocesses don't have this preloaded.
   unsetenv("LD_PRELOAD");
+
   // Enabling this breaks things. Don't trust CI being green, check this
-  // manually (see https://github.com/pythonspeed/filprofiler/issues/137).
+  // manually (see https://github.com/pythonspeed/filprofiler/issues/137). So
+  // instead we do it in fork(), post-constructor, where apparently it
+  // is fine to do.
   // unsetenv("DYLD_INSERT_LIBRARIES");
 
   initialized = 1;
@@ -323,6 +325,11 @@ static void add_anon_mmap(size_t address, size_t size) {
 
 // Disable memory tracking after fork() in the child.
 __attribute__((visibility("default"))) pid_t SYMBOL_PREFIX(fork)(void) {
+  // Make sure subprocesses on macOS don't preload this:
+  increment_reentrancy();
+  unsetenv("DYLD_INSERT_LIBRARIES");
+  decrement_reentrancy();
+
   static int already_printed = 0;
   if (atomic_load_explicit(&tracking_allocations, memory_order_acquire) && !already_printed) {
     fprintf(stderr, "=fil-profile= WARNING: Fil does not (yet) support tracking memory in subprocesses.\n");
