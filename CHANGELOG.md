@@ -1,3 +1,11 @@
+# Fil 2021.9.0 (2021-09-24)
+
+
+### Bugfixes
+
+- Fix problem on macOS where certain subprocesses (e.g. from Homebrew) would fail to start from Python processes running under Fil. Thanks to @dreid for the bug report. ([#230](https://github.com/pythonspeed/filprofiler/issues/230))
+
+
 # Fil 2021.8.0 (2021-08-17)
 
 

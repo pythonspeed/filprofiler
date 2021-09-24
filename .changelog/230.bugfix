@@ -1,1 +1,0 @@
-Fix problem on macOS where certain subprocesses (e.g. from Homebrew) would fail to start from Python processes running under Fil. Thanks to @dreid for the bug report.
