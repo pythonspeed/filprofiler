@@ -7,6 +7,7 @@ Command-line tools. Because of LD_PRELOAD, it's actually a two stage setup:
 
 import json
 import sys
+import os
 from os import environ, execve, getpid, makedirs
 from os.path import abspath, dirname, join, exists
 from argparse import ArgumentParser, RawDescriptionHelpFormatter, REMAINDER
@@ -14,7 +15,7 @@ from typing import List
 import runpy
 import signal
 from shutil import which
-from ._utils import library_path, glibc_version
+from ._utils import library_path, glibc_version, timestamp_now
 from ._cachegrind import benchmark
 from . import __version__, __file__
 
@@ -248,7 +249,9 @@ def stage_2():
 
     signal.signal(
         signal.SIGUSR2,
-        lambda *args: create_report(arguments.output_path),
+        lambda *args: create_report(
+            os.path.join(arguments.output_path, timestamp_now())
+        ),
     )
     print(
         "=fil-profile= Memory usage will be written out at exit, and opened automatically in a browser.\n"

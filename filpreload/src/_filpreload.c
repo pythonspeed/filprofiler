@@ -97,6 +97,15 @@ static inline void increment_reentrancy() { will_i_be_reentrant += 1; }
 static inline void decrement_reentrancy() { will_i_be_reentrant -= 1; }
 #endif
 
+// Versions for calling from Rust
+void fil_increment_reentrancy() {
+  increment_reentrancy();
+}
+
+void fil_decrement_reentrancy() {
+  decrement_reentrancy();
+}
+
 // Return whether to pass malloc() etc. to Rust tracking code.
 // Will be true if all conditions are true:
 //

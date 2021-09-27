@@ -14,14 +14,19 @@ def get_allocations(
         "peak-memory.prof",
     ],
     prof_file="peak-memory.prof",
+    direct=False,
 ):
     """Parses peak-memory.prof, returns mapping from callstack to size in KiB."""
-    subdir = glob(str(output_directory / "*"))[0]
-    assert sorted(os.listdir(subdir)) == sorted(expected_files)
-    for expected_file in expected_files:
-        assert (Path(subdir) / expected_file).stat().st_size > 0
+    if direct:
+        prof_path = str(output_directory)
+    else:
+        subdir = glob(str(output_directory / "*"))[0]
+        assert sorted(os.listdir(subdir)) == sorted(expected_files)
+        for expected_file in expected_files:
+            assert (Path(subdir) / expected_file).stat().st_size > 0
+        prof_path = glob(str(output_directory / "*" / prof_file))[0]
     result = {}
-    with open(glob(str(output_directory / "*" / prof_file))[0]) as f:
+    with open(prof_path) as f:
         for line in f:
             *calls, size_kb = line.split(" ")
             calls = " ".join(calls)
