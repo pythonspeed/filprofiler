@@ -37,11 +37,18 @@ lazy_static! {
 
 /// Register a new function/filename location.
 fn add_function(filename: String, function_name: String) -> FunctionId {
-    let mut tracker_state = TRACKER_STATE.lock();
-    tracker_state
-        .allocations
-        .functions
-        .add_function(filename, function_name)
+    let mut tracker_state = TRACKER_STATE.try_lock();
+    if let Some(mut tracker_state) = tracker_state {
+        tracker_state
+            .allocations
+            .functions
+            .add_function(filename, function_name)
+    } else {
+        // This will help in SIGUSR2 handler: dumping calls into Python, we
+        // can't really acquire lock since it's in the middle of dumping. So
+        // just give up.
+        FunctionId::UNKNOWN
+    }
 }
 
 /// Add to per-thread function stack:
@@ -298,6 +305,10 @@ extern "C" {
 
     // Return whether C code has initialized.
     fn is_initialized() -> c_int;
+
+    // Increment/decrement reentrancy counter.
+    fn fil_increment_reentrancy();
+    fn fil_decrement_reentrancy();
 }
 
 struct FilMmapAPI;
