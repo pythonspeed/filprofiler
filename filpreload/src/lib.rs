@@ -332,3 +332,18 @@ pub extern "C" fn reimplemented_munmap(addr: *mut c_void, len: usize) -> c_int {
 pub extern "C" fn munmap(addr: *mut c_void, len: usize) -> c_int {
     return pymemprofile_api::mmap::munmap_wrapper(addr, len, &FilMmapAPI {});
 }
+
+/// Performance profiling.
+extern "C" {
+    fn get_pycodeobject_function_id(code: *mut PyCodeObject) -> u64;
+}
+
+// TODO This duplicates some code in the C codepath... should try and merge it.
+fn get_function_id(code_object: *mut PyCodeObject) -> Option<FunctionId> {
+    let mut function_id = unsafe { get_pycodeobject_function_id(code_object) };
+    if function_id == 0 {
+        None
+    } else {
+        Some(FunctionId::new((function_id.saturating_sub(1)) as u32))
+    }
+}

@@ -73,13 +73,15 @@ impl FunctionLocations {
     }
 }
 
+pub type LineNumber = u16; // TODO u32, newtype
+
 /// A specific location: file + function + line number.
 #[derive(Clone, Debug, PartialEq, Eq, Copy, Hash)]
 pub struct CallSiteId {
     /// The function + filename. We use IDs for performance reasons (faster hashing).
     function: FunctionId,
     /// Line number within the _file_, 1-indexed.
-    line_number: u16,
+    line_number: LineNumber,
 }
 
 impl CallSiteId {

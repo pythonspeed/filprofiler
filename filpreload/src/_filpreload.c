@@ -212,6 +212,13 @@ static void finish_call() {
   }
 }
 
+int get_pycodeobject_function_id(PyCodeObject* code) {
+  uint64_t function_id = 0;
+  assert(extra_code_index != -1);
+  _PyCode_GetExtra((PyObject*)code, extra_code_index, (void **)&function_id);
+  return function_id;
+}
+
 /// Callback functions for the Python tracing API (PyEval_SetProfile).
 __attribute__((visibility("hidden"))) int
 fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
@@ -226,10 +233,7 @@ fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
       then store the ID. Due to bad API design, value 0 indicates "no result",
       so we actually store the result + 1.
     */
-    uint64_t function_id = 0;
-    assert(extra_code_index != -1);
-    _PyCode_GetExtra((PyObject *)frame->f_code, extra_code_index,
-                     (void **)&function_id);
+    uint64_t function_id = get_pycodeobject_function_id(frame->f_code);
     if (function_id == 0) {
       Py_ssize_t filename_length, function_length;
       const char* filename = PyUnicode_AsUTF8AndSize(frame->f_code->co_filename,

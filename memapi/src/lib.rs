@@ -2,6 +2,7 @@ pub mod ffi;
 pub mod memorytracking;
 pub mod mmap;
 pub mod oom;
+pub mod performancetracking;
 mod python;
 mod rangemap;
 pub mod util;
