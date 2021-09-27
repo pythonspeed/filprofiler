@@ -1,1 +1,0 @@
-SIGUSR2 previously did not actually dump memory. Thanks to @gaspard-quenard for the bug report.
