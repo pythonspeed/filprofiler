@@ -1,4 +1,5 @@
 use crate::flamegraph::filter_to_useful_callstacks;
+use crate::flamegraph::write_flamegraph;
 use crate::flamegraph::write_lines;
 use crate::python::get_runpy_path;
 
@@ -619,22 +620,24 @@ impl<'a> AllocationTracker {
         })
         .clone();
 
-        let svg_path = directory_path
-            .join(format!("{}.svg", base_filename))
-            .to_str()
-            .unwrap()
-            .to_string();
+        let svg_path = directory_path.join(format!("{}.svg", base_filename));
+
+        let title = format!(
+            "{} ({:.1} MiB)",
+            title,
+            self.peak_allocated_bytes as f64 / (1024.0 * 1024.0)
+        );
+
         match write_flamegraph(
             &raw_path.to_str().unwrap().to_string(),
             &svg_path,
-            self.peak_allocated_bytes,
             false,
-            title,
+            &title,
             to_be_post_processed,
         ) {
             Ok(_) => {
                 eprintln!(
-                    "=fil-profile= Wrote memory usage flamegraph to {}",
+                    "=fil-profile= Wrote memory usage flamegraph to {:?}",
                     svg_path
                 );
             }
@@ -642,22 +645,17 @@ impl<'a> AllocationTracker {
                 eprintln!("=fil-profile= Error writing SVG: {}", e);
             }
         }
-        let svg_path = directory_path
-            .join(format!("{}-reversed.svg", base_filename))
-            .to_str()
-            .unwrap()
-            .to_string();
+        let svg_path = directory_path.join(format!("{}-reversed.svg", base_filename));
         match write_flamegraph(
             &raw_path.to_str().unwrap().to_string(),
             &svg_path,
-            self.peak_allocated_bytes,
             true,
-            title,
+            &title,
             to_be_post_processed,
         ) {
             Ok(_) => {
                 eprintln!(
-                    "=fil-profile= Wrote memory usage flamegraph to {}",
+                    "=fil-profile= Wrote memory usage flamegraph to {:?}",
                     svg_path
                 );
             }
@@ -729,66 +727,6 @@ impl<'a> AllocationTracker {
         self.peak_allocated_bytes = 0;
         self.default_path = default_path;
         self.validate();
-    }
-}
-
-/// Write a flamegraph SVG to disk, given lines in summarized format.
-fn write_flamegraph(
-    lines_file_path: &str,
-    path: &str,
-    peak_bytes: usize,
-    reversed: bool,
-    title: &str,
-    to_be_post_processed: bool,
-) -> std::io::Result<()> {
-    let mut file = std::fs::File::create(path)?;
-    let title = format!(
-        "{}{} ({:.1} MiB)",
-        title,
-        if reversed { ", Reversed" } else { "" },
-        peak_bytes as f64 / (1024.0 * 1024.0)
-    );
-    let mut options = flamegraph::Options::default();
-    options.title = title;
-    options.count_name = "bytes".to_string();
-    options.font_size = 16;
-    options.font_type = "monospace".to_string();
-    options.frame_height = 22;
-    options.reverse_stack_order = reversed;
-    options.color_diffusion = true;
-    options.direction = flamegraph::Direction::Inverted;
-    // Maybe disable this some day; but for now it makes debugging much
-    // easier:
-    options.pretty_xml = true;
-    if to_be_post_processed {
-        // Can't put structured text into subtitle, so have to do a hack.
-        options.subtitle = Some("FIL-SUBTITLE-HERE".to_string());
-    }
-    match flamegraph::from_files(&mut options, &[PathBuf::from(lines_file_path)], &file) {
-        Err(e) => Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("{}", e),
-        )),
-        Ok(_) => {
-            file.flush()?;
-            if to_be_post_processed {
-                // Replace with real subtitle.
-                let mut file2 = std::fs::File::open(path)?;
-                let mut data = String::new();
-                file2.read_to_string(&mut data)?;
-                let data = data.replace("FIL-SUBTITLE-HERE", r#"Made with the Fil memory profiler. <a href="https://pythonspeed.com/fil/" style="text-decoration: underline;" target="_parent">Try it on your code!</a>"#);
-                // Restore normal semi-colons.
-                let data = data.replace("\u{ff1b}", ";");
-                // Restore (non-breaking) spaces.
-                let data = data.replace("\u{12e4}", "\u{00a0}");
-                // Get rid of empty-line markers:
-                let data = data.replace("\u{2800}", "");
-                file.seek(std::io::SeekFrom::Start(0))?;
-                file.set_len(0)?;
-                file.write_all(&data.as_bytes())?;
-            }
-            Ok(())
-        }
     }
 }
 
