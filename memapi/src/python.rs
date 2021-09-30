@@ -32,7 +32,7 @@ pub fn get_runpy_path() -> &'static str {
 }
 
 // Get the callstack for the given frame.
-pub fn get_callstack<F>(frame: *mut PyFrameObject, get_function_id: F) -> Callstack
+pub fn get_callstack<F>(mut frame: *mut PyFrameObject, get_function_id: F) -> Callstack
 where
     F: Fn(*mut PyCodeObject) -> Option<FunctionId>,
 {
