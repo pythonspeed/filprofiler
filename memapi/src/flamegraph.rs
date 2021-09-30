@@ -1,4 +1,5 @@
 use std::{
+    fs,
     io::{Read, Seek, Write},
     path::{Path, PathBuf},
 };
@@ -63,18 +64,19 @@ pub fn write_lines<I: Iterator<Item = String>>(lines: I, path: &Path) -> std::io
 }
 
 /// Write a flamegraph SVG to disk, given lines in summarized format.
-pub fn write_flamegraph(
+fn write_flamegraph(
     lines_file_path: &str,
     path: &Path,
     reversed: bool,
     title: &str,
+    count_name: &str,
     to_be_post_processed: bool,
 ) -> std::io::Result<()> {
     let mut file = std::fs::File::create(path)?;
     let title = format!("{}{}", title, if reversed { ", Reversed" } else { "" },);
     let mut options = flamegraph::Options::default();
     options.title = title;
-    options.count_name = "bytes".to_string();
+    options.count_name = count_name.to_string();
     options.font_size = 16;
     options.font_type = "monospace".to_string();
     options.frame_height = 22;
@@ -113,5 +115,94 @@ pub fn write_flamegraph(
             }
             Ok(())
         }
+    }
+}
+
+/// Write .prof, -source.prof, .svg and -reversed.svg files for given lines.
+pub fn write_flamegraphs<F>(
+    directory_path: &Path,
+    base_filename: &str,
+    title: &str,
+    count_name: &str,
+    to_be_post_processed: bool,
+    write_lines: F,
+) where
+    F: Fn(bool, &Path) -> std::io::Result<()>, // to_be_post_processed, dest
+{
+    if !directory_path.exists() {
+        fs::create_dir_all(directory_path)
+            .expect("=fil-profile= Couldn't create the output directory.");
+    } else if !directory_path.is_dir() {
+        panic!("=fil-profile= Output path must be a directory.");
+    }
+
+    let raw_path_without_source_code = directory_path.join(format!("{}.prof", base_filename));
+
+    let raw_path_with_source_code = directory_path.join(format!("{}-source.prof", base_filename));
+
+    // Always write .prof file without source code, for use by tests and
+    // other automated post-processing.
+    if let Err(e) = write_lines(false, &raw_path_without_source_code) {
+        eprintln!("=fil-profile= Error writing raw profiling data: {}", e);
+        return;
+    }
+
+    // Optionally write version with source code for SVGs, if we're using
+    // source code.
+    if to_be_post_processed {
+        if let Err(e) = write_lines(true, &raw_path_with_source_code) {
+            eprintln!("=fil-profile= Error writing raw profiling data: {}", e);
+            return;
+        }
+    }
+
+    let raw_path = (if to_be_post_processed {
+        &raw_path_with_source_code
+    } else {
+        &raw_path_without_source_code
+    })
+    .clone();
+
+    let svg_path = directory_path.join(format!("{}.svg", base_filename));
+    match write_flamegraph(
+        &raw_path.to_str().unwrap().to_string(),
+        &svg_path,
+        false,
+        &title,
+        count_name,
+        to_be_post_processed,
+    ) {
+        Ok(_) => {
+            eprintln!(
+                "=fil-profile= Wrote memory usage flamegraph to {:?}",
+                svg_path
+            );
+        }
+        Err(e) => {
+            eprintln!("=fil-profile= Error writing SVG: {}", e);
+        }
+    }
+    let svg_path = directory_path.join(format!("{}-reversed.svg", base_filename));
+    match write_flamegraph(
+        &raw_path.to_str().unwrap().to_string(),
+        &svg_path,
+        true,
+        &title,
+        count_name,
+        to_be_post_processed,
+    ) {
+        Ok(_) => {
+            eprintln!(
+                "=fil-profile= Wrote memory usage flamegraph to {:?}",
+                svg_path
+            );
+        }
+        Err(e) => {
+            eprintln!("=fil-profile= Error writing SVG: {}", e);
+        }
+    }
+    if to_be_post_processed {
+        // Don't need this file, and it'll be quite big, so delete it.
+        let _ = std::fs::remove_file(raw_path_with_source_code);
     }
 }

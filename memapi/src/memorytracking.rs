@@ -1,5 +1,5 @@
 use crate::flamegraph::filter_to_useful_callstacks;
-use crate::flamegraph::write_flamegraph;
+use crate::flamegraph::write_flamegraphs;
 use crate::flamegraph::write_lines;
 use crate::python::get_runpy_path;
 
@@ -7,13 +7,10 @@ use super::rangemap::RangeMap;
 use super::util::new_hashmap;
 use ahash::RandomState as ARandomState;
 use im::Vector as ImVector;
-use inferno::flamegraph;
 use itertools::Itertools;
+use std::borrow::Cow;
+use std::collections::HashMap;
 use std::path::Path;
-use std::path::PathBuf;
-use std::{borrow::Cow, io::Write};
-use std::{collections::HashMap, io::Read};
-use std::{fs, io::Seek};
 
 extern "C" {
     fn _exit(exit_code: std::os::raw::c_int);
@@ -256,7 +253,7 @@ impl<'a> CallstackInterner {
     }
 
     /// Add a (possibly) new Function, returning its ID.
-    pub fn get_or_insert_id<F: FnOnce() -> ()>(
+    pub fn get_or_insert_id<F: FnOnce()>(
         &mut self,
         callstack: Cow<Callstack>,
         call_on_new: F,
@@ -534,18 +531,26 @@ impl<'a> AllocationTracker {
         self.dump_to_flamegraph(path, true, "peak-memory", "Peak Tracked Memory Usage", true);
     }
 
+    fn write_lines(
+        &self,
+        peak: bool,
+        to_be_post_processed: bool,
+        dest: &Path,
+    ) -> std::io::Result<()> {
+        let lines = self.to_lines(peak, to_be_post_processed);
+        write_lines(lines, dest)?;
+        Ok(())
+    }
+
     fn to_lines(
-        &mut self,
+        &self,
         peak: bool,
         to_be_post_processed: bool,
     ) -> impl Iterator<Item = String> + '_ {
-        // First, make sure peaks are correct:
-        self.check_if_new_peak();
-
         let by_call = self.combine_callstacks(peak).into_iter();
         let id_to_callstack = self.interner.get_reverse_map();
         let functions = &self.functions;
-        by_call.map(move |(callstack_id, size)| {
+        let lines = by_call.map(move |(callstack_id, size)| {
             format!(
                 "{} {}",
                 id_to_callstack.get(&callstack_id).unwrap().as_string(
@@ -555,7 +560,8 @@ impl<'a> AllocationTracker {
                 ),
                 size,
             )
-        })
+        });
+        lines
     }
 
     fn dump_to_flamegraph(
@@ -566,6 +572,9 @@ impl<'a> AllocationTracker {
         title: &str,
         to_be_post_processed: bool,
     ) {
+        // First, make sure peaks are correct:
+        self.check_if_new_peak();
+
         // Print warning if we're missing allocations.
         #[cfg(not(feature = "fil4prod"))]
         {
@@ -585,88 +594,19 @@ impl<'a> AllocationTracker {
         eprintln!("=fil-profile= Preparing to write to {}", path);
         let directory_path = Path::new(path);
 
-        if !directory_path.exists() {
-            fs::create_dir_all(directory_path)
-                .expect("=fil-profile= Couldn't create the output directory.");
-        } else if !directory_path.is_dir() {
-            panic!("=fil-profile= Output path must be a directory.");
-        }
-
-        let raw_path_without_source_code = directory_path.join(format!("{}.prof", base_filename));
-
-        let raw_path_with_source_code =
-            directory_path.join(format!("{}-source.prof", base_filename));
-
-        // Always write .prof file without source code, for use by tests and
-        // other automated post-processing.
-        if let Err(e) = write_lines(self.to_lines(peak, false), &raw_path_without_source_code) {
-            eprintln!("=fil-profile= Error writing raw profiling data: {}", e);
-            return;
-        }
-
-        // Optionally write version with source code for SVGs, if we're using
-        // source code.
-        if to_be_post_processed {
-            if let Err(e) = write_lines(self.to_lines(peak, true), &raw_path_with_source_code) {
-                eprintln!("=fil-profile= Error writing raw profiling data: {}", e);
-                return;
-            }
-        }
-
-        let raw_path = (if to_be_post_processed {
-            &raw_path_with_source_code
-        } else {
-            &raw_path_without_source_code
-        })
-        .clone();
-
-        let svg_path = directory_path.join(format!("{}.svg", base_filename));
-
         let title = format!(
             "{} ({:.1} MiB)",
             title,
             self.peak_allocated_bytes as f64 / (1024.0 * 1024.0)
         );
-
-        match write_flamegraph(
-            &raw_path.to_str().unwrap().to_string(),
-            &svg_path,
-            false,
+        write_flamegraphs(
+            directory_path,
+            base_filename,
             &title,
+            "bytes",
             to_be_post_processed,
-        ) {
-            Ok(_) => {
-                eprintln!(
-                    "=fil-profile= Wrote memory usage flamegraph to {:?}",
-                    svg_path
-                );
-            }
-            Err(e) => {
-                eprintln!("=fil-profile= Error writing SVG: {}", e);
-            }
-        }
-        let svg_path = directory_path.join(format!("{}-reversed.svg", base_filename));
-        match write_flamegraph(
-            &raw_path.to_str().unwrap().to_string(),
-            &svg_path,
-            true,
-            &title,
-            to_be_post_processed,
-        ) {
-            Ok(_) => {
-                eprintln!(
-                    "=fil-profile= Wrote memory usage flamegraph to {:?}",
-                    svg_path
-                );
-            }
-            Err(e) => {
-                eprintln!("=fil-profile= Error writing SVG: {}", e);
-            }
-        }
-        if to_be_post_processed {
-            // Don't need this file, and it'll be quite big, so delete it.
-            let _ = std::fs::remove_file(raw_path_with_source_code);
-        }
+            |tbpp, dest| self.write_lines(peak, tbpp, dest),
+        )
     }
 
     /// Clear memory we won't be needing anymore, since we're going to exit out.
@@ -733,11 +673,9 @@ impl<'a> AllocationTracker {
 #[cfg(test)]
 mod tests {
     use super::{
-        filter_to_useful_callstacks, Allocation, AllocationTracker, CallSiteId, Callstack,
-        CallstackInterner, FunctionId, FunctionLocations, HIGH_32BIT, MIB,
+        Allocation, AllocationTracker, CallSiteId, Callstack, CallstackInterner, FunctionId,
+        FunctionLocations, HIGH_32BIT, MIB,
     };
-    use im;
-    use itertools::Itertools;
     use proptest::prelude::*;
     use std::borrow::Cow;
     use std::collections::HashMap;
@@ -1113,6 +1051,9 @@ mod tests {
         tracker.add_allocation(2, 234, cs2_id);
         tracker.add_anon_mmap(3, 50000, cs1_id);
         tracker.add_allocation(4, 6000, cs3_id);
+
+        // Make sure we notice new peak.
+        tracker.check_if_new_peak();
 
         // 234 allocation is too small, below the 99% total allocations
         // threshold, but we always guarantee at least 100 allocations.

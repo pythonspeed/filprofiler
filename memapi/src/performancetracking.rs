@@ -6,7 +6,7 @@
 // TODO dump on shutdown
 // TODO non-Python threads
 
-use crate::flamegraph::{filter_to_useful_callstacks, write_lines};
+use crate::flamegraph::{filter_to_useful_callstacks, write_flamegraphs, write_lines};
 use crate::memorytracking::{Callstack, FunctionId, FunctionLocations};
 use crate::python::get_callstack;
 
@@ -68,23 +68,37 @@ impl PerformanceTracker {
     }
 
     // Convert to input lines for flamegraph rendering.
-    fn write_lines(
+
+    /// Dump flamegraphs to disk.
+    fn dump_flamegraphs(
         &self,
+        path: &Path,
         to_be_post_processed: bool,
         functions: &FunctionLocations,
-        path: &Path,
-    ) -> std::io::Result<()> {
-        let total_samples = self.callstack_to_samples.values().sum();
-        let lines = filter_to_useful_callstacks(self.callstack_to_samples.iter(), total_samples)
-            .map(|(callstack, calls)| {
-                format!(
-                    "{} {}",
-                    callstack.as_string(to_be_post_processed, functions, ";"),
-                    calls
-                )
-            });
-        write_lines(lines, path)?;
-        Ok(())
+    ) {
+        let write_lines = |to_be_post_processed: bool, dest: &Path| {
+            let total_samples = self.callstack_to_samples.values().sum();
+            let lines =
+                filter_to_useful_callstacks(self.callstack_to_samples.iter(), total_samples).map(
+                    move |(callstack, calls)| {
+                        format!(
+                            "{} {}",
+                            callstack.as_string(to_be_post_processed, &functions, ";"),
+                            calls
+                        )
+                    },
+                );
+            write_lines(lines, dest)
+        };
+
+        write_flamegraphs(
+            path,
+            "performance",
+            "Performance",
+            "samples",
+            to_be_post_processed,
+            |tbpp, dest| write_lines(tbpp, dest),
+        )
     }
 }
 
