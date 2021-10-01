@@ -206,3 +206,39 @@ pub fn write_flamegraphs<F>(
         let _ = std::fs::remove_file(raw_path_with_source_code);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::filter_to_useful_callstacks;
+    use im::HashMap;
+    use itertools::Itertools;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn filtering_of_callstacks(
+            // Allocated bytes. Will use index as the memory address.
+            allocated_sizes in prop::collection::vec(0..1000 as usize, 5..15000),
+        ) {
+            let total_size : usize = allocated_sizes.iter().sum();
+            let total_size_99 = (99 * total_size) / 100;
+            let callstacks = (&allocated_sizes).iter().enumerate();
+            let filtered : HashMap<usize,usize>  = filter_to_useful_callstacks(callstacks, total_size).collect();
+            let filtered_size :usize = filtered.values().into_iter().sum();
+            if filtered_size >= total_size_99  {
+                if filtered.len() > 100 {
+                    // Removing any item should take us to or below 99%
+                    for value in filtered.values() {
+                        prop_assert!(filtered_size - *value <= total_size_99)
+                    }
+                }
+            } else {
+                // Cut out before 99%, so must be too many items
+                prop_assert_eq!(filtered.len(), 10000);
+                prop_assert_eq!(filtered_size, allocated_sizes.clone().iter().sorted_by(
+                    |a, b| Ord::cmp(b, a)).take(10000).sum::<usize>());
+            }
+        }
+
+    }
+}

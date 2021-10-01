@@ -726,6 +726,7 @@ dependencies = [
  "libc",
  "libloading 0.7.0",
  "once_cell",
+ "parking_lot",
  "proc-maps",
  "proptest",
  "psutil",
