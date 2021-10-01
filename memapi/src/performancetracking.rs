@@ -18,7 +18,7 @@ use pyo3::ffi::{
 };
 use pyo3::Python;
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -42,7 +42,7 @@ impl PerformanceTracker {
         }
     }
 
-    pub fn finish(&self) {
+    pub fn finish(&self, destination_directory: PathBuf) {
         self.running.store(false, Ordering::Release);
     }
 
@@ -66,8 +66,6 @@ impl PerformanceTracker {
         }
         // We're done, so dump profiling information to disk.
     }
-
-    // Convert to input lines for flamegraph rendering.
 
     /// Dump flamegraphs to disk.
     fn dump_flamegraphs(
