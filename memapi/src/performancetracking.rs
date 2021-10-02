@@ -36,7 +36,7 @@ struct PerformanceTrackerInner {
     running: bool,
 }
 
-struct PerformanceTracker {
+pub struct PerformanceTracker {
     inner: Arc<Mutex<PerformanceTrackerInner>>,
 }
 
@@ -62,9 +62,13 @@ impl PerformanceTracker {
         Self { inner: inner2 }
     }
 
-    pub fn finish(&self, destination_directory: &Path, functions: &FunctionLocations) {
+    pub fn finish(&self) {
         let mut inner = self.inner.lock();
         inner.finish();
+    }
+
+    pub fn dump_profile(&self, destination_directory: &Path, functions: &FunctionLocations) {
+        let inner = self.inner.lock();
         inner.dump_flamegraphs(destination_directory, functions);
     }
 }
