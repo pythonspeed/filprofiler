@@ -1,10 +1,20 @@
-// Performance profiling.
-//
-// TODO special handling for thread that has GIL when sampling happens
-// TODO callstacks
-// TODO thread status (CPU/Disk/Waiting/etc.)
-// TODO dump on shutdown
-// TODO non-Python threads
+/*
+Performance profiling.
+
+DONE actually write callstacks
+TODO fix segfault on shutdown
+DONE disable memory tracking in polling thread
+DONE write to correct directory
+TODO add to HTML template
+DONE acquiring GIL after 50ms on startup works... but it's fragile, should be _sure_ GIL is initialized?
+TODO filter out the tracking thread from output
+TODO unknown frames?
+TODO how to start/stop when using Fil's Python API?
+TODO special handling for thread that has GIL when sampling happens
+TODO thread status (CPU/Disk/Waiting/etc.)
+TODO dump on shutdown
+TODO non-Python threads
+*/
 
 use crate::flamegraph::{filter_to_useful_callstacks, write_flamegraphs, write_lines};
 use crate::memorytracking::{Callstack, FunctionId, FunctionLocations};
@@ -41,13 +51,15 @@ pub struct PerformanceTracker {
 }
 
 impl PerformanceTracker {
-    pub fn new<F>(get_function_id: F) -> Self
+    pub fn new<S, F>(setup_thread: S, get_function_id: F) -> Self
     where
+        S: Send + Sync + 'static + FnOnce(),
         F: Send + Sync + 'static + Fn(*mut PyCodeObject) -> Option<FunctionId>,
     {
         let inner = Arc::new(Mutex::new(PerformanceTrackerInner::new()));
         let inner2 = inner.clone();
         spawn(move || {
+            setup_thread();
             let get_function_id = &get_function_id;
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(50));
@@ -95,12 +107,14 @@ impl PerformanceTrackerInner {
     where
         F: Fn(*mut PyCodeObject) -> Option<FunctionId>,
     {
+        println!("add samples");
         let get_function_id = &get_function_id;
         Python::with_gil(|_py| {
             let interp = unsafe { PyInterpreterState_Get() };
             let mut tstate = unsafe { PyInterpreterState_ThreadHead(interp) };
             while tstate != null_mut() {
                 let frame = unsafe { PyThreadState_GetFrame(tstate) };
+                println!("adding sample for callstack");
                 let callstack = get_callstack(frame, get_function_id);
                 self.add_sample(callstack);
                 tstate = unsafe { PyThreadState_Next(tstate) };
@@ -117,6 +131,7 @@ impl PerformanceTrackerInner {
     /// Dump flamegraphs to disk.
     fn dump_flamegraphs(&self, destination_directory: &Path, functions: &FunctionLocations) {
         let write_lines = |to_be_post_processed: bool, dest: &Path| {
+            println!("CAllstacks to samples: {:?}", self.callstack_to_samples);
             let total_samples = self.callstack_to_samples.values().sum();
             let lines =
                 filter_to_useful_callstacks(self.callstack_to_samples.iter(), total_samples).map(

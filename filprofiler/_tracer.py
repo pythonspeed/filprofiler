@@ -64,6 +64,7 @@ def start_tracing(output_path: Union[str, Path]):
     """Start tracing allocations."""
     preload.fil_reset(str(output_path).encode("utf-8"))
     preload.fil_start_tracking()
+    preload.fil_start_performance_tracking()
     threading.setprofile(_start_thread_trace)
     preload.register_fil_tracer()
 

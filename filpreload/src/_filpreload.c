@@ -97,6 +97,11 @@ static inline void increment_reentrancy() { will_i_be_reentrant += 1; }
 static inline void decrement_reentrancy() { will_i_be_reentrant -= 1; }
 #endif
 
+// For use by Rust.
+void fil_increment_reentrancy() {
+  increment_reentrancy();
+}
+
 // Return whether to pass malloc() etc. to Rust tracking code.
 // Will be true if all conditions are true:
 //
@@ -129,8 +134,6 @@ extern void pymemprofile_start_call(uint16_t parent_line_number,
 extern void pymemprofile_finish_call();
 extern void pymemprofile_new_line_number(uint16_t line_number);
 extern void pymemprofile_reset(const char *path);
-extern void pymemprofile_start_tracking();
-extern void pymemprofile_stop_tracking();
 extern void pymemprofile_dump_peak_to_flamegraph(const char *path);
 extern void pymemprofile_add_allocation(size_t address, size_t length,
                                         uint16_t line_number);

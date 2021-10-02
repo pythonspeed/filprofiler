@@ -25,6 +25,16 @@ struct TrackerState {
     allocations: AllocationTracker,
 }
 
+extern "C" {
+    fn fil_increment_reentrancy();
+}
+
+fn disable_memory_tracking() {
+    unsafe {
+        fil_increment_reentrancy();
+    }
+}
+
 lazy_static! {
     static ref TRACKER_STATE: Mutex<TrackerState> = Mutex::new(TrackerState {
         allocations: AllocationTracker::new("/tmp".to_string()),
@@ -36,7 +46,8 @@ lazy_static! {
             }
         ),
     });
-    static ref PERFORMANCE_TRACKER: PerformanceTracker = PerformanceTracker::new(get_function_id);
+    static ref PERFORMANCE_TRACKER: PerformanceTracker =
+        PerformanceTracker::new(disable_memory_tracking, get_function_id);
 }
 
 /// Register a new function/filename location.
@@ -178,6 +189,11 @@ fn dump_peak_to_flamegraph(path: &str) {
     allocations.dump_peak_to_flamegraph(path);
 
     PERFORMANCE_TRACKER.dump_profile(&PathBuf::from(path), &allocations.functions);
+}
+
+#[no_mangle]
+extern "C" fn fil_start_performance_tracking() {
+    lazy_static::initialize(&PERFORMANCE_TRACKER);
 }
 
 #[no_mangle]
