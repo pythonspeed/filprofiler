@@ -5,15 +5,16 @@ DONE actually write callstacks
 TODO fix segfault on shutdown
 DONE disable memory tracking in polling thread
 DONE write to correct directory
-TODO add to HTML template
+DONE add to HTML template
 DONE acquiring GIL after 50ms on startup works... but it's fragile, should be _sure_ GIL is initialized?
 TODO filter out the tracking thread from output
-TODO unknown frames?
-TODO how to start/stop when using Fil's Python API?
+DONE unknown frames
+TODO how to start/stop when using Fil's Python API? no global PERFORMANCE_TRACKER, instead create new PerformanceTracker when starting tracking, return it to Python! then stop it when we stop tracking.
 TODO special handling for thread that has GIL when sampling happens
 TODO thread status (CPU/Disk/Waiting/etc.)
 TODO dump on shutdown
 TODO non-Python threads
+TODO better title for SVG
 */
 
 use crate::flamegraph::{filter_to_useful_callstacks, write_flamegraphs, write_lines};
@@ -107,15 +108,13 @@ impl PerformanceTrackerInner {
     where
         F: Fn(*mut PyCodeObject) -> Option<FunctionId>,
     {
-        println!("add samples");
         let get_function_id = &get_function_id;
         Python::with_gil(|_py| {
             let interp = unsafe { PyInterpreterState_Get() };
             let mut tstate = unsafe { PyInterpreterState_ThreadHead(interp) };
             while tstate != null_mut() {
                 let frame = unsafe { PyThreadState_GetFrame(tstate) };
-                println!("adding sample for callstack");
-                let callstack = get_callstack(frame, get_function_id);
+                let callstack = get_callstack(frame, get_function_id, true);
                 self.add_sample(callstack);
                 tstate = unsafe { PyThreadState_Next(tstate) };
             }
@@ -131,7 +130,6 @@ impl PerformanceTrackerInner {
     /// Dump flamegraphs to disk.
     fn dump_flamegraphs(&self, destination_directory: &Path, functions: &FunctionLocations) {
         let write_lines = |to_be_post_processed: bool, dest: &Path| {
-            println!("CAllstacks to samples: {:?}", self.callstack_to_samples);
             let total_samples = self.callstack_to_samples.values().sum();
             let lines =
                 filter_to_useful_callstacks(self.callstack_to_samples.iter(), total_samples).map(

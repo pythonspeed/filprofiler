@@ -32,7 +32,11 @@ pub fn get_runpy_path() -> &'static str {
 }
 
 // Get the callstack for the given frame.
-pub fn get_callstack<F>(mut frame: *mut PyFrameObject, get_function_id: F) -> Callstack
+pub fn get_callstack<F>(
+    mut frame: *mut PyFrameObject,
+    get_function_id: F,
+    stop_on_unknown: bool,
+) -> Callstack
 where
     F: Fn(*mut PyCodeObject) -> Option<FunctionId>,
 {
@@ -48,6 +52,11 @@ where
                 PyFrame_GetLineNumber(frame),
             )
         };
+        // On Fil4prod this should never happen; on Fil it's typically frames
+        // outside the tracing context.
+        if stop_on_unknown && function_id == FunctionId::UNKNOWN {
+            break;
+        }
         let line_number = line_number as LineNumber;
         result.push(CallSiteId::new(function_id, line_number));
         frame = unsafe { (*frame).f_back };
