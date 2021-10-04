@@ -15,6 +15,8 @@ TODO thread status (CPU/Disk/Waiting/etc.)
 TODO dump on shutdown
 TODO non-Python threads
 TODO better title for SVG
+TODO Python < 3.9. Just disable?
+TODO current mechanism loses thread-callstack-persistence Fil provides for non-Python threads. probably follow-up issue.
 */
 
 use crate::flamegraph::{filter_to_useful_callstacks, write_flamegraphs, write_lines};
@@ -34,16 +36,21 @@ use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
 use std::sync::Arc;
 use std::thread::{spawn, JoinHandle};
+use sysinfo::{ProcessExt, ProcessStatus, System, SystemExt};
 
 // Requires Python 3.9 or later...
 extern "C" {
+    // From Python itself.
     fn PyInterpreterState_Get() -> *mut PyInterpreterState;
     fn PyThreadState_GetFrame(ts: *mut PyThreadState) -> *mut PyFrameObject;
+
+    // APIs we provide.
+    fn PyThreadState_GetNativeThreadId(ts: *mut PyThreadState) -> u64;
 }
 
 /// Track what threads are doing over time.
 struct PerformanceTrackerInner {
-    callstack_to_samples: HashMap<Callstack, usize, ARandomState>,
+    callstack_to_samples: HashMap<(Callstack, ProcessStatus), usize, ARandomState>,
     running: bool,
 }
 
@@ -108,6 +115,11 @@ impl PerformanceTrackerInner {
     where
         F: Fn(*mut PyCodeObject) -> Option<FunctionId>,
     {
+        let pid = os::env::id();
+        let system = System::new();
+        system.refresh_process(pid);
+        let process = system.process(pid);
+
         let get_function_id = &get_function_id;
         Python::with_gil(|_py| {
             let interp = unsafe { PyInterpreterState_Get() };
@@ -115,15 +127,22 @@ impl PerformanceTrackerInner {
             while tstate != null_mut() {
                 let frame = unsafe { PyThreadState_GetFrame(tstate) };
                 let callstack = get_callstack(frame, get_function_id, true);
-                self.add_sample(callstack);
+                let status = process
+                    .tasks
+                    .get(unsafe { PyThreadState_GetNativeThreadId(ts) })
+                    .map_or(ProcessStatus::Unknown(0), |p| p.status());
+                self.add_sample(callstack, status);
                 tstate = unsafe { PyThreadState_Next(tstate) };
             }
         });
     }
 
     /// Add a sample.
-    fn add_sample(&mut self, callstack: Callstack) {
-        let samples = self.callstack_to_samples.entry(callstack).or_insert(0);
+    fn add_sample(&mut self, callstack: Callstack, status: ProcessStatus) {
+        let samples = self
+            .callstack_to_samples
+            .entry((callstack, status))
+            .or_insert(0);
         *samples += 1;
     }
 
@@ -133,10 +152,11 @@ impl PerformanceTrackerInner {
             let total_samples = self.callstack_to_samples.values().sum();
             let lines =
                 filter_to_useful_callstacks(self.callstack_to_samples.iter(), total_samples).map(
-                    move |(callstack, calls)| {
+                    move |((callstack, status), calls)| {
                         format!(
-                            "{} {}",
+                            "{};{} {}",
                             callstack.as_string(to_be_post_processed, &functions, ";"),
+                            status,
                             calls
                         )
                     },
