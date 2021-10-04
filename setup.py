@@ -27,7 +27,7 @@ machine = platform.machine()
 # Set public symbols to use for macOS. For some reason this doesn't work in
 # build.rs. Currently the exported symbols list breaks on macOS ARM for
 # unclear reasons, possibly the ABI is different (no `_` prefix to symbols maybe?)
-if system == 'Darwin' and machine == 'x86_64':
+if system == "Darwin" and machine == "x86_64":
     environ[
         "RUSTFLAGS"
     ] = f"-C link-arg=-Wl,-exported_symbols_list,{getcwd()}/filpreload/export_symbols.txt"
@@ -75,7 +75,7 @@ setup(
     ],
     python_requires=">=3.6",
     license="Apache 2.0",
-    url="https://pythonspeed.com/products/filmemoryprofiler/",
+    url="https://pythonspeed.com/fil/",
     maintainer="Itamar Turner-Trauring",
     maintainer_email="itamar@pythonspeed.com",
     long_description=read("README.md"),

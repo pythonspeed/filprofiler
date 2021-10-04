@@ -60,8 +60,7 @@ You can also run the profiler this way:
 
   $ python -m filprofiler run yourprogram.py
 
-For more info, including documentation on Jupyter usage,
-visit https://pythonspeed.com/products/filmemoryprofiler/
+You can read the documentation at https://pythonspeed.com/fil/docs/
 """
 
 
