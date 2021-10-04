@@ -40,6 +40,7 @@ def render_report(output_path: str, now: datetime) -> str:
         margin: 4rem auto;
         font-size: 18px;
     }}
+    blockquote {{ border: 1px; border-color: black; }}
     div {{
         text-align: center;
     }}
@@ -77,11 +78,24 @@ def render_report(output_path: str, now: datetime) -> str:
 <p><input type="button" onclick="fullScreen('#peak');" value="Full screen"></p></div>
 
 <br>
+<blockquote><strong>Need help, or does something look wrong?</strong>
+<a href="https://pythonspeed.com/fil/docs/">Read the documentation</a>,
+and if that doesn't help please
+<a href="https://github.com/pythonspeed/filprofiler/issues/new?body={bugreport}">file an issue</a>
+and I'll try to help.</blockquote>
+<br>
 
 <div><iframe id="peak-reversed" src="peak-memory-reversed.svg" width="100%" height="200" scrolling="auto" frameborder="0"></iframe><br>
 <p><input type="button" onclick="fullScreen('#peak-reversed');" value="Full screen"></p></div>
 
-<h2>Need help, or does something look wrong? <a href="https://github.com/pythonspeed/filprofiler/issues/new?body={bugreport}">Please file an issue</a> and I'll try to help</h2>
+<br>
+<blockquote><strong>Want memory profiling for your production batch jobs?</strong>
+I'm working on a
+<a href="https://pythonspeed.com/fil/docs/fil4prod/difference-opensource.html"
+>commercial version of Fil</a> fast and robust enough to run in production;
+<a href="mailto:itamar@pythonspeed.com">send me an email</a> to participate
+in the alpha program.</blockquote>
+<br>
 
 <h2>Understanding the graphs</h2>
 <p>The flame graphs shows the callstacks responsible for allocations at peak.</p>
