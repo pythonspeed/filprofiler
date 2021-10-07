@@ -144,6 +144,7 @@ extern void pymemprofile_free_anon_mmap(size_t address, size_t length);
 extern void *pymemprofile_get_current_callstack();
 extern void pymemprofile_set_current_callstack(void *callstack);
 extern void pymemprofile_clear_current_callstack();
+extern void pymemprofile_new_thread();
 
 static void __attribute__((constructor)) constructor() {
   if (initialized) {
@@ -190,6 +191,9 @@ static void __attribute__((constructor)) constructor() {
   // instead we do it in fork(), post-constructor, where apparently it
   // is fine to do.
   // unsetenv("DYLD_INSERT_LIBRARIES");
+
+  // Register main thread.
+  pymemprofile_new_thread();
 
   initialized = 1;
 }
@@ -532,6 +536,9 @@ static void *wrapper_pthread_start(void *nta) {
 __attribute__((visibility("default"))) int
 SYMBOL_PREFIX(pthread_create)(pthread_t *thread, const pthread_attr_t *attr,
                               void *(*start_routine)(void *), void *arg) {
+  // Record pthread_t -> tid mapping.
+  pymemprofile_new_thread();
+
   if (!likely(initialized) || am_i_reentrant()) {
     return underlying_real_pthread_create(thread, attr, start_routine, arg);
   }

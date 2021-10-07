@@ -1,9 +1,13 @@
+use ahash::RandomState as ARandomState;
+use libc::{pid_t, pthread_t};
 use parking_lot::Mutex;
 use pymemprofile_api::memorytracking::{AllocationTracker, CallSiteId, Callstack, FunctionId};
 use pymemprofile_api::oom::{InfiniteMemory, OutOfMemoryEstimator, RealMemoryInfo};
-use pymemprofile_api::performancetracking::PerformanceTracker;
+use pymemprofile_api::performancetracking::{gettid, PerformanceTracker};
+use pymemprofile_api::util::new_hashmap;
 use pyo3::ffi::PyCodeObject;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_void};
 use std::path::PathBuf;
@@ -46,8 +50,14 @@ lazy_static! {
             }
         ),
     });
+
     static ref PERFORMANCE_TRACKER: PerformanceTracker =
-        PerformanceTracker::new(disable_memory_tracking, get_function_id);
+        PerformanceTracker::new(disable_memory_tracking, get_function_id, pthread_t_to_tid);
+
+    // Map pthread_t to thread IDs (==process IDs in Linux), for use by
+    // performance tracking.
+    static ref PTHREAD_T_TO_TID: Mutex<HashMap<pthread_t, pid_t, ARandomState>> =
+        Mutex::new(new_hashmap());
 }
 
 /// Register a new function/filename location.
@@ -368,4 +378,18 @@ fn get_function_id(code_object: *mut PyCodeObject) -> Option<FunctionId> {
     } else {
         Some(FunctionId::new((function_id.saturating_sub(1)) as u32))
     }
+}
+
+fn pthread_t_to_tid(pthread_id: pthread_t) -> pid_t {
+    let map = PTHREAD_T_TO_TID.lock();
+    *map.get(&pthread_id).unwrap_or(&0)
+}
+
+// Keep track of mapping between pthread_t and pid_t.
+#[no_mangle]
+extern "C" fn pymemprofile_new_thread() {
+    let pthread_id = unsafe { libc::pthread_self() };
+    let pid: pid_t = gettid();
+    let mut map = PTHREAD_T_TO_TID.lock();
+    map.insert(pthread_id, pid);
 }

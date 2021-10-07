@@ -1,9 +1,9 @@
 // Python APIs that are not exposed in PyO3.
 
+#include <pthread.h>
 #include <Python.h>
 #include <pystate.h>
-#include <stdint.h>
 
-uint64_t PyThreadState_GetNativeThreadId(PyThreadState* ts) {
-  return ts->native_thread_id;
+pthread_t PyThreadState_GetPthreadId(PyThreadState* ts) {
+  return ts->thread_id;
 }
