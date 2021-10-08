@@ -87,8 +87,8 @@ impl From<ProcessStatus> for ThreadStatus {
 impl std::fmt::Display for ThreadStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
-            ThreadStatus::Running => "Running",
-            ThreadStatus::Waiting => "Waiting",
+            ThreadStatus::Running => "\u{2BC8} Running",
+            ThreadStatus::Waiting => "\u{29D7} Waiting",
             ThreadStatus::Uninterruptible => "Uninterruptable wait",
             _ => "Other",
         })
