@@ -62,7 +62,7 @@ struct PerformanceTrackerInner {
 }
 
 pub struct PerformanceTracker {
-    inner: Arc<Mutex<PerformanceTrackerInner>>,
+    inner: Arc<Mutex<(Option<JoinHandle<()>>, PerformanceTrackerInner)>>,
 }
 
 #[derive(Eq, PartialEq, Hash)]
@@ -105,9 +105,9 @@ impl PerformanceTracker {
         // Make sure our pthread_t -> tid mapping works correctly.
         assert_eq!(unsafe { pthread_t_to_tid(libc::pthread_self()) }, gettid());
 
-        let inner = Arc::new(Mutex::new(PerformanceTrackerInner::new()));
+        let inner = Arc::new(Mutex::new((None, PerformanceTrackerInner::new())));
         let inner2 = inner.clone();
-        ThreadBuilder::new()
+        let handle = ThreadBuilder::new()
             .name("PerformanceTracker".to_string())
             .spawn(move || {
                 setup_thread();
@@ -117,23 +117,30 @@ impl PerformanceTracker {
                     std::thread::sleep(std::time::Duration::from_millis(50));
                     // TODO make sure we don't get GIL/inner-lock deadlocks
                     let mut inner = inner.lock();
-                    if !inner.is_running() {
+                    if !inner.1.is_running() {
                         break;
                     }
-                    inner.add_samples(get_function_id, pthread_t_to_tid);
+                    inner.1.add_samples(get_function_id, pthread_t_to_tid);
                 }
             });
+        {
+            let mut inner = inner2.lock();
+            inner.0 = Some(handle.unwrap());
+        }
         Self { inner: inner2 }
     }
 
-    pub fn finish(&self) {
-        let mut inner = self.inner.lock();
-        inner.finish();
-    }
-
-    pub fn dump_profile(&self, destination_directory: &Path, functions: &FunctionLocations) {
+    pub fn dump_profile(self, destination_directory: &Path, functions: &FunctionLocations) {
+        let handle = {
+            let mut inner = self.inner.lock();
+            inner.1.finish();
+            inner.0.take()
+        };
+        if let Some(handle) = handle {
+            handle.join();
+        }
         let inner = self.inner.lock();
-        inner.dump_flamegraphs(destination_directory, functions);
+        inner.1.dump_flamegraphs(destination_directory, functions);
     }
 }
 
