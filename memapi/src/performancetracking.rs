@@ -7,7 +7,7 @@ DONE disable memory tracking in polling thread
 DONE write to correct directory
 DONE add to HTML template
 DONE acquiring GIL after 50ms on startup works... but it's fragile, should be _sure_ GIL is initialized?
-TODO filter out the tracking thread from output
+DONE filter out the tracking thread from output
 DONE unknown frames
 TODO how to start/stop when using Fil's Python API? no global PERFORMANCE_TRACKER, instead create new PerformanceTracker when starting tracking, return it to Python! then stop it when we stop tracking.
 TODO special handling for thread that has GIL when sampling happens
@@ -165,7 +165,7 @@ impl PerformanceTrackerInner {
         let mut system = System::new();
         system.refresh_process(pid);
         let process = system.process(pid)?;
-
+        let this_thread_tid = gettid();
         let get_function_id = &get_function_id;
         Python::with_gil(|_py| {
             let interp = unsafe { PyInterpreterState_Get() };
@@ -174,15 +174,17 @@ impl PerformanceTrackerInner {
                 let frame = unsafe { PyThreadState_GetFrame(tstate) };
                 let callstack = get_callstack(frame, get_function_id, true);
                 let tid = pthread_t_to_tid(unsafe { PyThreadState_GetPthreadId(tstate) });
-                let thread = if process.pid() == tid {
-                    // The main thread
-                    Some(process)
-                } else {
-                    // A child thread
-                    process.tasks.get(&tid)
-                };
-                let status = thread.map_or(ThreadStatus::Other, |p| p.status().into());
-                self.add_sample(callstack, status);
+                if tid != this_thread_tid {
+                    let thread = if process.pid() == tid {
+                        // The main thread
+                        Some(process)
+                    } else {
+                        // A child thread
+                        process.tasks.get(&tid)
+                    };
+                    let status = thread.map_or(ThreadStatus::Other, |p| p.status().into());
+                    self.add_sample(callstack, status);
+                }
                 tstate = unsafe { PyThreadState_Next(tstate) };
             }
         });
