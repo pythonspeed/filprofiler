@@ -67,17 +67,17 @@ pub struct PerformanceTracker {
 
 #[derive(Eq, PartialEq, Hash)]
 enum ThreadStatus {
-    CPU,
+    Running,
     Waiting,
-    IO,
+    Uninterruptible,
     Other,
 }
 
 impl From<ProcessStatus> for ThreadStatus {
     fn from(sp: ProcessStatus) -> Self {
         match sp {
-            ProcessStatus::Run => ThreadStatus::CPU,
-            ProcessStatus::Idle => ThreadStatus::IO,
+            ProcessStatus::Run => ThreadStatus::Running,
+            ProcessStatus::Idle => ThreadStatus::Uninterruptible,
             ProcessStatus::Sleep => ThreadStatus::Waiting,
             _ => ThreadStatus::Other,
         }
@@ -87,9 +87,9 @@ impl From<ProcessStatus> for ThreadStatus {
 impl std::fmt::Display for ThreadStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
-            ThreadStatus::CPU => "CPU",
+            ThreadStatus::Running => "Running",
             ThreadStatus::Waiting => "Waiting",
-            ThreadStatus::IO => "I/O",
+            ThreadStatus::Uninterruptible => "Uninterruptable wait",
             _ => "Other",
         })
     }
