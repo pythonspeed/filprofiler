@@ -36,7 +36,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
 use std::sync::Arc;
-use std::thread::{spawn, JoinHandle};
+use std::thread::{Builder as ThreadBuilder, JoinHandle};
 use sysinfo::{ProcessExt, ProcessStatus, System, SystemExt};
 
 // Requires Python 3.9 or later...
@@ -103,27 +103,26 @@ impl PerformanceTracker {
         PTP: Send + Sync + 'static + Fn(pthread_t) -> pid_t,
     {
         // Make sure our pthread_t -> tid mapping works correctly.
-        assert_eq!(unsafe { pthread_t_to_tid(libc::pthread_self()) }, unsafe {
-            // TODO this only works on new glibc
-            libc::gettid()
-        });
+        assert_eq!(unsafe { pthread_t_to_tid(libc::pthread_self()) }, gettid());
 
         let inner = Arc::new(Mutex::new(PerformanceTrackerInner::new()));
         let inner2 = inner.clone();
-        spawn(move || {
-            setup_thread();
-            let get_function_id = &get_function_id;
-            let pthread_t_to_tid = &pthread_t_to_tid;
-            loop {
-                std::thread::sleep(std::time::Duration::from_millis(50));
-                // TODO make sure we don't get GIL/inner-lock deadlocks
-                let mut inner = inner.lock();
-                if !inner.is_running() {
-                    break;
+        ThreadBuilder::new()
+            .name("PerformanceTracker".to_string())
+            .spawn(move || {
+                setup_thread();
+                let get_function_id = &get_function_id;
+                let pthread_t_to_tid = &pthread_t_to_tid;
+                loop {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                    // TODO make sure we don't get GIL/inner-lock deadlocks
+                    let mut inner = inner.lock();
+                    if !inner.is_running() {
+                        break;
+                    }
+                    inner.add_samples(get_function_id, pthread_t_to_tid);
                 }
-                inner.add_samples(get_function_id, pthread_t_to_tid);
-            }
-        });
+            });
         Self { inner: inner2 }
     }
 
