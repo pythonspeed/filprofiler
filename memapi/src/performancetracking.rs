@@ -11,7 +11,7 @@ TODO filter out the tracking thread from output
 DONE unknown frames
 TODO how to start/stop when using Fil's Python API? no global PERFORMANCE_TRACKER, instead create new PerformanceTracker when starting tracking, return it to Python! then stop it when we stop tracking.
 TODO special handling for thread that has GIL when sampling happens
-TODO thread status (CPU/Disk/Waiting/etc.)
+DONE thread status (CPU/Disk/Waiting/etc.)
 TODO dump on shutdown
 TODO non-Python threads
 TODO better title for SVG

@@ -31,6 +31,7 @@ struct TrackerState {
 
 extern "C" {
     fn fil_increment_reentrancy();
+    fn fil_decrement_reentrancy();
 }
 
 fn disable_memory_tracking() {
@@ -388,8 +389,14 @@ fn pthread_t_to_tid(pthread_id: pthread_t) -> pid_t {
 // Keep track of mapping between pthread_t and pid_t.
 #[no_mangle]
 extern "C" fn pymemprofile_new_thread() {
+    unsafe {
+        fil_increment_reentrancy();
+    }
     let pthread_id = unsafe { libc::pthread_self() };
     let pid: pid_t = gettid();
     let mut map = PTHREAD_T_TO_TID.lock();
     map.insert(pthread_id, pid);
+    unsafe {
+        fil_decrement_reentrancy();
+    }
 }

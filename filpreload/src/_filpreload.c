@@ -102,6 +102,10 @@ void fil_increment_reentrancy() {
   increment_reentrancy();
 }
 
+void fil_decrement_reentrancy() {
+  decrement_reentrancy();
+}
+
 // Return whether to pass malloc() etc. to Rust tracking code.
 // Will be true if all conditions are true:
 //
