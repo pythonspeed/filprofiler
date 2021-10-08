@@ -315,7 +315,9 @@ fil_dump_peak_to_flamegraph(const char *path) {
   // We want to prevent reentrant malloc() calls, but we want to run regardless
   // of whether this particular call is reentrant.
   increment_reentrancy();
+  Py_BEGIN_ALLOW_THREADS
   pymemprofile_dump_peak_to_flamegraph(path);
+  Py_END_ALLOW_THREADS
   decrement_reentrancy();
 }
 
