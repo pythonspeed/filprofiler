@@ -173,12 +173,15 @@ impl PerformanceTrackerInner {
             while tstate != null_mut() {
                 let frame = unsafe { PyThreadState_GetFrame(tstate) };
                 let callstack = get_callstack(frame, get_function_id, true);
-                let status = process
-                    .tasks
-                    .get(&pthread_t_to_tid(unsafe {
-                        PyThreadState_GetPthreadId(tstate)
-                    }))
-                    .map_or(ThreadStatus::Other, |p| p.status().into());
+                let tid = pthread_t_to_tid(unsafe { PyThreadState_GetPthreadId(tstate) });
+                let thread = if process.pid() == tid {
+                    // The main thread
+                    Some(process)
+                } else {
+                    // A child thread
+                    process.tasks.get(&tid)
+                };
+                let status = thread.map_or(ThreadStatus::Other, |p| p.status().into());
                 self.add_sample(callstack, status);
                 tstate = unsafe { PyThreadState_Next(tstate) };
             }
