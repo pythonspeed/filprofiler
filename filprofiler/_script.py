@@ -244,11 +244,13 @@ def stage_2():
 
     # Only import here since we don't want the parent process accessing any of
     # the _filpread.so code.
-    from ._tracer import trace_until_exit, create_report
+    from ._tracer import trace_until_exit, create_memory_report
 
     signal.signal(
         signal.SIGUSR2,
-        lambda *args: create_report(arguments.output_path),
+        lambda *args: create_memory_report(
+            arguments.output_path, with_performance=False
+        ),
     )
     print(
         "=fil-profile= Memory usage will be written out at exit, and opened automatically in a browser.\n"

@@ -1,7 +1,7 @@
 """Trace code, so that libpymemprofile_api know's where we are."""
 
 import atexit
-from ctypes import PyDLL
+from ctypes import PyDLL, c_void_p, c_char_p
 from datetime import datetime
 import os
 import sys
@@ -60,6 +60,9 @@ Full trackback:
     )
 
 
+_PERFORMANCE_TRACKER = None
+
+
 def start_tracing(output_path: Union[str, Path]):
     """Start tracing allocations."""
     preload.fil_reset(str(output_path).encode("utf-8"))
@@ -67,6 +70,10 @@ def start_tracing(output_path: Union[str, Path]):
     preload.fil_start_performance_tracking()
     threading.setprofile(_start_thread_trace)
     preload.register_fil_tracer()
+    global _PERFORMANCE_TRACKER
+    f = preload.fil_start_performance_tracking
+    f.restype = c_void_p
+    _PERFORMANCE_TRACKER = f()
 
 
 def _start_thread_trace(frame, event, arg):
@@ -90,17 +97,20 @@ def stop_tracing(output_path: str) -> str:
     sys.setprofile(None)
     threading.setprofile(None)
     preload.fil_stop_tracking()
-    result = create_report(output_path)
+    result = create_memory_report(output_path)
+    f = preload.fil_stop_and_dump_performance_tracking
+    f.argtypes = [c_void_p, c_char_p]
+    f(_PERFORMANCE_TRACKER, str(output_path).encode("utf-8"))
     # Clear allocations; we don't need them anymore, and they're just wasting
     # memory:
     preload.fil_reset("/tmp")
     return result
 
 
-def create_report(output_path: Union[str, Path]) -> str:
+def create_memory_report(output_path: Union[str, Path], with_performance=True) -> str:
     preload.fil_dump_peak_to_flamegraph(str(output_path).encode("utf-8"))
     now = datetime.now()
-    return render_report(output_path, now)
+    return render_report(output_path, now, with_performance)
 
 
 def trace_until_exit(function, args, kwargs, output_path: str, open_browser: bool):

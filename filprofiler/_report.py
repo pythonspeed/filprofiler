@@ -21,7 +21,7 @@ Python: {sys.version}
 )
 
 
-def render_report(output_path: str, now: datetime) -> str:
+def render_report(output_path: str, now: datetime, with_performance: bool) -> str:
     """Write out the HTML index and improve the SVGs."""
     index_path = os.path.join(output_path, "index.html")
     with open(index_path, "w") as index:
@@ -67,11 +67,17 @@ def render_report(output_path: str, now: datetime) -> str:
   </script>
 </head>
 <body>
-<h1>Fil performance and memory profiling results</h1>
+<h1>Fil profiling results</h1>
 <h2>{now}</h2>
 <h2>Command</h2>
 <p><code>{argv}</code><p>
-
+""".format(
+                now=now.ctime(), argv=" ".join(map(shlex.quote, sys.argv))
+            )
+        )
+        if with_performance:
+            index.write(
+                """
 <h2>Performance profiling result</h2>
 <div><iframe id="perf" src="performance.svg" width="100%" height="200" scrolling="auto" frameborder="0"></iframe><br>
 <p><input type="button" onclick="fullScreen('#perf');" value="Full screen"></p></div>
@@ -80,8 +86,10 @@ def render_report(output_path: str, now: datetime) -> str:
 
 <div><iframe id="perf-reversed" src="performance-reversed.svg" width="100%" height="200" scrolling="auto" frameborder="0"></iframe><br>
 <p><input type="button" onclick="fullScreen('#perf-reversed');" value="Full screen"></p></div>
-
-<h2>Memory profiling result</h2>
+"""
+            )
+        index.write(
+            """<h2>Memory profiling result</h2>
 <div><iframe id="peak" src="peak-memory.svg" width="100%" height="200" scrolling="auto" frameborder="0"></iframe><br>
 <p><input type="button" onclick="fullScreen('#peak');" value="Full screen"></p></div>
 
@@ -120,8 +128,6 @@ If the bar is 100% of width, that's all the allocated memory.</p>
 </body>
 </html>
 """.format(
-                now=now.ctime(),
-                argv=" ".join(map(shlex.quote, sys.argv)),
                 bugreport=DEBUGGING_INFO,
             )
         )

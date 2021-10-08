@@ -1,4 +1,5 @@
-use ahash::RandomState as ARandomState;
+mod performance;
+
 use libc::{pid_t, pthread_t};
 use parking_lot::Mutex;
 use pymemprofile_api::memorytracking::{AllocationTracker, CallSiteId, Callstack, FunctionId};
@@ -51,14 +52,6 @@ lazy_static! {
             }
         ),
     });
-
-    static ref PERFORMANCE_TRACKER: PerformanceTracker =
-        PerformanceTracker::new(disable_memory_tracking, get_function_id, pthread_t_to_tid);
-
-    // Map pthread_t to thread IDs (==process IDs in Linux), for use by
-    // performance tracking.
-    static ref PTHREAD_T_TO_TID: Mutex<HashMap<pthread_t, pid_t, ARandomState>> =
-        Mutex::new(new_hashmap());
 }
 
 /// Register a new function/filename location.
@@ -198,13 +191,6 @@ fn dump_peak_to_flamegraph(path: &str) {
     let mut tracker_state = TRACKER_STATE.lock();
     let allocations = &mut tracker_state.allocations;
     allocations.dump_peak_to_flamegraph(path);
-
-    PERFORMANCE_TRACKER.dump_profile(&PathBuf::from(path), &allocations.functions);
-}
-
-#[no_mangle]
-extern "C" fn fil_start_performance_tracking() {
-    lazy_static::initialize(&PERFORMANCE_TRACKER);
 }
 
 #[no_mangle]
@@ -364,39 +350,4 @@ pub extern "C" fn reimplemented_munmap(addr: *mut c_void, len: usize) -> c_int {
 #[no_mangle]
 pub extern "C" fn munmap(addr: *mut c_void, len: usize) -> c_int {
     return pymemprofile_api::mmap::munmap_wrapper(addr, len, &FilMmapAPI {});
-}
-
-/// Performance profiling.
-extern "C" {
-    fn get_pycodeobject_function_id(code: *mut PyCodeObject) -> u64;
-}
-
-// TODO This duplicates some code in the C codepath... should try and merge it.
-fn get_function_id(code_object: *mut PyCodeObject) -> Option<FunctionId> {
-    let mut function_id = unsafe { get_pycodeobject_function_id(code_object) };
-    if function_id == 0 {
-        None
-    } else {
-        Some(FunctionId::new((function_id.saturating_sub(1)) as u32))
-    }
-}
-
-fn pthread_t_to_tid(pthread_id: pthread_t) -> pid_t {
-    let map = PTHREAD_T_TO_TID.lock();
-    *map.get(&pthread_id).unwrap_or(&0)
-}
-
-// Keep track of mapping between pthread_t and pid_t.
-#[no_mangle]
-extern "C" fn pymemprofile_new_thread() {
-    unsafe {
-        fil_increment_reentrancy();
-    }
-    let pthread_id = unsafe { libc::pthread_self() };
-    let pid: pid_t = gettid();
-    let mut map = PTHREAD_T_TO_TID.lock();
-    map.insert(pthread_id, pid);
-    unsafe {
-        fil_decrement_reentrancy();
-    }
 }
