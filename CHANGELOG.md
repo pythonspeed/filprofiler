@@ -1,3 +1,11 @@
+# Fil 2021.09.1 (2021-09-27)
+
+
+### Bugfixes
+
+- SIGUSR2 previously did not actually dump memory. Thanks to @gaspard-quenard for the bug report. ([#237](https://github.com/pythonspeed/filprofiler/issues/237))
+
+
 # Fil 2021.9.0 (2021-09-24)
 
 

@@ -97,7 +97,7 @@ static inline void increment_reentrancy() { will_i_be_reentrant += 1; }
 static inline void decrement_reentrancy() { will_i_be_reentrant -= 1; }
 #endif
 
-// For use by Rust.
+// Versions for calling from Rust
 void fil_increment_reentrancy() {
   increment_reentrancy();
 }

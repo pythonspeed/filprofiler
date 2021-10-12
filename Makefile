@@ -10,7 +10,7 @@ build:
 	python setup.py install_data
 
 target/release/libfilpreload.so: Cargo.lock memapi/Cargo.toml memapi/src/*.rs filpreload/src/*.rs filpreload/src/*.c
-	eval `python cflags.py` && cd filpreload && cargo build --release
+	cd filpreload && cargo build --release
 
 venv:
 	python3 -m venv venv/
@@ -24,7 +24,7 @@ test:
 .PHONY: test-rust
 test-rust:
 	cd memapi && env RUST_BACKTRACE=1 cargo test
-	cd filpreload && eval `python ../cflags.py` && env RUST_BACKTRACE=1 cargo test --no-default-features
+	cd filpreload && env RUST_BACKTRACE=1 cargo test --no-default-features
 
 .PHONY: test-python
 test-python: build

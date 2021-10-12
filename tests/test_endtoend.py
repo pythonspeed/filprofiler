@@ -609,3 +609,31 @@ def test_tabs():
 
         # It's valid XML:
         ElementTree.fromstring(svg)
+
+
+def test_sigusr2():
+    """
+    Sending SIGUSR2 to the process does an extra dump.
+    """
+    script = TEST_SCRIPTS / "sigusr2.py"
+    output_dir = profile(script)
+
+    # There are two dumps in the output directory, one for SIGUSR2, one for
+    # shutdown.
+    assert len(list(output_dir.iterdir())) == 2
+
+    sigusr2, final = sorted(output_dir.glob("*/peak-memory.prof"))
+
+    # SIGUSR2 dump only has allocations up to that point
+    script = str(script)
+    path1 = ((script, "<module>", 8), (numpy.core.numeric.__file__, "ones", ANY))
+    path2 = ((script, "<module>", 11), (numpy.core.numeric.__file__, "ones", ANY))
+
+    allocations_sigusr2 = get_allocations(sigusr2, direct=True)
+    assert match(allocations_sigusr2, {path1: big}, as_mb) == pytest.approx(20, 0.1)
+    with pytest.raises(MatchError):
+        match(allocations_sigusr2, {path2: big}, as_mb)
+
+    allocations_final = get_allocations(final, direct=True)
+    assert match(allocations_final, {path1: big}, as_mb) == pytest.approx(20, 0.1)
+    assert match(allocations_final, {path2: big}, as_mb) == pytest.approx(50, 0.1)
