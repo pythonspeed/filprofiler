@@ -30,11 +30,6 @@ struct TrackerState {
     allocations: AllocationTracker,
 }
 
-extern "C" {
-    fn fil_increment_reentrancy();
-    fn fil_decrement_reentrancy();
-}
-
 fn disable_memory_tracking() {
     unsafe {
         fil_increment_reentrancy();

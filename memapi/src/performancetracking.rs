@@ -50,19 +50,37 @@ extern "C" {
 }
 
 /// Get the current thread's id (==pid_t on Linux)
-pub fn gettid() -> pid_t {
+pub fn gettid() -> GlobalThreadId {
     // TODO macOS.
-    (unsafe { libc::syscall(libc::SYS_gettid) }) as pid_t
+    GlobalThreadId((unsafe { libc::syscall(libc::SYS_gettid) }) as pid_t)
+}
+
+/// OS-specific system-wide thread identifier, for use with platform per-thread
+/// status APIs. TODO macOS
+#[derive(Eq, PartialEq, Hash)]
+pub struct GlobalThreadId(pid_t);
+
+/// Implementation-specific details.
+pub trait PerfImpl {
+    /// TODO at some point may want something more generic than Callstack.
+    type Iter: Iterator<Item = (GlobalThreadId, Callstack)>;
+
+    /// Typically this will disable things like memory tracking.
+    fn setup_running_thread(&self);
+
+    /// Get the callstacks for all threads.
+    fn get_callstacks(&self) -> Self::Iter;
 }
 
 /// Track what threads are doing over time.
-struct PerformanceTrackerInner {
+struct PerformanceTrackerInner<P: PerfImpl> {
     callstack_to_samples: HashMap<(Callstack, ThreadStatus), usize, ARandomState>,
     running: bool,
+    perf_impl: P,
 }
 
-pub struct PerformanceTracker {
-    inner: Arc<Mutex<(Option<JoinHandle<()>>, PerformanceTrackerInner)>>,
+pub struct PerformanceTracker<P: PerfImpl> {
+    inner: Arc<Mutex<(Option<JoinHandle<()>>, PerformanceTrackerInner<P>)>>,
 }
 
 #[derive(Eq, PartialEq, Hash)]
@@ -95,24 +113,14 @@ impl std::fmt::Display for ThreadStatus {
     }
 }
 
-impl PerformanceTracker {
-    pub fn new<S, GFI, PTP>(setup_thread: S, get_function_id: GFI, pthread_t_to_tid: PTP) -> Self
-    where
-        S: Send + Sync + 'static + FnOnce(),
-        GFI: Send + Sync + 'static + Fn(*mut PyCodeObject) -> Option<FunctionId>,
-        PTP: Send + Sync + 'static + Fn(pthread_t) -> pid_t,
-    {
-        // Make sure our pthread_t -> tid mapping works correctly.
-        assert_eq!(unsafe { pthread_t_to_tid(libc::pthread_self()) }, gettid());
-
-        let inner = Arc::new(Mutex::new((None, PerformanceTrackerInner::new())));
+impl<P: PerfImpl + Send + 'static> PerformanceTracker<P> {
+    pub fn new(perf_impl: P) -> Self {
+        let inner = Arc::new(Mutex::new((None, PerformanceTrackerInner::new(perf_impl))));
         let inner2 = inner.clone();
         let handle = ThreadBuilder::new()
             .name("PerformanceTracker".to_string())
             .spawn(move || {
-                setup_thread();
-                let get_function_id = &get_function_id;
-                let pthread_t_to_tid = &pthread_t_to_tid;
+                inner.lock().1.perf_impl.setup_running_thread();
                 loop {
                     std::thread::sleep(std::time::Duration::from_millis(50));
                     // TODO make sure we don't get GIL/inner-lock deadlocks
@@ -120,7 +128,7 @@ impl PerformanceTracker {
                     if !inner.1.is_running() {
                         break;
                     }
-                    inner.1.add_samples(get_function_id, pthread_t_to_tid);
+                    inner.1.add_samples();
                 }
             });
         {
@@ -137,18 +145,20 @@ impl PerformanceTracker {
             inner.0.take()
         };
         if let Some(handle) = handle {
-            handle.join();
+            // TODO maybe log?
+            let _ = handle.join();
         }
         let inner = self.inner.lock();
         inner.1.dump_flamegraphs(destination_directory, functions);
     }
 }
 
-impl PerformanceTrackerInner {
-    fn new() -> Self {
+impl<P: PerfImpl> PerformanceTrackerInner<P> {
+    fn new(perf_impl: P) -> Self {
         Self {
             callstack_to_samples: new_hashmap(),
             running: true,
+            perf_impl,
         }
     }
 
@@ -162,38 +172,27 @@ impl PerformanceTrackerInner {
     }
 
     /// Add samples for all threads.
-    fn add_samples<GFI, PTP>(&mut self, get_function_id: GFI, pthread_t_to_tid: PTP) -> Option<()>
-    where
-        GFI: Fn(*mut PyCodeObject) -> Option<FunctionId>,
-        PTP: Fn(pthread_t) -> pid_t,
-    {
+    fn add_samples(&mut self) -> Option<()> {
         let pid = std::process::id() as i32;
         let mut system = System::new();
         system.refresh_process(pid);
         let process = system.process(pid)?;
         let this_thread_tid = gettid();
-        let get_function_id = &get_function_id;
-        Python::with_gil(|_py| {
-            let interp = unsafe { PyInterpreterState_Get() };
-            let mut tstate = unsafe { PyInterpreterState_ThreadHead(interp) };
-            while tstate != null_mut() {
-                let frame = unsafe { PyThreadState_GetFrame(tstate) };
-                let callstack = get_callstack(frame, get_function_id, true);
-                let tid = pthread_t_to_tid(unsafe { PyThreadState_GetPthreadId(tstate) });
-                if tid != this_thread_tid {
-                    let thread = if process.pid() == tid {
-                        // The main thread
-                        Some(process)
-                    } else {
-                        // A child thread
-                        process.tasks.get(&tid)
-                    };
-                    let status = thread.map_or(ThreadStatus::Other, |p| p.status().into());
-                    self.add_sample(callstack, status);
-                }
-                tstate = unsafe { PyThreadState_Next(tstate) };
+
+        for (tid, callstack) in self.perf_impl.get_callstacks() {
+            if tid != this_thread_tid {
+                let thread = if process.pid() == tid.0 {
+                    // The main thread
+                    Some(process)
+                } else {
+                    // A child thread
+                    process.tasks.get(&tid.0)
+                };
+                let status = thread.map_or(ThreadStatus::Other, |p| p.status().into());
+                self.add_sample(callstack, status);
             }
-        });
+        }
+
         Some(())
     }
 

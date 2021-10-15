@@ -3,8 +3,8 @@ use lazy_static::lazy_static;
 use libc::{c_char, c_void, pid_t, pthread_t};
 use parking_lot::Mutex;
 use pymemprofile_api::{
-    memorytracking::FunctionId,
-    performancetracking::{gettid, PerformanceTracker},
+    memorytracking::{Callstack, FunctionId},
+    performancetracking::{gettid, GlobalThreadId, PerfImpl, PerformanceTracker},
     util::new_hashmap,
 };
 use pyo3::ffi::PyCodeObject;
@@ -20,18 +20,14 @@ lazy_static! {
 }
 
 #[no_mangle]
-extern "C" fn fil_start_performance_tracking() -> *mut PerformanceTracker {
-    let tracker = Box::new(PerformanceTracker::new(
-        disable_memory_tracking,
-        get_function_id,
-        pthread_t_to_tid,
-    ));
+extern "C" fn fil_start_performance_tracking() -> *mut PerformanceTracker<FilPerfImpl> {
+    let tracker = Box::new(PerformanceTracker::new(FilPerfImpl::new()));
     Box::into_raw(tracker)
 }
 
 #[no_mangle]
 extern "C" fn fil_stop_and_dump_performance_tracking(
-    tracker: *mut PerformanceTracker,
+    tracker: *mut PerformanceTracker<FilPerfImpl>,
     path: *const c_char,
 ) {
     unsafe {
@@ -87,5 +83,28 @@ extern "C" fn pymemprofile_new_thread() {
     map.insert(pthread_id, pid);
     unsafe {
         fil_decrement_reentrancy();
+    }
+}
+
+/// Implement PerfImpl for the open source Fil profiler.
+struct FilPerfImpl {
+    per_thread_frames: HashMap<GlobalThreadId, *mut PyFrameObject, ARandomState>,
+}
+
+impl PerfImpl for FilPerfImpl {
+    type Iter = std::collections::hash_map::Iter<'static, GlobalThreadId, Callstack>;
+
+    fn new() -> Self {
+        Self {
+            per_thread_frames: new_hashmap(),
+        }
+    }
+
+    fn setup_running_thread(&self) {
+        disable_memory_tracking();
+    }
+
+    fn get_callstacks(&self) -> Self::Iter {
+        self.per_thread_frames.iter().map
     }
 }
