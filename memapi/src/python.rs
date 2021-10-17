@@ -31,7 +31,9 @@ pub fn get_runpy_path() -> &'static str {
     PATH.as_str()
 }
 
-// Get the callstack for the given frame.
+/// Get the callstack for the given frame. TODO make sure we can handle garbage
+/// byte code indexes when getting line numbers, since the GIL thread might
+/// mutate it and we do _not_ guarantee GIL held.
 pub fn get_callstack<F>(
     mut frame: *mut PyFrameObject,
     get_function_id: F,

@@ -136,7 +136,7 @@ impl<P: PerfImpl + Send + 'static> PerformanceTracker<P> {
         Self { inner: inner2 }
     }
 
-    pub fn dump_profile(self, destination_directory: &Path, functions: &FunctionLocations) {
+    pub fn stop(&self) {
         let handle = {
             let mut inner = self.inner.lock();
             inner.1.finish();
@@ -146,6 +146,9 @@ impl<P: PerfImpl + Send + 'static> PerformanceTracker<P> {
             // TODO maybe log?
             let _ = handle.join();
         }
+    }
+
+    pub fn dump_profile(self, destination_directory: &Path, functions: &FunctionLocations) {
         let inner = self.inner.lock();
         inner.1.dump_flamegraphs(destination_directory, functions);
     }

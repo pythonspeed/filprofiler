@@ -27,7 +27,18 @@ extern "C" fn fil_start_performance_tracking() -> *mut PerformanceTracker<FilPer
 }
 
 #[no_mangle]
-extern "C" fn fil_stop_and_dump_performance_tracking(
+extern "C" fn fil_stop_performance_tracking(tracker: *mut PerformanceTracker<FilPerfImpl>) {
+    unsafe {
+        fil_increment_reentrancy();
+    }
+    let performance_tracker = unsafe { Box::from_raw(tracker) };
+    performance_tracker.stop();
+    // Make sure we don't drop it, it should still stay in memory:
+    std::mem::forget(performance_tracker);
+}
+
+#[no_mangle]
+extern "C" fn fil_dump_performance_tracking(
     tracker: *mut PerformanceTracker<FilPerfImpl>,
     path: *const c_char,
 ) {
@@ -59,7 +70,7 @@ extern "C" {
 
 // TODO This duplicates some code in the C codepath... should try and merge it.
 fn get_function_id(code_object: *mut PyCodeObject) -> Option<FunctionId> {
-    let mut function_id = unsafe { get_pycodeobject_function_id(code_object) };
+    let function_id = unsafe { get_pycodeobject_function_id(code_object) };
     if function_id == 0 {
         None
     } else {
@@ -94,6 +105,20 @@ impl FilPerfImpl {
             per_thread_frames: Mutex::new(new_hashmap()),
         }
     }
+
+    /// Add a new frame for the current thread (which is presumed to own the
+    /// GIL).
+    pub fn push_frame(&self, new_frame: *mut PyFrameObject) {
+        let mut per_thread_frames = self.per_thread_frames.lock();
+        per_thread_frames.insert(gettid(), new_frame);
+    }
+
+    /// Switch to parent frame for the current thread (which is presumed to own
+    /// the GIL).
+    pub fn pop_frame(&self, parent_frame: *mut PyFrameObject) {
+        let mut per_thread_frames = self.per_thread_frames.lock();
+        per_thread_frames.insert(gettid(), parent_frame);
+    }
 }
 
 impl PerfImpl for FilPerfImpl {
@@ -101,6 +126,11 @@ impl PerfImpl for FilPerfImpl {
         disable_memory_tracking();
     }
 
+    /// This will be called with GIL _not_ owned, but lock prevents frame from
+    /// changing out from under us, and the bits we care about (code object and
+    /// line number) won't change. Or, rather, code object won't. Line number is
+    /// iffy and might be wrong, but we're assuming get_callstack() can handle
+    /// that.
     fn get_callstacks(&self) -> Vec<(GlobalThreadId, Callstack)> {
         let per_thread_frames = self.per_thread_frames.lock();
         per_thread_frames

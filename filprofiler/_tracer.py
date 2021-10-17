@@ -94,11 +94,19 @@ def stop_tracing(output_path: str) -> str:
 
     Returns path to the index HTML page of the report.
     """
+    # Important to stop tracking _before_ we stop profiler hooks, since once we
+    # stop the latter the frame objects in the performance tracker get out of
+    # sync with reality. Which can lead to segfaults...
+    f = preload.fil_stop_performance_tracking
+    f.argtypes = [c_void_p]
+    f(_PERFORMANCE_TRACKER)
+
     sys.setprofile(None)
     threading.setprofile(None)
+
     preload.fil_stop_tracking()
     result = create_memory_report(output_path)
-    f = preload.fil_stop_and_dump_performance_tracking
+    f = preload.fil_dump_performance_tracking
     f.argtypes = [c_void_p, c_char_p]
     f(_PERFORMANCE_TRACKER, str(output_path).encode("utf-8"))
     # Clear allocations; we don't need them anymore, and they're just wasting
