@@ -57,19 +57,17 @@ pub fn gettid() -> GlobalThreadId {
 
 /// OS-specific system-wide thread identifier, for use with platform per-thread
 /// status APIs. TODO macOS
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Eq, PartialEq, Hash, Clone)]
 pub struct GlobalThreadId(pid_t);
 
 /// Implementation-specific details.
 pub trait PerfImpl {
-    /// TODO at some point may want something more generic than Callstack.
-    type Iter: Iterator<Item = (GlobalThreadId, Callstack)>;
-
     /// Typically this will disable things like memory tracking.
     fn setup_running_thread(&self);
 
     /// Get the callstacks for all threads.
-    fn get_callstacks(&self) -> Self::Iter;
+    /// TODO at some point may want something more generic than Callstack.
+    fn get_callstacks(&self) -> Vec<(GlobalThreadId, Callstack)>;
 }
 
 /// Track what threads are doing over time.

@@ -5,9 +5,10 @@ use parking_lot::Mutex;
 use pymemprofile_api::{
     memorytracking::{Callstack, FunctionId},
     performancetracking::{gettid, GlobalThreadId, PerfImpl, PerformanceTracker},
+    python::get_callstack,
     util::new_hashmap,
 };
-use pyo3::ffi::PyCodeObject;
+use pyo3::ffi::{PyCodeObject, PyFrameObject};
 use std::{collections::HashMap, ffi::CStr, path::PathBuf};
 
 use crate::{disable_memory_tracking, fil_decrement_reentrancy, fil_increment_reentrancy};
@@ -74,37 +75,37 @@ fn pthread_t_to_tid(pthread_id: pthread_t) -> pid_t {
 // Keep track of mapping between pthread_t and pid_t.
 #[no_mangle]
 extern "C" fn pymemprofile_new_thread() {
-    unsafe {
-        fil_increment_reentrancy();
-    }
-    let pthread_id = unsafe { libc::pthread_self() };
-    let pid: pid_t = gettid();
-    let mut map = PTHREAD_T_TO_TID.lock();
-    map.insert(pthread_id, pid);
-    unsafe {
-        fil_decrement_reentrancy();
-    }
+    // TODO can rip this out
 }
 
 /// Implement PerfImpl for the open source Fil profiler.
 struct FilPerfImpl {
-    per_thread_frames: HashMap<GlobalThreadId, *mut PyFrameObject, ARandomState>,
+    per_thread_frames: Mutex<HashMap<GlobalThreadId, *mut PyFrameObject, ARandomState>>,
+}
+
+// The main risk here is accessing PyFrameObject from non-GIL thread. We solve
+// this by haveing our own lock around any access to it, including notably the
+// GIL-thread's update in the tracer.
+unsafe impl Send for FilPerfImpl {}
+
+impl FilPerfImpl {
+    fn new() -> Self {
+        Self {
+            per_thread_frames: Mutex::new(new_hashmap()),
+        }
+    }
 }
 
 impl PerfImpl for FilPerfImpl {
-    type Iter = std::collections::hash_map::Iter<'static, GlobalThreadId, Callstack>;
-
-    fn new() -> Self {
-        Self {
-            per_thread_frames: new_hashmap(),
-        }
-    }
-
     fn setup_running_thread(&self) {
         disable_memory_tracking();
     }
 
-    fn get_callstacks(&self) -> Self::Iter {
-        self.per_thread_frames.iter().map
+    fn get_callstacks(&self) -> Vec<(GlobalThreadId, Callstack)> {
+        let per_thread_frames = self.per_thread_frames.lock();
+        per_thread_frames
+            .iter()
+            .map(|(tid, frame)| ((*tid).clone(), get_callstack(*frame, get_function_id, true)))
+            .collect()
     }
 }
