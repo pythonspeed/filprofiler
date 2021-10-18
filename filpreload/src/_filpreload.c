@@ -148,7 +148,11 @@ extern void pymemprofile_free_anon_mmap(size_t address, size_t length);
 extern void *pymemprofile_get_current_callstack();
 extern void pymemprofile_set_current_callstack(void *callstack);
 extern void pymemprofile_clear_current_callstack();
-extern void pymemprofile_new_thread();
+extern void pymemprofile_new_thread(); // TODO get rid of this
+extern void pymemprofile_performance_push_frame(void *performance_tracker,
+                                                PyFrameObject *current_frame);
+extern void pymemprofile_performance_pop_frame(void *performance_tracker,
+                                               PyFrameObject *parent_frame);
 
 static void __attribute__((constructor)) constructor() {
   if (initialized) {
@@ -233,10 +237,14 @@ int get_pycodeobject_function_id(PyCodeObject* code) {
 /// Callback functions for the Python tracing API (PyEval_SetProfile).
 __attribute__((visibility("hidden"))) int
 fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
+  void* performance_tracker = (void*)obj;
   switch (what) {
   case PyTrace_CALL:
     // Store the current frame, so malloc() can look up line number:
     current_frame = frame;
+
+    // Store the current frame in the performance tracker:
+    pymemprofile_performance_push_frame(performance_tracker, frame);
 
     /*
       We want an efficient identifier for filename+fuction name. So we register
@@ -262,6 +270,7 @@ fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
     start_call(function_id, frame->f_lineno);
     break;
   case PyTrace_RETURN:
+    pymemprofile_performance_pop_frame(performance_tracker, frame->f_back);
     finish_call();
     // We're done with this frame, so set the parent frame:
     current_frame = frame->f_back;
@@ -300,13 +309,13 @@ __attribute__((visibility("default"))) void fil_stop_tracking() {
 }
 
 /// Register the C level Python tracer for the current thread.
-__attribute__((visibility("default"))) void register_fil_tracer() {
+__attribute__((visibility("default"))) void register_fil_tracer(void* performance_tracker) {
   // C threads inherit their callstack from the creating Python thread. That's
   // fine. However, if a tracer is being registered, that means this is not a
   // pure C thread, it's a new Python thread with its own callstack.
   pymemprofile_clear_current_callstack();
-  // We use 123 as a marker object for tests.
-  PyEval_SetProfile(fil_tracer, PyLong_FromLong(123));
+  // TODO YOLOing it, might need actual wrapper object...
+  PyEval_SetProfile(fil_tracer, (PyObject*)performance_tracker);
 }
 
 /// Dump the current peak memory usage to disk.

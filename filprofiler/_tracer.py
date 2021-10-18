@@ -69,11 +69,12 @@ def start_tracing(output_path: Union[str, Path]):
     preload.fil_start_tracking()
     preload.fil_start_performance_tracking()
     threading.setprofile(_start_thread_trace)
-    preload.register_fil_tracer()
     global _PERFORMANCE_TRACKER
     f = preload.fil_start_performance_tracking
     f.restype = c_void_p
     _PERFORMANCE_TRACKER = f()
+    assert _PERFORMANCE_TRACKER is not None
+    preload.register_fil_tracer(_PERFORMANCE_TRACKER)
 
 
 def _start_thread_trace(frame, event, arg):
@@ -85,7 +86,8 @@ def _start_thread_trace(frame, event, arg):
     CTracer_call.
     """
     if event == "call":
-        preload.register_fil_tracer()
+        assert _PERFORMANCE_TRACKER is not None
+        preload.register_fil_tracer(_PERFORMANCE_TRACKER)
     return _start_thread_trace
 
 

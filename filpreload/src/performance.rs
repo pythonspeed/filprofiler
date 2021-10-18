@@ -31,10 +31,11 @@ extern "C" fn fil_stop_performance_tracking(tracker: *mut PerformanceTracker<Fil
     unsafe {
         fil_increment_reentrancy();
     }
-    let performance_tracker = unsafe { Box::from_raw(tracker) };
+    let performance_tracker = unsafe { tracker.as_ref().unwrap() };
     performance_tracker.stop();
-    // Make sure we don't drop it, it should still stay in memory:
-    std::mem::forget(performance_tracker);
+    unsafe {
+        fil_decrement_reentrancy();
+    }
 }
 
 #[no_mangle]
@@ -58,6 +59,36 @@ extern "C" fn fil_dump_performance_tracking(
             performance_tracker.dump_profile(&path, &memory_tracker.allocations.functions);
         })
     });
+    unsafe {
+        fil_decrement_reentrancy();
+    }
+}
+
+#[no_mangle]
+extern "C" fn pymemprofile_performance_push_frame(
+    tracker: *mut PerformanceTracker<FilPerfImpl>,
+    frame: *mut PyFrameObject,
+) {
+    unsafe {
+        fil_increment_reentrancy();
+    }
+    let performance_tracker = unsafe { tracker.as_ref().unwrap() };
+    performance_tracker.run_with_perf_impl(|perf_impl| perf_impl.push_frame(frame));
+    unsafe {
+        fil_decrement_reentrancy();
+    }
+}
+
+#[no_mangle]
+extern "C" fn pymemprofile_performance_pop_frame(
+    tracker: *mut PerformanceTracker<FilPerfImpl>,
+    parent_frame: *mut PyFrameObject,
+) {
+    unsafe {
+        fil_increment_reentrancy();
+    }
+    let performance_tracker = unsafe { tracker.as_ref().unwrap() };
+    performance_tracker.run_with_perf_impl(|perf_impl| perf_impl.pop_frame(parent_frame));
     unsafe {
         fil_decrement_reentrancy();
     }
@@ -91,33 +122,32 @@ extern "C" fn pymemprofile_new_thread() {
 
 /// Implement PerfImpl for the open source Fil profiler.
 struct FilPerfImpl {
-    per_thread_frames: Mutex<HashMap<GlobalThreadId, *mut PyFrameObject, ARandomState>>,
+    per_thread_frames: HashMap<GlobalThreadId, *mut PyFrameObject, ARandomState>,
 }
 
 // The main risk here is accessing PyFrameObject from non-GIL thread. We solve
 // this by haveing our own lock around any access to it, including notably the
-// GIL-thread's update in the tracer.
+// GIL-thread's update in the tracer. The lock, specifically, is in
+// PerformanceTracker.
 unsafe impl Send for FilPerfImpl {}
 
 impl FilPerfImpl {
     fn new() -> Self {
         Self {
-            per_thread_frames: Mutex::new(new_hashmap()),
+            per_thread_frames: new_hashmap(),
         }
     }
 
     /// Add a new frame for the current thread (which is presumed to own the
     /// GIL).
-    pub fn push_frame(&self, new_frame: *mut PyFrameObject) {
-        let mut per_thread_frames = self.per_thread_frames.lock();
-        per_thread_frames.insert(gettid(), new_frame);
+    pub fn push_frame(&mut self, new_frame: *mut PyFrameObject) {
+        self.per_thread_frames.insert(gettid(), new_frame);
     }
 
     /// Switch to parent frame for the current thread (which is presumed to own
     /// the GIL).
-    pub fn pop_frame(&self, parent_frame: *mut PyFrameObject) {
-        let mut per_thread_frames = self.per_thread_frames.lock();
-        per_thread_frames.insert(gettid(), parent_frame);
+    pub fn pop_frame(&mut self, parent_frame: *mut PyFrameObject) {
+        self.per_thread_frames.insert(gettid(), parent_frame);
     }
 }
 
@@ -132,8 +162,7 @@ impl PerfImpl for FilPerfImpl {
     /// iffy and might be wrong, but we're assuming get_callstack() can handle
     /// that.
     fn get_callstacks(&self) -> Vec<(GlobalThreadId, Callstack)> {
-        let per_thread_frames = self.per_thread_frames.lock();
-        per_thread_frames
+        self.per_thread_frames
             .iter()
             .map(|(tid, frame)| ((*tid).clone(), get_callstack(*frame, get_function_id, true)))
             .collect()

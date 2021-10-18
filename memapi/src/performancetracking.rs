@@ -136,6 +136,15 @@ impl<P: PerfImpl + Send + 'static> PerformanceTracker<P> {
         Self { inner: inner2 }
     }
 
+    pub fn run_with_perf_impl<F>(&self, run: F)
+    where
+        F: FnOnce(&mut P),
+    {
+        let mut inner = self.inner.lock();
+        let perf_impl = &mut inner.1.perf_impl;
+        run(perf_impl)
+    }
+
     pub fn stop(&self) {
         let handle = {
             let mut inner = self.inner.lock();
