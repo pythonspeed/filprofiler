@@ -2,52 +2,36 @@
 Performance profiling.
 
 DONE actually write callstacks
-TODO fix segfault on shutdown
+DONE fix segfault on shutdown
 DONE disable memory tracking in polling thread
 DONE write to correct directory
 DONE add to HTML template
 DONE acquiring GIL after 50ms on startup works... but it's fragile, should be _sure_ GIL is initialized?
 DONE filter out the tracking thread from output
 DONE unknown frames
-TODO how to start/stop when using Fil's Python API? no global PERFORMANCE_TRACKER, instead create new PerformanceTracker when starting tracking, return it to Python! then stop it when we stop tracking.
-TODO special handling for thread that has GIL when sampling happens
+DONE how to start/stop when using Fil's Python API? no global PERFORMANCE_TRACKER, instead create new PerformanceTracker when starting tracking, return it to Python! then stop it when we stop tracking.
 DONE thread status (CPU/Disk/Waiting/etc.)
-TODO dump on shutdown
+DONE dump on shutdown
 TODO non-Python threads
 TODO better title for SVG
 TODO Python < 3.9. Just disable?
 TODO current mechanism loses thread-callstack-persistence Fil provides for non-Python threads. probably follow-up issue.
+TODO tests
+TODO macos
 */
 
 use crate::flamegraph::{filter_to_useful_callstacks, write_flamegraphs, write_lines};
-use crate::memorytracking::{Callstack, FunctionId, FunctionLocations};
-use crate::python::get_callstack;
+use crate::memorytracking::{Callstack, FunctionLocations};
 
 use super::util::new_hashmap;
 use ahash::RandomState as ARandomState;
-use libc::{pid_t, pthread_t};
+use libc::pid_t;
 use parking_lot::Mutex;
-use pyo3::ffi::{
-    PyCodeObject, PyFrameObject, PyInterpreterState, PyInterpreterState_ThreadHead, PyThreadState,
-    PyThreadState_Next,
-};
-use pyo3::Python;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::ptr::null_mut;
+use std::path::Path;
 use std::sync::Arc;
 use std::thread::{Builder as ThreadBuilder, JoinHandle};
 use sysinfo::{ProcessExt, ProcessStatus, System, SystemExt};
-
-// Requires Python 3.9 or later...
-extern "C" {
-    // From Python itself.
-    fn PyInterpreterState_Get() -> *mut PyInterpreterState;
-    fn PyThreadState_GetFrame(ts: *mut PyThreadState) -> *mut PyFrameObject;
-
-    // APIs we provide.
-    fn PyThreadState_GetPthreadId(ts: *mut PyThreadState) -> pthread_t;
-}
 
 /// Get the current thread's id (==pid_t on Linux)
 pub fn gettid() -> GlobalThreadId {
@@ -120,8 +104,7 @@ impl<P: PerfImpl + Send + 'static> PerformanceTracker<P> {
             .spawn(move || {
                 inner.lock().1.perf_impl.setup_running_thread();
                 loop {
-                    std::thread::sleep(std::time::Duration::from_millis(50));
-                    // TODO make sure we don't get GIL/inner-lock deadlocks
+                    std::thread::sleep(std::time::Duration::from_millis(47));
                     let mut inner = inner.lock();
                     if !inner.1.is_running() {
                         break;
