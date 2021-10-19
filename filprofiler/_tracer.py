@@ -1,7 +1,7 @@
 """Trace code, so that libpymemprofile_api know's where we are."""
 
 import atexit
-from ctypes import PyDLL, c_void_p, c_char_p
+from ctypes import PyDLL, c_void_p, c_char_p, py_object
 from datetime import datetime
 import os
 import sys
@@ -71,10 +71,12 @@ def start_tracing(output_path: Union[str, Path]):
     threading.setprofile(_start_thread_trace)
     global _PERFORMANCE_TRACKER
     f = preload.fil_start_performance_tracking
-    f.restype = c_void_p
+    f.restype = py_object
     _PERFORMANCE_TRACKER = f()
     assert _PERFORMANCE_TRACKER is not None
-    preload.register_fil_tracer(_PERFORMANCE_TRACKER)
+    f = preload.register_fil_tracer
+    f.argtypes = [py_object]
+    f(_PERFORMANCE_TRACKER)
 
 
 def _start_thread_trace(frame, event, arg):
@@ -100,7 +102,7 @@ def stop_tracing(output_path: str) -> str:
     # stop the latter the frame objects in the performance tracker get out of
     # sync with reality. Which can lead to segfaults...
     f = preload.fil_stop_performance_tracking
-    f.argtypes = [c_void_p]
+    f.argtypes = [py_object]
     f(_PERFORMANCE_TRACKER)
 
     sys.setprofile(None)
@@ -109,7 +111,7 @@ def stop_tracing(output_path: str) -> str:
     preload.fil_stop_tracking()
     result = create_memory_report(output_path)
     f = preload.fil_dump_performance_tracking
-    f.argtypes = [c_void_p, c_char_p]
+    f.argtypes = [py_object, c_char_p]
     f(_PERFORMANCE_TRACKER, str(output_path).encode("utf-8"))
     # Clear allocations; we don't need them anymore, and they're just wasting
     # memory:

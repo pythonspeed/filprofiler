@@ -8,7 +8,11 @@ use pymemprofile_api::{
     python::get_callstack,
     util::new_hashmap,
 };
-use pyo3::ffi::{PyCodeObject, PyFrameObject};
+use pyo3::{
+    ffi::{PyCodeObject, PyFrameObject, PyObject},
+    prelude::pyclass,
+    AsPyPointer, Py, PyAny, PyResult, Python,
+};
 use std::{collections::HashMap, ffi::CStr, path::PathBuf};
 
 use crate::{disable_memory_tracking, fil_decrement_reentrancy, fil_increment_reentrancy};
@@ -20,44 +24,36 @@ lazy_static! {
         Mutex::new(new_hashmap());
 }
 
+#[pyclass]
+struct PerformanceTrackerWrapper {
+    wrapped: Box<PerformanceTracker<FilPerfImpl>>,
+}
+
 #[no_mangle]
-extern "C" fn fil_start_performance_tracking() -> *mut PerformanceTracker<FilPerfImpl> {
+extern "C" fn fil_start_performance_tracking() -> *mut PyObject {
     let tracker = Box::new(PerformanceTracker::new(FilPerfImpl::new()));
-    Box::into_raw(tracker)
+    let wrapper = Python::with_gil(|py| -> PyResult<Py<PerformanceTrackerWrapper>> {
+        let wrapper = Py::new(py, PerformanceTrackerWrapper { wrapped: tracker })?;
+        Ok(wrapper)
+    })
+    .unwrap();
+    let result = wrapper.as_ptr();
+    std::mem::forget(wrapper);
+    result
 }
 
-#[no_mangle]
-extern "C" fn fil_stop_performance_tracking(tracker: *mut PerformanceTracker<FilPerfImpl>) {
+fn run_with_perf_tracker<F>(tracker: *mut PyObject, f: F)
+where
+    F: FnOnce(Python, &PerformanceTracker<FilPerfImpl>),
+{
     unsafe {
         fil_increment_reentrancy();
     }
-    let performance_tracker = unsafe { tracker.as_ref().unwrap() };
-    performance_tracker.stop();
-    unsafe {
-        fil_decrement_reentrancy();
-    }
-}
-
-#[no_mangle]
-extern "C" fn fil_dump_performance_tracking(
-    tracker: *mut PerformanceTracker<FilPerfImpl>,
-    path: *const c_char,
-) {
-    unsafe {
-        fil_increment_reentrancy();
-    }
-    let performance_tracker = unsafe { Box::from_raw(tracker) };
-    let path = PathBuf::from(
-        unsafe { CStr::from_ptr(path) }
-            .to_str()
-            .expect("Path wasn't UTF-8"),
-    );
-
-    pyo3::Python::with_gil(|py| {
-        py.allow_threads(|| {
-            let memory_tracker = crate::TRACKER_STATE.lock();
-            performance_tracker.dump_profile(&path, &memory_tracker.allocations.functions);
-        })
+    Python::with_gil(|py| {
+        let pt_wrapper: Py<PerformanceTrackerWrapper> =
+            unsafe { Py::from_borrowed_ptr(py, tracker) };
+        let tracker = &pt_wrapper.borrow(py).wrapped;
+        f(py, tracker);
     });
     unsafe {
         fil_decrement_reentrancy();
@@ -65,33 +61,43 @@ extern "C" fn fil_dump_performance_tracking(
 }
 
 #[no_mangle]
+extern "C" fn fil_stop_performance_tracking(tracker: *mut PyObject) {
+    run_with_perf_tracker(tracker, |py, tracker| tracker.stop());
+}
+
+#[no_mangle]
+extern "C" fn fil_dump_performance_tracking(tracker: *mut PyObject, path: *const c_char) {
+    let path = PathBuf::from(
+        unsafe { CStr::from_ptr(path) }
+            .to_str()
+            .expect("Path wasn't UTF-8"),
+    );
+    run_with_perf_tracker(tracker, |py, tracker| {
+        py.allow_threads(|| {
+            let memory_tracker = crate::TRACKER_STATE.lock();
+            tracker.dump_profile(&path, &memory_tracker.allocations.functions);
+        })
+    });
+}
+
+#[no_mangle]
 extern "C" fn pymemprofile_performance_push_frame(
-    tracker: *mut PerformanceTracker<FilPerfImpl>,
+    tracker: *mut PyObject,
     frame: *mut PyFrameObject,
 ) {
-    unsafe {
-        fil_increment_reentrancy();
-    }
-    let performance_tracker = unsafe { tracker.as_ref().unwrap() };
-    performance_tracker.run_with_perf_impl(|perf_impl| perf_impl.push_frame(frame));
-    unsafe {
-        fil_decrement_reentrancy();
-    }
+    run_with_perf_tracker(tracker, |_, tracker| {
+        tracker.run_with_perf_impl(|perf_impl| perf_impl.push_frame(frame))
+    });
 }
 
 #[no_mangle]
 extern "C" fn pymemprofile_performance_pop_frame(
-    tracker: *mut PerformanceTracker<FilPerfImpl>,
+    tracker: *mut PyObject,
     parent_frame: *mut PyFrameObject,
 ) {
-    unsafe {
-        fil_increment_reentrancy();
-    }
-    let performance_tracker = unsafe { tracker.as_ref().unwrap() };
-    performance_tracker.run_with_perf_impl(|perf_impl| perf_impl.pop_frame(parent_frame));
-    unsafe {
-        fil_decrement_reentrancy();
-    }
+    run_with_perf_tracker(tracker, |_, tracker| {
+        tracker.run_with_perf_impl(|perf_impl| perf_impl.pop_frame(parent_frame))
+    });
 }
 
 /// Performance profiling.

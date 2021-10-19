@@ -157,7 +157,7 @@ impl<P: PerfImpl + Send + 'static> PerformanceTracker<P> {
         }
     }
 
-    pub fn dump_profile(self, destination_directory: &Path, functions: &FunctionLocations) {
+    pub fn dump_profile(&self, destination_directory: &Path, functions: &FunctionLocations) {
         let inner = self.inner.lock();
         inner.1.dump_flamegraphs(destination_directory, functions);
     }
