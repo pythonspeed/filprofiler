@@ -105,11 +105,19 @@ impl<P: PerfImpl + Send + 'static> PerformanceTracker<P> {
                 inner.lock().1.perf_impl.setup_running_thread();
                 loop {
                     std::thread::sleep(std::time::Duration::from_millis(47));
+
+                    // TODO Kinda wierd factoring? Also this may be expensive,
+                    // see if psutil is better or maybe just extrac the code we
+                    // actually need, for status.
+                    let pid = std::process::id() as i32;
+                    let mut system = System::new();
+                    system.refresh_process(pid);
+
                     let mut inner = inner.lock();
                     if !inner.1.is_running() {
                         break;
                     }
-                    inner.1.add_samples();
+                    inner.1.add_samples(system);
                 }
             });
         {
@@ -165,13 +173,14 @@ impl<P: PerfImpl> PerformanceTrackerInner<P> {
     }
 
     /// Add samples for all threads.
-    fn add_samples(&mut self) -> Option<()> {
+    fn add_samples(&mut self, system: System) -> Option<()> {
         let pid = std::process::id() as i32;
-        let mut system = System::new();
-        system.refresh_process(pid);
         let process = system.process(pid)?;
         let this_thread_tid = gettid();
 
+        // this should probably happen OUTSIDE the lock too, only
+        // get_callstacks() shoudl be locked? which means... the lock should be
+        // on perf_impl I guess...
         for (tid, callstack) in self.perf_impl.get_callstacks() {
             if tid != this_thread_tid {
                 let thread = if process.pid() == tid.0 {
