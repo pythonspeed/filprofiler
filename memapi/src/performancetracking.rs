@@ -33,15 +33,17 @@ use std::sync::Arc;
 use std::thread::{Builder as ThreadBuilder, JoinHandle};
 use sysinfo::{ProcessExt, ProcessStatus, System, SystemExt};
 
+thread_local!(static TID: GlobalThreadId = GlobalThreadId((unsafe { libc::syscall(libc::SYS_gettid) }) as pid_t));
+
 /// Get the current thread's id (==pid_t on Linux)
 pub fn gettid() -> GlobalThreadId {
     // TODO macOS.
-    GlobalThreadId((unsafe { libc::syscall(libc::SYS_gettid) }) as pid_t)
+    TID.with(|tid| tid.clone())
 }
 
 /// OS-specific system-wide thread identifier, for use with platform per-thread
 /// status APIs. TODO macOS
-#[derive(Eq, PartialEq, Hash, Clone)]
+#[derive(Eq, PartialEq, Hash, Clone, Copy)]
 pub struct GlobalThreadId(pid_t);
 
 /// Implementation-specific details.
