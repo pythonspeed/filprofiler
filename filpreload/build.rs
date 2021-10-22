@@ -48,6 +48,7 @@ fn main() -> Result<(), std::io::Error> {
         .define("_GNU_SOURCE", "1")
         .define("NDEBUG", "1")
         .flag("-fno-omit-frame-pointer")
+        .flag("-O2")
         .compile("_filpreload");
     Ok(())
 }
