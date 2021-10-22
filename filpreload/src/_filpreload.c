@@ -305,13 +305,12 @@ __attribute__((visibility("default"))) void fil_stop_tracking() {
 }
 
 /// Register the C level Python tracer for the current thread.
-__attribute__((visibility("default"))) void register_fil_tracer(void* performance_tracker) {
+__attribute__((visibility("default"))) void register_fil_tracer(PyObject* performance_tracker) {
   // C threads inherit their callstack from the creating Python thread. That's
   // fine. However, if a tracer is being registered, that means this is not a
   // pure C thread, it's a new Python thread with its own callstack.
   pymemprofile_clear_current_callstack();
-  // TODO YOLOing it, might need actual wrapper object...
-  PyEval_SetProfile(fil_tracer, (PyObject*)performance_tracker);
+  PyEval_SetProfile(fil_tracer, performance_tracker);
 }
 
 /// Dump the current peak memory usage to disk.
