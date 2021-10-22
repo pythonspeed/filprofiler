@@ -46,17 +46,14 @@ fn run_with_perf_tracker<F>(tracker: *mut PyObject, f: F)
 where
     F: FnOnce(Python, &PerformanceTracker<FilPerfImpl>),
 {
+    // All these functions are called from CPython.
     unsafe {
-        fil_increment_reentrancy();
-    }
-    Python::with_gil(|py| {
-        let pt_wrapper: Py<PerformanceTrackerWrapper> =
-            unsafe { Py::from_borrowed_ptr(py, tracker) };
-        let tracker = &pt_wrapper.borrow(py).wrapped;
-        f(py, tracker);
-    });
-    unsafe {
-        fil_decrement_reentrancy();
+        Python::with_gil_unchecked(|py| {
+            let pt_wrapper: Py<PerformanceTrackerWrapper> =
+                unsafe { Py::from_borrowed_ptr(py, tracker) };
+            let tracker = &pt_wrapper.borrow(py).wrapped;
+            f(py, tracker);
+        });
     }
 }
 
