@@ -148,7 +148,6 @@ extern void pymemprofile_free_anon_mmap(size_t address, size_t length);
 extern void *pymemprofile_get_current_callstack();
 extern void pymemprofile_set_current_callstack(void *callstack);
 extern void pymemprofile_clear_current_callstack();
-extern void pymemprofile_new_thread(); // TODO get rid of this
 extern void pymemprofile_performance_push_frame(void *performance_tracker,
                                                 PyFrameObject *current_frame);
 extern void pymemprofile_performance_pop_frame(void *performance_tracker,
@@ -199,9 +198,6 @@ static void __attribute__((constructor)) constructor() {
   // instead we do it in fork(), post-constructor, where apparently it
   // is fine to do.
   // unsetenv("DYLD_INSERT_LIBRARIES");
-
-  // Register main thread.
-  pymemprofile_new_thread();
 
   initialized = 1;
 }
@@ -534,27 +530,10 @@ struct NewThreadArgs {
 // Called as starting function for new threads. Sets callstack, then calls the
 // real starting function.
 static void *wrapper_pthread_start(void *nta) {
-  // Record pthread_t -> tid mapping.
-  pymemprofile_new_thread();
   struct NewThreadArgs *args = (struct NewThreadArgs *)nta;
   increment_reentrancy();
   pymemprofile_set_current_callstack(args->callstack);
   decrement_reentrancy();
-  void *(*start_routine)(void *) = args->start_routine;
-  void *arg = args->arg;
-  REAL_IMPL(free)(args);
-
-  // Run the underlying thread code:
-  return start_routine(arg);
-}
-
-// Called as starting function for new threads when no tracking is happening.
-static void *wrapper_pthread_start_no_tracking(void *nta) {
-  // Record pthread_t -> tid mapping.
-  pymemprofile_new_thread();
-
-  struct NewThreadArgs *args = (struct NewThreadArgs *)nta;
-
   void *(*start_routine)(void *) = args->start_routine;
   void *arg = args->arg;
   REAL_IMPL(free)(args);
@@ -568,18 +547,17 @@ static void *wrapper_pthread_start_no_tracking(void *nta) {
 __attribute__((visibility("default"))) int
 SYMBOL_PREFIX(pthread_create)(pthread_t *thread, const pthread_attr_t *attr,
                               void *(*start_routine)(void *), void *arg) {
+  if (!likely(initialized) || am_i_reentrant()) {
+    return underlying_real_pthread_create(thread, attr, start_routine, arg);
+  }
   struct NewThreadArgs *wrapper_args =
-    REAL_IMPL(malloc)(sizeof(struct NewThreadArgs));
+      REAL_IMPL(malloc)(sizeof(struct NewThreadArgs));
+  wrapper_args->callstack = pymemprofile_get_current_callstack();
   wrapper_args->start_routine = start_routine;
   wrapper_args->arg = arg;
-  if (!likely(initialized) || am_i_reentrant()) {
-    wrapper_args->callstack = NULL;
-    return underlying_real_pthread_create(thread, attr, &wrapper_pthread_start_no_tracking, (void *)wrapper_args);
-  } else {
-    wrapper_args->callstack = pymemprofile_get_current_callstack();
-    return underlying_real_pthread_create(
-                                          thread, attr, &wrapper_pthread_start, (void *)wrapper_args);
-  }
+  int result = underlying_real_pthread_create(
+      thread, attr, &wrapper_pthread_start, (void *)wrapper_args);
+  return result;
 }
 
 #ifdef __APPLE__

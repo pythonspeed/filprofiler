@@ -112,17 +112,6 @@ fn get_function_id(code_object: *mut PyCodeObject) -> Option<FunctionId> {
     }
 }
 
-fn pthread_t_to_tid(pthread_id: pthread_t) -> pid_t {
-    let map = PTHREAD_T_TO_TID.lock();
-    *map.get(&pthread_id).unwrap_or(&0)
-}
-
-// Keep track of mapping between pthread_t and pid_t.
-#[no_mangle]
-extern "C" fn pymemprofile_new_thread() {
-    // TODO can rip this out
-}
-
 /// Implement PerfImpl for the open source Fil profiler.
 struct FilPerfImpl {
     per_thread_frames: HashMap<GlobalThreadId, *mut PyFrameObject, ARandomState>,
