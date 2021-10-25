@@ -29,6 +29,7 @@ use libc::pid_t;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::{Builder as ThreadBuilder, JoinHandle};
 use sysinfo::{ProcessExt, ProcessStatus, System, SystemExt};
@@ -43,7 +44,7 @@ pub fn gettid() -> GlobalThreadId {
 
 /// OS-specific system-wide thread identifier, for use with platform per-thread
 /// status APIs. TODO macOS
-#[derive(Eq, PartialEq, Hash, Clone, Copy)]
+#[derive(Eq, PartialEq, Hash, Clone, Copy, PartialOrd, Ord)]
 pub struct GlobalThreadId(pid_t);
 
 /// Implementation-specific details.
@@ -57,14 +58,15 @@ pub trait PerfImpl {
 }
 
 /// Track what threads are doing over time.
-struct PerformanceTrackerInner<P: PerfImpl> {
-    callstack_to_samples: HashMap<(Callstack, ThreadStatus), usize, ARandomState>,
-    running: bool,
+struct PerformanceTrackerInner<P: PerfImpl + Sync + Send> {
+    callstack_to_samples: Mutex<HashMap<(Callstack, ThreadStatus), usize, ARandomState>>,
+    should_stop: AtomicBool,
     perf_impl: P,
 }
 
-pub struct PerformanceTracker<P: PerfImpl> {
-    inner: Arc<Mutex<(Option<JoinHandle<()>>, PerformanceTrackerInner<P>)>>,
+pub struct PerformanceTracker<P: PerfImpl + Sync + Send> {
+    inner: Arc<PerformanceTrackerInner<P>>,
+    handle: Mutex<Option<JoinHandle<()>>>,
 }
 
 #[derive(Eq, PartialEq, Hash)]
@@ -97,14 +99,14 @@ impl std::fmt::Display for ThreadStatus {
     }
 }
 
-impl<P: PerfImpl + Send + 'static> PerformanceTracker<P> {
+impl<P: PerfImpl + Sync + Send + 'static> PerformanceTracker<P> {
     pub fn new(perf_impl: P) -> Self {
-        let inner = Arc::new(Mutex::new((None, PerformanceTrackerInner::new(perf_impl))));
+        let inner = Arc::new(PerformanceTrackerInner::new(perf_impl));
         let inner2 = inner.clone();
         let handle = ThreadBuilder::new()
             .name("PerformanceTracker".to_string())
             .spawn(move || {
-                inner.lock().1.perf_impl.setup_running_thread();
+                inner.perf_impl.setup_running_thread();
                 loop {
                     std::thread::sleep(std::time::Duration::from_millis(47));
 
@@ -115,35 +117,30 @@ impl<P: PerfImpl + Send + 'static> PerformanceTracker<P> {
                     let mut system = System::new();
                     system.refresh_process(pid);
 
-                    let mut inner = inner.lock();
-                    if !inner.1.is_running() {
+                    if !inner.is_running() {
                         break;
                     }
-                    inner.1.add_samples(system);
+                    inner.add_samples(system);
                 }
-            });
-        {
-            let mut inner = inner2.lock();
-            inner.0 = Some(handle.unwrap());
+            })
+            .unwrap();
+        Self {
+            inner: inner2,
+            handle: Mutex::new(Some(handle)),
         }
-        Self { inner: inner2 }
     }
 
     pub fn run_with_perf_impl<F>(&self, run: F)
     where
-        F: FnOnce(&mut P),
+        F: FnOnce(&P),
     {
-        let mut inner = self.inner.lock();
-        let perf_impl = &mut inner.1.perf_impl;
+        let perf_impl = &self.inner.perf_impl;
         run(perf_impl)
     }
 
     pub fn stop(&self) {
-        let handle = {
-            let mut inner = self.inner.lock();
-            inner.1.finish();
-            inner.0.take()
-        };
+        self.inner.finish();
+        let handle = { self.handle.lock().take() };
         if let Some(handle) = handle {
             // TODO maybe log?
             let _ = handle.join();
@@ -151,31 +148,31 @@ impl<P: PerfImpl + Send + 'static> PerformanceTracker<P> {
     }
 
     pub fn dump_profile(&self, destination_directory: &Path, functions: &FunctionLocations) {
-        let inner = self.inner.lock();
-        inner.1.dump_flamegraphs(destination_directory, functions);
+        self.inner
+            .dump_flamegraphs(destination_directory, functions);
     }
 }
 
-impl<P: PerfImpl> PerformanceTrackerInner<P> {
+impl<P: PerfImpl + Sync + Send> PerformanceTrackerInner<P> {
     fn new(perf_impl: P) -> Self {
         Self {
-            callstack_to_samples: new_hashmap(),
-            running: true,
+            callstack_to_samples: Mutex::new(new_hashmap()),
+            should_stop: AtomicBool::new(false),
             perf_impl,
         }
     }
 
     fn is_running(&self) -> bool {
-        self.running
+        !self.should_stop.load(Ordering::Acquire)
     }
 
     /// Finish running.
-    fn finish(&mut self) {
-        self.running = false;
+    fn finish(&self) {
+        self.should_stop.store(true, Ordering::Release)
     }
 
     /// Add samples for all threads.
-    fn add_samples(&mut self, system: System) -> Option<()> {
+    fn add_samples(&self, system: System) -> Option<()> {
         let pid = std::process::id() as i32;
         let process = system.process(pid)?;
         let this_thread_tid = gettid();
@@ -201,29 +198,28 @@ impl<P: PerfImpl> PerformanceTrackerInner<P> {
     }
 
     /// Add a sample.
-    fn add_sample(&mut self, callstack: Callstack, status: ThreadStatus) {
-        let samples = self
-            .callstack_to_samples
-            .entry((callstack, status))
-            .or_insert(0);
+    /// TODO move lock out
+    fn add_sample(&self, callstack: Callstack, status: ThreadStatus) {
+        let mut c_t_s = self.callstack_to_samples.lock();
+        let samples = c_t_s.entry((callstack, status)).or_insert(0);
         *samples += 1;
     }
 
     /// Dump flamegraphs to disk.
     fn dump_flamegraphs(&self, destination_directory: &Path, functions: &FunctionLocations) {
+        let c_t_s = self.callstack_to_samples.lock();
         let write_lines = |to_be_post_processed: bool, dest: &Path| {
-            let total_samples = self.callstack_to_samples.values().sum();
-            let lines =
-                filter_to_useful_callstacks(self.callstack_to_samples.iter(), total_samples).map(
-                    move |((callstack, status), calls)| {
-                        format!(
-                            "{};{} {}",
-                            callstack.as_string(to_be_post_processed, &functions, ";"),
-                            status,
-                            calls
-                        )
-                    },
-                );
+            let total_samples = c_t_s.values().sum();
+            let lines = filter_to_useful_callstacks(c_t_s.iter(), total_samples).map(
+                move |((callstack, status), calls)| {
+                    format!(
+                        "{};{} {}",
+                        callstack.as_string(to_be_post_processed, &functions, ";"),
+                        status,
+                        calls
+                    )
+                },
+            );
             write_lines(lines, dest)
         };
 

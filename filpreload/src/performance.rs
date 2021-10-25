@@ -1,7 +1,7 @@
 use ahash::RandomState as ARandomState;
 use lazy_static::lazy_static;
 use libc::{c_char, c_void, pid_t, pthread_t};
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RawMutex};
 use pymemprofile_api::{
     memorytracking::{Callstack, FunctionId},
     performancetracking::{gettid, GlobalThreadId, PerfImpl, PerformanceTracker},
@@ -13,7 +13,16 @@ use pyo3::{
     prelude::pyclass,
     AsPyPointer, Py, PyAny, PyResult, Python,
 };
-use std::{collections::HashMap, ffi::CStr, path::PathBuf};
+use std::{
+    borrow::Borrow,
+    collections::{BTreeMap, HashMap},
+    ffi::CStr,
+    path::PathBuf,
+    sync::{
+        atomic::{AtomicPtr, Ordering},
+        Arc,
+    },
+};
 
 use crate::{disable_memory_tracking, fil_decrement_reentrancy, fil_increment_reentrancy};
 
@@ -112,9 +121,47 @@ fn get_function_id(code_object: *mut PyCodeObject) -> Option<FunctionId> {
     }
 }
 
+lazy_static! {
+    static ref ALL_THREAD_FRAMES: Mutex<BTreeMap<GlobalThreadId, Arc<AtomicPtr<PyFrameObject>>>> =
+        Mutex::new(BTreeMap::new());
+}
+
+/// Stored as thread-local, tracked in THREAD_FRAMES.
+struct PerThreadFrame {
+    current_frame: Arc<AtomicPtr<PyFrameObject>>,
+}
+
+impl PerThreadFrame {
+    fn new() -> Self {
+        let result = Self {
+            current_frame: Arc::default(),
+        };
+        ALL_THREAD_FRAMES
+            .lock()
+            .insert(gettid(), result.current_frame.clone());
+        result
+    }
+
+    fn set(&self, frame: *mut PyFrameObject) {
+        self.current_frame.store(frame, Ordering::Relaxed);
+    }
+
+    fn get(&self) -> *mut PyFrameObject {
+        self.current_frame.load(Ordering::Relaxed)
+    }
+}
+
+thread_local! { static THREAD_FRAME: PerThreadFrame = PerThreadFrame::new(); }
+
+impl Drop for PerThreadFrame {
+    fn drop(&mut self) {
+        ALL_THREAD_FRAMES.lock().remove(&gettid());
+    }
+}
+
 /// Implement PerfImpl for the open source Fil profiler.
 struct FilPerfImpl {
-    per_thread_frames: HashMap<GlobalThreadId, *mut PyFrameObject, ARandomState>,
+    mutex: Mutex<()>,
 }
 
 // The main risk here is accessing PyFrameObject from non-GIL thread. We solve
@@ -126,20 +173,29 @@ unsafe impl Send for FilPerfImpl {}
 impl FilPerfImpl {
     fn new() -> Self {
         Self {
-            per_thread_frames: new_hashmap(),
+            mutex: Mutex::new(()),
         }
     }
 
     /// Add a new frame for the current thread (which is presumed to own the
     /// GIL).
-    pub fn push_frame(&mut self, new_frame: *mut PyFrameObject) {
-        self.per_thread_frames.insert(gettid(), new_frame);
+    pub fn push_frame(&self, new_frame: *mut PyFrameObject) {
+        // If this doesn't make it to the performance polling thread, the
+        // callstack will be truncated and not have the lower frames. But it
+        // won't *segfault*, the old (parent) frame is still valid.
+        THREAD_FRAME.with(|frame_ptr| frame_ptr.set(new_frame));
     }
 
     /// Switch to parent frame for the current thread (which is presumed to own
     /// the GIL).
-    pub fn pop_frame(&mut self, parent_frame: *mut PyFrameObject) {
-        self.per_thread_frames.insert(gettid(), parent_frame);
+    pub fn pop_frame(&self, parent_frame: *mut PyFrameObject) {
+        // The current frame is being popped, so it's no longer valid. That
+        // means we need to ensure that the performance polling thread isn't
+        // using it before we remove it, so we use a lock this time around.
+        let _guard = self.mutex.lock();
+        // We rely on locking in performance thread to ensure happens-before, so
+        // atomic can still be relaxed.
+        THREAD_FRAME.with(|frame_ptr| frame_ptr.set(parent_frame));
     }
 }
 
@@ -154,9 +210,17 @@ impl PerfImpl for FilPerfImpl {
     /// iffy and might be wrong, but we're assuming get_callstack() can handle
     /// that.
     fn get_callstacks(&self) -> Vec<(GlobalThreadId, Callstack)> {
-        self.per_thread_frames
+        let _guard = self.mutex.lock();
+        ALL_THREAD_FRAMES
+            .lock()
             .iter()
-            .map(|(tid, frame)| ((*tid).clone(), get_callstack(*frame, get_function_id, true)))
+            .map(|(tid, frame)| {
+                (
+                    (*tid).clone(),
+                    // we rely on lock to make this sufficiently up-to-date.
+                    get_callstack(frame.load(Ordering::Relaxed), get_function_id, true),
+                )
+            })
             .collect()
     }
 }
