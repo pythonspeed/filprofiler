@@ -49,6 +49,13 @@ fn main() -> Result<(), std::io::Error> {
         .define("NDEBUG", "1")
         .flag("-fno-omit-frame-pointer")
         .flag("-O2")
+        .flag(if cfg!(target_os = "linux") {
+            // Faster TLS for Linux.
+            "-ftls-model=initial-exec"
+        } else {
+            // noop
+            "-O2"
+        })
         .compile("_filpreload");
     Ok(())
 }
