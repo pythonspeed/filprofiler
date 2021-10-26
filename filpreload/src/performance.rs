@@ -56,14 +56,10 @@ where
     F: FnOnce(Python, &PerformanceTracker<FilPerfImpl>),
 {
     // All these functions are called from CPython.
-    unsafe {
-        Python::with_gil_unchecked(|py| {
-            let pt_wrapper: Py<PerformanceTrackerWrapper> =
-                unsafe { Py::from_borrowed_ptr(py, tracker) };
-            let tracker = &pt_wrapper.borrow(py).wrapped;
-            f(py, tracker);
-        });
-    }
+    let py = unsafe { Python::assume_gil_acquired() };
+    let pt_wrapper: Py<PerformanceTrackerWrapper> = unsafe { Py::from_borrowed_ptr(py, tracker) };
+    let tracker = &pt_wrapper.borrow(py).wrapped;
+    f(py, tracker);
 }
 
 #[no_mangle]
