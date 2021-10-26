@@ -11,7 +11,7 @@ use pymemprofile_api::{
 use pyo3::{
     ffi::{PyCodeObject, PyFrameObject, PyObject},
     prelude::pyclass,
-    AsPyPointer, Py, PyAny, PyResult, Python,
+    AsPyPointer, Py, PyAny, PyCell, PyResult, Python,
 };
 use std::{
     borrow::Borrow,
@@ -56,10 +56,12 @@ where
     F: FnOnce(Python, &PerformanceTracker<FilPerfImpl>),
 {
     // All these functions are called from CPython.
-    let py = unsafe { Python::assume_gil_acquired() };
-    let pt_wrapper: Py<PerformanceTrackerWrapper> = unsafe { Py::from_borrowed_ptr(py, tracker) };
-    let tracker = &pt_wrapper.borrow(py).wrapped;
-    f(py, tracker);
+    unsafe {
+        let py = unsafe { Python::assume_gil_acquired() };
+        let cell: &PyCell<PerformanceTrackerWrapper> = py.from_borrowed_ptr(tracker);
+        let wrapper = cell.borrow();
+        f(py, &(*wrapper.wrapped));
+    }
 }
 
 #[no_mangle]
