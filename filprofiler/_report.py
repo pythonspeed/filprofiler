@@ -10,6 +10,8 @@ import os
 import shlex
 import sys
 from urllib.parse import quote_plus as url_quote
+from platform import platform
+
 from . import __version__
 
 DEBUGGING_INFO = url_quote(
@@ -17,6 +19,7 @@ DEBUGGING_INFO = url_quote(
 ## Version information
 Fil: {__version__}
 Python: {sys.version}
+Platform: {platform()}
 """
 )
 
@@ -43,6 +46,9 @@ def render_report(output_path: str, now: datetime, with_performance: bool) -> st
     div {{
         text-align: center;
     }}
+    hr {{
+        margin: 3em;
+    }}
   </style>
   <script>
    function compatRequestFullscreen(elem) {{
@@ -67,7 +73,7 @@ def render_report(output_path: str, now: datetime, with_performance: bool) -> st
   </script>
 </head>
 <body>
-<h1>Fil profiling results</h1>
+<h1>Fil profiling results: memory + performance</h1>
 <h2>{now}</h2>
 <h2>Command</h2>
 <p><code>{argv}</code><p>
@@ -75,28 +81,35 @@ def render_report(output_path: str, now: datetime, with_performance: bool) -> st
                 now=now.ctime(), argv=" ".join(map(shlex.quote, sys.argv))
             )
         )
-        if with_performance:
-            index.write(
-                """
-<h2>Performance profiling result</h2>
-<div><iframe id="perf" src="performance.svg" width="100%" height="200" scrolling="auto" frameborder="0"></iframe><br>
-<p><input type="button" onclick="fullScreen('#perf');" value="Full screen"></p></div>
-
-<br>
-
-<div><iframe id="perf-reversed" src="performance-reversed.svg" width="100%" height="200" scrolling="auto" frameborder="0"></iframe><br>
-<p><input type="button" onclick="fullScreen('#perf-reversed');" value="Full screen"></p></div>
-"""
-            )
         index.write(
             """<h2>Memory profiling result</h2>
-<div><iframe id="peak" src="peak-memory.svg" width="100%" height="200" scrolling="auto" frameborder="0"></iframe><br>
+<div><iframe id="peak" src="peak-memory.svg" width="100%" height="400" scrolling="auto" frameborder="0"></iframe><br>
 <p><input type="button" onclick="fullScreen('#peak');" value="Full screen"></p></div>
 
 <br>
 
-<div><iframe id="peak-reversed" src="peak-memory-reversed.svg" width="100%" height="200" scrolling="auto" frameborder="0"></iframe><br>
+<div><iframe id="peak-reversed" src="peak-memory-reversed.svg" width="100%" height="400" scrolling="auto" frameborder="0"></iframe><br>
 <p><input type="button" onclick="fullScreen('#peak-reversed');" value="Full screen"></p></div>
+"""
+        )
+        if with_performance:
+            index.write(
+                """
+<hr>
+<h2>Performance profiling result</h2>
+<div><iframe id="perf" src="performance.svg" width="100%" height="400" scrolling="auto" frameborder="0"></iframe><br>
+<p><input type="button" onclick="fullScreen('#perf');" value="Full screen"></p></div>
+
+<br>
+
+<div><iframe id="perf-reversed" src="performance-reversed.svg" width="100%" height="400" scrolling="auto" frameborder="0"></iframe><br>
+<p><input type="button" onclick="fullScreen('#perf-reversed');" value="Full screen"></p></div>
+"""
+            )
+
+        index.write(
+            """
+<hr>
 
 <h2>Need help, or does something look wrong? <a href="https://github.com/pythonspeed/filprofiler/issues/new?body={bugreport}">Please file an issue</a> and I'll try to help</h2>
 
@@ -111,12 +124,6 @@ The second graph shows the reverse callgraph, from <tt>f()</tt> upwards.</p>
 <p>Why is the second graph useful? If <tt>f()</tt> is called from multiple places, in the first graph it will show up multiple times, at the bottom.
 In the second reversed graph all calls to <tt>f()</tt> will be merged together.</p>
 
-<h3>Understanding the performance graphs</h3>
-
-<p>The graphs show how much time was spent in each function. Multiple threads are combined, so if you have a program that runs for 10 seconds with 3 threads, that is counted as 30 seconds of runtime; different callstacks may have run in parallel!</p>
-
-<p>Each sample is ~50ms of runtime in a single thread.</p>
-
 <h3>Understanding the memory graphs</h3>
 
 <p>The graphs show how much memory was allocated at the moment of peak memory usage.</p>
@@ -124,7 +131,19 @@ In the second reversed graph all calls to <tt>f()</tt> will be merged together.<
 <p>The wider (and the redder) the bar, the more memory was allocated by that function or its callers.
 If the bar is 100% of width, that's all the allocated memory.</p>
 
-<p>Need help reducing your data processing application's memory use? Check out tips and tricks <a href="https://pythonspeed.com/datascience/">here</a>.</p>
+<p>Need help reducing your data processing application's memory use? Check out tips and tricks <a href="https://pythonspeed.com/memory/">here</a>.</p>
+
+<h3>Understanding the performance graphs</h3>
+
+<p>The graphs show how much time was spent in each function. Multiple threads are combined, so if you have a program that runs for 10 seconds with 3 threads, that is counted as 30 seconds of runtime; different callstacks may have run in parallel!</p>
+
+<p>Each sample is ~47ms of runtime in a single thread.</p>
+
+<p>Each stacktrace ends with indication of what was going on at the time: "Running" implies the CPU was working, "Waiting" implies the thread was blocking/waiting on some operation.</p>
+
+<p><strong>Important:</strong> Fil's performance profiling is intended for big-picture optimization. You shouldn't rely on these graphs for micro-optimizations, given the overhead from Fil might distort results slightly. Try <a href="https://github.com/joerick/pyinstrument">Pyinstrument</a> or <a href="https://github.com/benfred/py-spy">PySpy</a> if you're trying to optimize at a more micro-level.</p>
+
+<p>Need help reducing your data processing application's runtime? Check out tips and tricks <a href="https://pythonspeed.com/performance/">here</a>.</p>
 </body>
 </html>
 """.format(

@@ -13,9 +13,7 @@ DONE how to start/stop when using Fil's Python API? no global PERFORMANCE_TRACKE
 DONE thread status (CPU/Disk/Waiting/etc.)
 DONE dump on shutdown
 TODO non-Python threads
-TODO better title for SVG
-TODO Python < 3.9. Just disable?
-TODO current mechanism loses thread-callstack-persistence Fil provides for non-Python threads. probably follow-up issue.
+DONE better title for SVG
 TODO tests
 TODO macos
 */
@@ -226,7 +224,7 @@ impl<P: PerfImpl + Sync + Send> PerformanceTrackerInner<P> {
         write_flamegraphs(
             destination_directory,
             "performance",
-            "Performance",
+            "Performance: Combined per-thread runtime",
             "samples",
             true,
             |tbpp, dest| write_lines(tbpp, dest),
