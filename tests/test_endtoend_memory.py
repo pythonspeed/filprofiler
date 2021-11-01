@@ -6,7 +6,6 @@ from pathlib import Path
 import os
 import time
 import sys
-from typing import Union
 import re
 import shutil
 from glob import glob
@@ -17,30 +16,10 @@ from pampy import match, _ as ANY, MatchError
 import pytest
 import psutil
 
-from filprofiler._testing import get_allocations, big, as_mb
+from filprofiler._testing import get_allocations, big, as_mb, profile
 from filprofiler._utils import glibc_version
 
 TEST_SCRIPTS = Path("tests") / "test-scripts"
-
-
-def profile(
-    *arguments: Union[str, Path], expect_exit_code=0, argv_prefix=(), **kwargs
-) -> Path:
-    """Run fil-profile on given script, return path to output directory."""
-    output = Path(mkdtemp())
-    try:
-        check_call(
-            list(argv_prefix)
-            + ["fil-profile", "-o", str(output), "run"]
-            + list(arguments),
-            **kwargs,
-        )
-        exit_code = 0
-    except CalledProcessError as e:
-        exit_code = e.returncode
-    assert exit_code == expect_exit_code
-
-    return output
 
 
 def test_threaded_allocation_tracking():

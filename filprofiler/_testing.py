@@ -3,6 +3,9 @@
 import os
 from glob import glob
 from pathlib import Path
+from tempfile import mkdtemp
+from subprocess import check_call, CalledProcessError
+from typing import Union
 
 
 def get_allocations(
@@ -56,3 +59,23 @@ def as_mb(*args):
 def big(length):
     """Return True for large values."""
     return length > 10000
+
+
+def profile(
+    *arguments: Union[str, Path], expect_exit_code=0, argv_prefix=(), **kwargs
+) -> Path:
+    """Run fil-profile on given script, return path to output directory."""
+    output = Path(mkdtemp())
+    try:
+        check_call(
+            list(argv_prefix)
+            + ["fil-profile", "-o", str(output), "run"]
+            + list(arguments),
+            **kwargs,
+        )
+        exit_code = 0
+    except CalledProcessError as e:
+        exit_code = e.returncode
+    assert exit_code == expect_exit_code
+
+    return output
