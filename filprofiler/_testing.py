@@ -7,38 +7,25 @@ from tempfile import mkdtemp
 from subprocess import check_call, CalledProcessError
 from typing import Union
 
+RUNNING = "\u2BC8 Running"
 
-def get_allocations(
-    output_directory: Path,
-    expected_files=[
-        "peak-memory.svg",
-        "peak-memory-reversed.svg",
-        "index.html",
-        "peak-memory.prof",
-    ],
-    prof_file="peak-memory.prof",
-    direct=False,
-):
-    """Parses peak-memory.prof, returns mapping from callstack to size in KiB."""
-    if direct:
-        prof_path = str(output_directory)
-    else:
-        subdir = glob(str(output_directory / "*"))[0]
-        assert sorted(os.listdir(subdir)) == sorted(expected_files)
-        for expected_file in expected_files:
-            assert (Path(subdir) / expected_file).stat().st_size > 0
-        prof_path = glob(str(output_directory / "*" / prof_file))[0]
-    result = {}
-    with open(prof_path) as f:
+WAITING = "\u29D7 Waiting"
+
+
+def parse_prof(path: Path):
+    """Parses peak-memory.prof, returns iterable of (path, samples)."""
+    with open(path) as f:
         for line in f:
-            *calls, size_kb = line.split(" ")
+            *calls, samples = line.split(" ")
             calls = " ".join(calls)
-            size_kb = int(int(size_kb) / 1024)
             path = []
             if calls == "[No Python stack]":
-                result[calls] = size_kb
+                yield (calls, samples)
                 continue
             for call in calls.split(";"):
+                if call in (RUNNING, WAITING):
+                    path.append(call)
+                    continue
                 part1, func_name = call.rsplit(" ", 1)
                 assert func_name[0] == "("
                 assert func_name[-1] == ")"
@@ -46,8 +33,60 @@ def get_allocations(
                 file_name, line = part1.split(":")
                 line = int(line)
                 path.append((file_name, func_name, line))
-            if size_kb > 900:
-                result[tuple(path)] = size_kb
+            yield (tuple(path), samples)
+
+
+def get_prof_file(output_directory: Path, prof_file: str, expected_files=None) -> Path:
+    """
+    Return path to a .prof file.
+    """
+    if expected_files is None:
+        expected_files = [
+            "peak-memory.svg",
+            "peak-memory-reversed.svg",
+            "index.html",
+            "peak-memory.prof",
+            "performance.svg",
+            "performance-reversed.svg",
+            "performance.prof",
+        ]
+    subdir = glob(str(output_directory / "*"))[0]
+    assert sorted(os.listdir(subdir)) == sorted(expected_files)
+    for expected_file in expected_files:
+        assert (Path(subdir) / expected_file).stat().st_size > 0
+    return glob(str(output_directory / "*" / prof_file))[0]
+
+
+def get_allocations(
+    output_directory: Path,
+    expected_files=None,
+    prof_file="peak-memory.prof",
+    direct=False,
+):
+    """Parses peak-memory.prof, returns mapping from callstack to size in KiB."""
+    if direct:
+        prof_path = str(output_directory)
+    else:
+        prof_path = get_prof_file(output_directory, prof_file, expected_files)
+
+    result = {}
+    for path, size_bytes in parse_prof(prof_path):
+        size_kb = int(int(size_bytes) / 1024)
+        if size_kb > 900:
+            result[path] = size_kb
+    return result
+
+
+def get_performance_samples(output_directory: Path):
+    """Parses performance.prof, returns mapping from callstack to % samples."""
+    prof_path = get_prof_file(output_directory, "performance.prof")
+
+    result = dict(
+        (path, int(samples.strip())) for (path, samples) in parse_prof(prof_path)
+    )
+    total = sum(result.values())
+    for key in result:
+        result[key] /= total
     return result
 
 

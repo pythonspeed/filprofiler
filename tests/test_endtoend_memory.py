@@ -1,4 +1,4 @@
-"""End-to-end tests."""
+"""End-to-end tests for memory profiling and generic functionality."""
 
 from subprocess import check_call, check_output, CalledProcessError, run, PIPE
 from tempfile import mkdtemp, NamedTemporaryFile
