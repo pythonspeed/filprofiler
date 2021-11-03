@@ -74,17 +74,37 @@ def test_thread_after_exit():
     Performance profiling captures thread code that runs after main thread
     exits.
     """
+    script, samples = run("thread_after_main.py")
+
+    # 2 threads:
+    # - Main: 0.25 sleeping, 0.25 waiting for thread 1 to shutdown
+    # - Thread 1: 0.5 waiting
+    # Total: 0.75
+
+    path_main_sleep = (
+        (script, "<module>", 12),
+        WAITING,
+    )
+    assert match(samples, {path_main_sleep: ANY}, lambda *x: x[-1]) == pytest.approx(
+        0.25, 0.1
+    )
+
+    # Python implementation detail...
+    path_main_wait = (
+        (threading.__file__, ANY, ANY),
+        WAITING,
+    )
+    assert match(samples, {path_main_wait: ANY}, lambda *x: x[-1]) == pytest.approx(
+        0.25, 0.1
+    )
+
+    path_1 = ((script, "sleepy", 8), WAITING)
+    assert match(samples, {path_1: ANY}, lambda *x: x[-1]) == pytest.approx(0.5, 0.1)
 
 
 def test_api():
     """
     Performance profiling can be enabled via the API.
-    """
-
-
-def test_waiting():
-    """
-    Performance profiling distinguishes between waiting and running.
     """
 
 
