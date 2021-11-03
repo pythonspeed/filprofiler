@@ -57,7 +57,8 @@ pub trait PerfImpl {
 
 /// Track what threads are doing over time.
 struct PerformanceTrackerInner<P: PerfImpl + Sync + Send> {
-    callstack_to_samples: Mutex<HashMap<(Callstack, ThreadStatus), usize, ARandomState>>,
+    callstack_to_samples:
+        Mutex<HashMap<(GlobalThreadId, Callstack, ThreadStatus), usize, ARandomState>>,
     should_stop: AtomicBool,
     perf_impl: P,
 }
@@ -187,7 +188,7 @@ impl<P: PerfImpl + Sync + Send> PerformanceTrackerInner<P> {
                 };
                 handled.insert(tid.0);
                 let status = thread.map_or(ThreadStatus::Other, |p| p.status().into());
-                self.add_sample(callstack, status);
+                self.add_sample(tid, callstack, status);
             }
         }
 
@@ -196,9 +197,9 @@ impl<P: PerfImpl + Sync + Send> PerformanceTrackerInner<P> {
 
     /// Add a sample.
     /// TODO move lock out
-    fn add_sample(&self, callstack: Callstack, status: ThreadStatus) {
+    fn add_sample(&self, tid: GlobalThreadId, callstack: Callstack, status: ThreadStatus) {
         let mut c_t_s = self.callstack_to_samples.lock();
-        let samples = c_t_s.entry((callstack, status)).or_insert(0);
+        let samples = c_t_s.entry((tid, callstack, status)).or_insert(0);
         *samples += 1;
     }
 
@@ -208,9 +209,10 @@ impl<P: PerfImpl + Sync + Send> PerformanceTrackerInner<P> {
         let write_lines = |to_be_post_processed: bool, dest: &Path| {
             let total_samples = c_t_s.values().sum();
             let lines = filter_to_useful_callstacks(c_t_s.iter(), total_samples).map(
-                move |((callstack, status), calls)| {
+                move |((tid, callstack, status), calls)| {
                     format!(
-                        "{};{} {}",
+                        "[Thread {}];{};{} {}",
+                        tid.0,
                         callstack.as_string(to_be_post_processed, &functions, ";"),
                         status,
                         calls

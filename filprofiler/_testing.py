@@ -25,7 +25,17 @@ def parse_prof(path: Path):
                 yield (calls, samples)
                 continue
             for call in calls.split(";"):
-                if call in (RUNNING, WAITING, WAITING2, NO_PYTHON_STACK, OTHER):
+                if (
+                    call
+                    in (
+                        RUNNING,
+                        WAITING,
+                        WAITING2,
+                        NO_PYTHON_STACK,
+                        OTHER,
+                    )
+                    or call.startswith("[Thread ")
+                ):
                     path.append(call)
                     continue
                 part1, func_name = call.rsplit(" ", 1)

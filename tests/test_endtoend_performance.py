@@ -2,13 +2,15 @@
 
 from pathlib import Path
 import threading
-
+import re
 from pampy import match, _ as ANY
 import pytest
 
 from filprofiler._testing import get_performance_samples, profile, RUNNING, WAITING
 
 TEST_SCRIPTS = Path("tests") / "test-scripts" / "performance"
+
+THREAD = re.compile(r"\[Thread \d*\]")
 
 
 def run(filename: str):
@@ -26,8 +28,8 @@ def test_minimal():
     Minimal test of performance sampling CPU-bound Python program.
     """
     script, samples = run("minimal.py")
-    path = ((script, "<module>", 12), (script, "calc", 8), RUNNING)
-    assert samples[path] == pytest.approx(1.0, 0.1)
+    path = (THREAD, (script, "<module>", 12), (script, "calc", 8), RUNNING)
+    assert match(samples, {path: ANY}, lambda *x: x[-1]) == pytest.approx(1.0, 0.1)
 
 
 def test_threads():
@@ -49,6 +51,7 @@ def test_threads():
     # Total: 2.5 seconds
 
     path_main = (
+        THREAD,
         (script, "<module>", 32),
         (threading.__file__, "join", ANY),
         ANY,
@@ -58,12 +61,12 @@ def test_threads():
         1 / 2.5, 0.1
     )
 
-    path_1 = ((script, "thread1", 18), (script, "calc", 12), RUNNING)
+    path_1 = (THREAD, (script, "thread1", 18), (script, "calc", 12), RUNNING)
     assert match(samples, {path_1: ANY}, lambda *x: x[-1]) == pytest.approx(
         1 / 2.5, 0.1
     )
 
-    path_2 = ((script, "thread2", 22), WAITING)
+    path_2 = (THREAD, (script, "thread2", 22), WAITING)
     assert match(samples, {path_2: ANY}, lambda *x: x[-1]) == pytest.approx(
         0.5 / 2.5, 0.1
     )
@@ -82,6 +85,7 @@ def test_thread_after_exit():
     # Total: 0.75
 
     path_main_sleep = (
+        THREAD,
         (script, "<module>", 12),
         WAITING,
     )
@@ -91,6 +95,7 @@ def test_thread_after_exit():
 
     # Python implementation detail...
     path_main_wait = (
+        THREAD,
         (threading.__file__, ANY, ANY),
         WAITING,
     )
@@ -98,7 +103,7 @@ def test_thread_after_exit():
         0.25, 0.1
     )
 
-    path_1 = ((script, "sleepy", 8), WAITING)
+    path_1 = (THREAD, (script, "sleepy", 8), WAITING)
     assert match(samples, {path_1: ANY}, lambda *x: x[-1]) == pytest.approx(0.5, 0.1)
 
 
@@ -118,14 +123,24 @@ def test_gil():
     calc = ((script, "go", 14), (script, "calc", 8))
     running = calc + (RUNNING,)
     waiting = calc + (WAITING,)
-    main_running = ((script, "<module>", 18),) + running
-    main_waiting = ((script, "<module>", 18),) + waiting
+    main_running = (
+        THREAD,
+        (script, "<module>", 18),
+    ) + running
+    main_waiting = (
+        THREAD,
+        (script, "<module>", 18),
+    ) + waiting
 
-    assert match(samples, {running: ANY}, lambda *x: x[-1]) == pytest.approx(0.25, 0.1)
-    assert match(samples, {waiting: ANY}, lambda *x: x[-1]) == pytest.approx(0.25, 0.1)
+    assert match(
+        samples, {(THREAD,) + running: ANY}, lambda *x: x[-1]
+    ) == pytest.approx(0.25, 0.2)
+    assert match(
+        samples, {(THREAD,) + waiting: ANY}, lambda *x: x[-1]
+    ) == pytest.approx(0.25, 0.2)
     assert match(samples, {main_running: ANY}, lambda *x: x[-1]) == pytest.approx(
-        0.25, 0.1
+        0.25, 0.2
     )
     assert match(samples, {main_waiting: ANY}, lambda *x: x[-1]) == pytest.approx(
-        0.25, 0.1
+        0.25, 0.2
     )
