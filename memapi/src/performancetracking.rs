@@ -175,9 +175,7 @@ impl<P: PerfImpl + Sync + Send> PerformanceTrackerInner<P> {
         let process = system.process(pid)?;
         let this_thread_tid = gettid();
 
-        // this should probably happen OUTSIDE the lock too, only
-        // get_callstacks() shoudl be locked? which means... the lock should be
-        // on perf_impl I guess...
+        let mut handled = HashSet::new();
         for (tid, callstack) in self.perf_impl.get_callstacks() {
             if tid != this_thread_tid {
                 let thread = if process.pid() == tid.0 {
@@ -187,8 +185,20 @@ impl<P: PerfImpl + Sync + Send> PerformanceTrackerInner<P> {
                     // A child thread
                     process.tasks.get(&tid.0)
                 };
+                handled.insert(tid.0);
                 let status = thread.map_or(ThreadStatus::Other, |p| p.status().into());
                 self.add_sample(callstack, status);
+            }
+        }
+
+        for tid in process.tasks.keys() {
+            if !handled.contains(&tid) {
+                // Not a Python thread, but we should still profile it.
+                let status = process
+                    .tasks
+                    .get(tid)
+                    .map_or(ThreadStatus::Other, |p| p.status().into());
+                self.add_sample(Callstack::new(), status);
             }
         }
 
