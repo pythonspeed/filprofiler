@@ -113,3 +113,19 @@ def test_gil():
     Performance profiling can capture situations where threads are fighting
     over the GIL.
     """
+    script, samples = run("gil.py")
+
+    calc = ((script, "go", 14), (script, "calc", 8))
+    running = calc + (RUNNING,)
+    waiting = calc + (WAITING,)
+    main_running = ((script, "<module>", 18),) + running
+    main_waiting = ((script, "<module>", 18),) + waiting
+
+    assert match(samples, {running: ANY}, lambda *x: x[-1]) == pytest.approx(0.25, 0.1)
+    assert match(samples, {waiting: ANY}, lambda *x: x[-1]) == pytest.approx(0.25, 0.1)
+    assert match(samples, {main_running: ANY}, lambda *x: x[-1]) == pytest.approx(
+        0.25, 0.1
+    )
+    assert match(samples, {main_waiting: ANY}, lambda *x: x[-1]) == pytest.approx(
+        0.25, 0.1
+    )
