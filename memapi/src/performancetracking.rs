@@ -25,7 +25,7 @@ use super::util::new_hashmap;
 use ahash::RandomState as ARandomState;
 use libc::pid_t;
 use parking_lot::Mutex;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -91,8 +91,8 @@ impl std::fmt::Display for ThreadStatus {
         f.write_str(match self {
             ThreadStatus::Running => "\u{2BC8} Running",
             ThreadStatus::Waiting => "\u{29D7} Waiting",
-            ThreadStatus::Uninterruptible => "Uninterruptable wait",
-            _ => "Other",
+            ThreadStatus::Uninterruptible => "\u{29D7} Uninterruptible wait",
+            _ => "? Other",
         })
     }
 }

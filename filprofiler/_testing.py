@@ -8,8 +8,10 @@ from subprocess import check_call, CalledProcessError
 from typing import Union
 
 RUNNING = "\u2BC8 Running"
-
 WAITING = "\u29D7 Waiting"
+WAITING2 = "\u29D7 Uninterruptible wait"
+NO_PYTHON_STACK = "[No Python stack]"
+OTHER = "? Other"
 
 
 def parse_prof(path: Path):
@@ -19,11 +21,11 @@ def parse_prof(path: Path):
             *calls, samples = line.split(" ")
             calls = " ".join(calls)
             path = []
-            if calls == "[No Python stack]":
+            if calls == NO_PYTHON_STACK:
                 yield (calls, samples)
                 continue
             for call in calls.split(";"):
-                if call in (RUNNING, WAITING):
+                if call in (RUNNING, WAITING, WAITING2, NO_PYTHON_STACK, OTHER):
                     path.append(call)
                     continue
                 part1, func_name = call.rsplit(" ", 1)
