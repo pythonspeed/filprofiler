@@ -191,17 +191,6 @@ impl<P: PerfImpl + Sync + Send> PerformanceTrackerInner<P> {
             }
         }
 
-        for tid in process.tasks.keys() {
-            if !handled.contains(&tid) {
-                // Not a Python thread, but we should still profile it.
-                let status = process
-                    .tasks
-                    .get(tid)
-                    .map_or(ThreadStatus::Other, |p| p.status().into());
-                self.add_sample(Callstack::new(), status);
-            }
-        }
-
         Some(())
     }
 
