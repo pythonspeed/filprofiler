@@ -65,5 +65,5 @@ def run_with_profile(code_to_profile):
     try:
         return profile(code_to_profile, tempdir)
     finally:
-        svg_path = tempdir / "peak-memory.svg"
-        display(IFrame(svg_path, width="100%", height="600"))
+        display(IFrame(tempdir / "peak-memory.svg", width="100%", height="600"))
+        display(IFrame(tempdir / "performance.svg", width="100%", height="600"))

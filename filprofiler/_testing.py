@@ -1,6 +1,7 @@
 """Utility functions for testing."""
 
 import os
+import re
 from glob import glob
 from pathlib import Path
 from tempfile import mkdtemp
@@ -130,3 +131,27 @@ def profile(
     assert exit_code == expect_exit_code
 
     return output
+
+
+def run_in_ipython_shell(code_cells, filename):
+    """Run a list of strings in IPython.
+
+    Returns Path to top-level directory usable by ``get_allocations()`` or
+    ``get_performance_samples()``.
+    """
+    from IPython.core.displaypub import CapturingDisplayPublisher
+    from IPython.core.interactiveshell import InteractiveShell
+
+    InteractiveShell.clear_instance()
+
+    shell = InteractiveShell.instance(display_pub_class=CapturingDisplayPublisher)
+    for code in code_cells:
+        shell.run_cell(code)
+    InteractiveShell.clear_instance()
+    html = shell.display_pub.outputs[-1]["data"]["text/html"]
+    assert "<iframe" in html
+    svg_paths = re.findall('src="([^"]*)"', html)
+    for svg_path in svg_paths:
+        if svg_path.endswith(filename):
+            return Path(svg_path).parent.parent
+    assert False, f"Couldn't find {filename} in {svg_paths}"

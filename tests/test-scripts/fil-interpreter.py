@@ -17,8 +17,6 @@ import pytest
 import numpy as np
 import numpy.core.numeric
 from pampy import _ as ANY, match
-from IPython.core.displaypub import CapturingDisplayPublisher
-from IPython.core.interactiveshell import InteractiveShell
 import threadpoolctl
 
 from filprofiler._tracer import (
@@ -27,7 +25,7 @@ from filprofiler._tracer import (
     stop_tracing,
     disable_thread_pools,
 )
-from filprofiler._testing import get_allocations, big, as_mb
+from filprofiler._testing import get_allocations, big, as_mb, run_in_ipython_shell
 from filprofiler._ipython import run_with_profile
 from filprofiler.api import profile
 from pymalloc import pymalloc
@@ -62,39 +60,22 @@ def test_temporary_profiling(tmpdir):
     test_no_profiling()
 
 
-def run_in_ipython_shell(code_cells):
-    """Run a list of strings in IPython.
-
-    Returns parsed allocations.
-    """
-    InteractiveShell.clear_instance()
-
-    shell = InteractiveShell.instance(display_pub_class=CapturingDisplayPublisher)
-    for code in code_cells:
-        shell.run_cell(code)
-    InteractiveShell.clear_instance()
-    html = shell.display_pub.outputs[-1]["data"]["text/html"]
-    assert "<iframe" in html
-    [svg_path] = re.findall('src="([^"]*)"', html)
-    assert svg_path.endswith("peak-memory.svg")
-    resultdir = Path(svg_path).parent.parent
-
-    return get_allocations(resultdir)
-
-
 def test_ipython_profiling(tmpdir):
     """Profiling can be run via IPython magic."""
     cwd = os.getcwd()
     os.chdir(tmpdir)
-    allocations = run_in_ipython_shell(
-        [
-            "%load_ext filprofiler",
-            """\
+    allocations = get_allocations(
+        run_in_ipython_shell(
+            [
+                "%load_ext filprofiler",
+                """\
 %%filprofile
 import numpy as np
 arr = np.ones((1024, 1024, 4), dtype=np.uint64)  # 32MB
 """,
-        ]
+            ],
+            "peak-memory-svg",
+        )
     )
 
     # Allocations were tracked:
