@@ -10,7 +10,7 @@ def calc():
 
 def go():
     start = time.time()
-    while time.time() < start + 1.0:
+    while time.time() < start + 2.0:
         calc()
 
 

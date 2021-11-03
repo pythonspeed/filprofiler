@@ -3,6 +3,8 @@
 from pathlib import Path
 import threading
 import re
+from subprocess import check_call
+
 from pampy import match, _ as ANY
 import pytest
 
@@ -111,6 +113,15 @@ def test_api():
     """
     Performance profiling can be enabled via the API.
     """
+    check_call(
+        [
+            "fil-profile",
+            "python",
+            "-m",
+            "pytest",
+            str(TEST_SCRIPTS / "interpreter.py"),
+        ]
+    )
 
 
 def test_gil():
@@ -134,13 +145,13 @@ def test_gil():
 
     assert match(
         samples, {(THREAD,) + running: ANY}, lambda *x: x[-1]
-    ) == pytest.approx(0.25, 0.2)
+    ) == pytest.approx(0.25, 0.5)
     assert match(
         samples, {(THREAD,) + waiting: ANY}, lambda *x: x[-1]
-    ) == pytest.approx(0.25, 0.2)
+    ) == pytest.approx(0.25, 0.5)
     assert match(samples, {main_running: ANY}, lambda *x: x[-1]) == pytest.approx(
-        0.25, 0.2
+        0.25, 0.5
     )
     assert match(samples, {main_waiting: ANY}, lambda *x: x[-1]) == pytest.approx(
-        0.25, 0.2
+        0.25, 0.5
     )
