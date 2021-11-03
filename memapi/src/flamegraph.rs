@@ -173,10 +173,7 @@ pub fn write_flamegraphs<F>(
         to_be_post_processed,
     ) {
         Ok(_) => {
-            eprintln!(
-                "=fil-profile= Wrote memory usage flamegraph to {:?}",
-                svg_path
-            );
+            eprintln!("=fil-profile= Wrote flamegraph to {:?}", svg_path);
         }
         Err(e) => {
             eprintln!("=fil-profile= Error writing SVG: {}", e);
@@ -192,10 +189,7 @@ pub fn write_flamegraphs<F>(
         to_be_post_processed,
     ) {
         Ok(_) => {
-            eprintln!(
-                "=fil-profile= Wrote memory usage flamegraph to {:?}",
-                svg_path
-            );
+            eprintln!("=fil-profile= Wrote flamegraph to {:?}", svg_path);
         }
         Err(e) => {
             eprintln!("=fil-profile= Error writing SVG: {}", e);
