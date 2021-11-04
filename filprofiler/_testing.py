@@ -64,7 +64,7 @@ def get_prof_file(output_directory: Path, prof_file: str, expected_files=None) -
             "performance.prof",
         ]
     subdir = glob(str(output_directory / "*"))[0]
-    assert sorted(os.listdir(subdir)) == sorted(expected_files)
+    assert set(os.listdir(subdir)) >= set(expected_files)
     for expected_file in expected_files:
         assert (Path(subdir) / expected_file).stat().st_size > 0
     return glob(str(output_directory / "*" / prof_file))[0]
@@ -72,7 +72,12 @@ def get_prof_file(output_directory: Path, prof_file: str, expected_files=None) -
 
 def get_allocations(
     output_directory: Path,
-    expected_files=None,
+    expected_files=[
+        "peak-memory.svg",
+        "peak-memory-reversed.svg",
+        "index.html",
+        "peak-memory.prof",
+    ],
     prof_file="peak-memory.prof",
     direct=False,
 ):
