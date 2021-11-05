@@ -62,6 +62,7 @@ jobs:
           set -euo pipefail
           make venv
           . venv/bin/activate
+          python -m sysconfig
           make
           pip install -e .[dev]
       - name: "Run tests"
