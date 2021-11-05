@@ -18,6 +18,15 @@ fn main() -> Result<(), std::io::Error> {
     println!("cargo:rerun-if-changed=src/_filpreload.c");
     let cur_dir = std::env::current_dir()?;
 
+    #[cfg(target_os = "macos")]
+    {
+        // Limit symbol visibility.
+        println!(
+            "cargo:rustc-cdylib-link-arg=-Wl,-exported_symbols_list,{}/filpreload/export_symbols.txt",
+            cur_dir.to_string_lossy()
+        );
+    }
+
     #[cfg(target_os = "linux")]
     {
         // On Linux GNU ld can't handle two version files (one from Rust, one from
