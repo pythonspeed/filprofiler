@@ -1,21 +1,5 @@
 /*
 Performance profiling.
-
-DONE actually write callstacks
-DONE fix segfault on shutdown
-DONE disable memory tracking in polling thread
-DONE write to correct directory
-DONE add to HTML template
-DONE acquiring GIL after 50ms on startup works... but it's fragile, should be _sure_ GIL is initialized?
-DONE filter out the tracking thread from output
-DONE unknown frames
-DONE how to start/stop when using Fil's Python API? no global PERFORMANCE_TRACKER, instead create new PerformanceTracker when starting tracking, return it to Python! then stop it when we stop tracking.
-DONE thread status (CPU/Disk/Waiting/etc.)
-DONE dump on shutdown
-TODO non-Python threads
-DONE better title for SVG
-TODO tests
-TODO macos
 */
 
 use crate::flamegraph::{filter_to_useful_callstacks, write_flamegraphs, write_lines};
@@ -23,7 +7,6 @@ use crate::memorytracking::{Callstack, FunctionLocations};
 
 use super::util::new_hashmap;
 use ahash::RandomState as ARandomState;
-use libc::pid_t;
 use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -32,18 +15,30 @@ use std::sync::Arc;
 use std::thread::{Builder as ThreadBuilder, JoinHandle};
 use sysinfo::{ProcessExt, ProcessStatus, System, SystemExt};
 
-thread_local!(static TID: GlobalThreadId = GlobalThreadId((unsafe { libc::syscall(libc::SYS_gettid) }) as pid_t));
+#[cfg(target_os = "macos")]
+#[link(name = "pthread")]
+extern "C" {
+    fn pthread_threadid_np(thread: libc::pthread_t, thread_id: *mut u64) -> libc::c_int;
+}
 
 /// Get the current thread's id (==pid_t on Linux)
 pub fn gettid() -> GlobalThreadId {
-    // TODO macOS.
-    TID.with(|tid| tid.clone())
+    #[cfg(target_os = "linux")]
+    {
+        GlobalThreadId(unsafe { libc::syscall(libc::SYS_gettid) as u64 })
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let mut tid: u64 = 0;
+        unsafe { libc::pthread_threadid_np(libc::pthread_self(), &mut tid) }
+        GlobalThreadId(tid)
+    }
 }
 
 /// OS-specific system-wide thread identifier, for use with platform per-thread
-/// status APIs. TODO macOS
+/// status APIs.
 #[derive(Eq, PartialEq, Hash, Clone, Copy, PartialOrd, Ord)]
-pub struct GlobalThreadId(pid_t);
+pub struct GlobalThreadId(u64);
 
 /// Implementation-specific details.
 pub trait PerfImpl {
@@ -179,12 +174,12 @@ impl<P: PerfImpl + Sync + Send> PerformanceTrackerInner<P> {
         let mut handled = HashSet::new();
         for (tid, callstack) in self.perf_impl.get_callstacks() {
             if tid != this_thread_tid {
-                let thread = if process.pid() == tid.0 {
+                let thread = if process.pid() as u64 == tid.0 {
                     // The main thread
                     Some(process)
                 } else {
                     // A child thread
-                    process.tasks.get(&tid.0)
+                    process.tasks.get(&(tid.0 as i32))
                 };
                 handled.insert(tid.0);
                 let status = thread.map_or(ThreadStatus::Other, |p| p.status().into());
