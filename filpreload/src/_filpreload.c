@@ -168,6 +168,13 @@ static void __attribute__((constructor)) constructor() {
     exit(1);
   }
 
+#ifdef __APPLE__
+  // On macOS Monterey dlsym() is pointing at symbols in current shared library
+  // for some reason, so just use DYLD_INTERPOSE.
+  underlying_real_mmap = REAL_IMPL(mmap);
+  underlying_real_pthread_create = REAL_IMPL(pthread_create);
+  underlying_real_fork = REAL_IMPL(fork);
+#else
   underlying_real_mmap = dlsym(RTLD_NEXT, "mmap");
   if (!underlying_real_mmap) {
     fprintf(stderr, "Couldn't load mmap(): %s\n", dlerror());
@@ -183,7 +190,7 @@ static void __attribute__((constructor)) constructor() {
     fprintf(stderr, "Couldn't load fork(): %s\n", dlerror());
     exit(1);
   }
-
+#endif
   // Initialize Rust static state before we start doing any calls via malloc(),
   // to ensure we don't get unpleasant reentrancy issues.
   pymemprofile_reset("/tmp");
