@@ -1,3 +1,11 @@
+# Fil 2021.11.0 (2021-11-08)
+
+
+### Bugfixes
+
+- Fixed crashes on macOS Monterey. ([#248](https://github.com/pythonspeed/filprofiler/issues/248))
+
+
 # Fil 2021.09.1 (2021-09-27)
 
 
