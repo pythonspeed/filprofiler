@@ -1,4 +1,5 @@
 pub mod ffi;
+pub mod flamegraph;
 pub mod memorytracking;
 pub mod mmap;
 pub mod oom;

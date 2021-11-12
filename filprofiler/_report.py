@@ -74,7 +74,7 @@ def render_report(output_path: str, now: datetime) -> str:
 <p><code>{argv}</code><p>
 
 <h2>Profiling result</h2>
-<div><iframe id="peak" src="peak-memory.svg" width="100%" height="200" scrolling="auto" frameborder="0"></iframe><br>
+<div><iframe id="peak" src="peak-memory.svg" width="100%" height="400" scrolling="auto" frameborder="0"></iframe><br>
 <p><input type="button" onclick="fullScreen('#peak');" value="Full screen"></p></div>
 
 <br>
@@ -85,7 +85,7 @@ and if that doesn't help please
 and I'll try to help.</blockquote>
 <br>
 
-<div><iframe id="peak-reversed" src="peak-memory-reversed.svg" width="100%" height="200" scrolling="auto" frameborder="0"></iframe><br>
+<div><iframe id="peak-reversed" src="peak-memory-reversed.svg" width="100%" height="400" scrolling="auto" frameborder="0"></iframe><br>
 <p><input type="button" onclick="fullScreen('#peak-reversed');" value="Full screen"></p></div>
 
 <br>
@@ -109,7 +109,7 @@ The second graph shows the reverse callgraph, from <tt>f()</tt> upwards.</p>
 <p>Why is the second graph useful? If <tt>f()</tt> is called from multiple places, in the first graph it will show up multiple times, at the bottom.
 In the second reversed graph all calls to <tt>f()</tt> will be merged together.</p>
 
-<p>Need help reducing your data processing application's memory use? Check out tips and tricks <a href="https://pythonspeed.com/datascience/">here</a>.</p>
+<p>Need help reducing your data processing application's memory use? Check out tips and tricks <a href="https://pythonspeed.com/memory/">here</a>.</p>
 </body>
 </html>
 """.format(

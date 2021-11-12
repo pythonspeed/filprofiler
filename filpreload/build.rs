@@ -3,8 +3,7 @@ use std::process::Command;
 /// Get paths for C compilation builds, e.g. "include" or "platinclude".
 /// TODO this is copy/pasted multiple times...
 fn get_python_path(pathname: &str) -> String {
-    let exe = std::env::var("PYO3_PYTHON").unwrap_or("python".to_string());
-    let output = Command::new(exe)
+    let output = Command::new("python")
         .arg("-c")
         .arg(format!(
             "import sysconfig; print(sysconfig.get_path('{}'))",
@@ -18,6 +17,15 @@ fn get_python_path(pathname: &str) -> String {
 fn main() -> Result<(), std::io::Error> {
     println!("cargo:rerun-if-changed=src/_filpreload.c");
     let cur_dir = std::env::current_dir()?;
+
+    #[cfg(target_os = "macos")]
+    {
+        // Limit symbol visibility.
+        println!(
+            "cargo:rustc-cdylib-link-arg=-Wl,-exported_symbols_list,{}/filpreload/export_symbols.txt",
+            cur_dir.to_string_lossy()
+        );
+    }
 
     #[cfg(target_os = "linux")]
     {
@@ -49,6 +57,13 @@ fn main() -> Result<(), std::io::Error> {
         .define("_GNU_SOURCE", "1")
         .define("NDEBUG", "1")
         .flag("-fno-omit-frame-pointer")
+        .flag(if cfg!(target_os = "linux") {
+            // Faster TLS for Linux.
+            "-ftls-model=initial-exec"
+        } else {
+            // noop hopefully
+            "-O3"
+        })
         .compile("_filpreload");
     Ok(())
 }
