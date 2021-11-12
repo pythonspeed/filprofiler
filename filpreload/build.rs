@@ -22,7 +22,7 @@ fn main() -> Result<(), std::io::Error> {
     {
         // Limit symbol visibility.
         println!(
-            "cargo:rustc-cdylib-link-arg=-Wl,-exported_symbols_list,{}/filpreload/export_symbols.txt",
+            "cargo:rustc-cdylib-link-arg=-Wl,-exported_symbols_list,{}/export_symbols.txt",
             cur_dir.to_string_lossy()
         );
     }
