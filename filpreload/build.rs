@@ -19,6 +19,15 @@ fn main() -> Result<(), std::io::Error> {
     println!("cargo:rerun-if-changed=src/_filpreload.c");
     let cur_dir = std::env::current_dir()?;
 
+    #[cfg(target_os = "macos")]
+    {
+        // Limit symbol visibility.
+        println!(
+            "cargo:rustc-cdylib-link-arg=-Wl,-exported_symbols_list,{}/export_symbols.txt",
+            cur_dir.to_string_lossy()
+        );
+    }
+
     #[cfg(target_os = "linux")]
     {
         // On Linux GNU ld can't handle two version files (one from Rust, one from
@@ -49,6 +58,13 @@ fn main() -> Result<(), std::io::Error> {
         .define("_GNU_SOURCE", "1")
         .define("NDEBUG", "1")
         .flag("-fno-omit-frame-pointer")
+        .flag(if cfg!(target_os = "linux") {
+            // Faster TLS for Linux.
+            "-ftls-model=initial-exec"
+        } else {
+            // noop hopefully
+            "-O3"
+        })
         .compile("_filpreload");
     Ok(())
 }
