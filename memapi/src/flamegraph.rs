@@ -124,6 +124,7 @@ pub fn write_flamegraphs<F>(
     directory_path: &Path,
     base_filename: &str,
     title: &str,
+    subtitle: &str,
     count_name: &str,
     to_be_post_processed: bool,
     write_lines: F,
@@ -165,7 +166,6 @@ pub fn write_flamegraphs<F>(
     .clone();
 
     let svg_path = directory_path.join(format!("{}.svg", base_filename));
-    let subtitle = r#"Made with the Fil profiler. <a href="https://pythonspeed.com/fil/" style="text-decoration: underline;" target="_parent">Try it on your code!</a>"#;
     match write_flamegraph(
         &raw_path.to_str().unwrap().to_string(),
         &svg_path,

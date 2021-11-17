@@ -599,10 +599,12 @@ impl<'a> AllocationTracker {
             title,
             self.peak_allocated_bytes as f64 / (1024.0 * 1024.0)
         );
+        let subtitle = r#"Made with the Fil profiler. <a href="https://pythonspeed.com/fil/" style="text-decoration: underline;" target="_parent">Try it on your code!</a>"#;
         write_flamegraphs(
             directory_path,
             base_filename,
             &title,
+            subtitle,
             "bytes",
             to_be_post_processed,
             |tbpp, dest| self.write_lines(peak, tbpp, dest),
