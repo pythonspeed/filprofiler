@@ -69,6 +69,7 @@ fn write_flamegraph(
     path: &Path,
     reversed: bool,
     title: &str,
+    subtitle: &str,
     count_name: &str,
     to_be_post_processed: bool,
 ) -> std::io::Result<()> {
@@ -88,7 +89,7 @@ fn write_flamegraph(
     options.pretty_xml = true;
     if to_be_post_processed {
         // Can't put structured text into subtitle, so have to do a hack.
-        options.subtitle = Some("FIL-SUBTITLE-HERE".to_string());
+        options.subtitle = Some("__FIL-SUBTITLE-HERE__".to_string());
     }
     match flamegraph::from_files(&mut options, &[PathBuf::from(lines_file_path)], &file) {
         Err(e) => Err(std::io::Error::new(
@@ -102,7 +103,7 @@ fn write_flamegraph(
                 let mut file2 = std::fs::File::open(path)?;
                 let mut data = String::new();
                 file2.read_to_string(&mut data)?;
-                let data = data.replace("FIL-SUBTITLE-HERE", r#"Made with the Fil profiler. <a href="https://pythonspeed.com/fil/" style="text-decoration: underline;" target="_parent">Try it on your code!</a>"#);
+                let data = data.replace("__FIL-SUBTITLE-HERE__", subtitle);
                 // Restore normal semi-colons.
                 let data = data.replace("\u{ff1b}", ";");
                 // Restore (non-breaking) spaces.
@@ -164,11 +165,13 @@ pub fn write_flamegraphs<F>(
     .clone();
 
     let svg_path = directory_path.join(format!("{}.svg", base_filename));
+    let subtitle = r#"Made with the Fil profiler. <a href="https://pythonspeed.com/fil/" style="text-decoration: underline;" target="_parent">Try it on your code!</a>"#;
     match write_flamegraph(
         &raw_path.to_str().unwrap().to_string(),
         &svg_path,
         false,
         &title,
+        subtitle,
         count_name,
         to_be_post_processed,
     ) {
@@ -185,6 +188,7 @@ pub fn write_flamegraphs<F>(
         &svg_path,
         true,
         &title,
+        subtitle,
         count_name,
         to_be_post_processed,
     ) {
