@@ -72,10 +72,9 @@ jobs:
           make test
       - name: "Build wheel"
         if: startsWith(matrix.os, 'mac')
-        run: |
-            set -euo pipefail
-            . venv/bin/activate
-            make wheel
+        uses: pypa/cibuildwheel@v2.2.2
+        with:
+          output-dir: dist
       - name: "Build manylinux wheel"
         if: startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.8')
         run: |
