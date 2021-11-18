@@ -599,7 +599,10 @@ impl<'a> AllocationTracker {
             title,
             self.peak_allocated_bytes as f64 / (1024.0 * 1024.0)
         );
+        #[cfg(not(feature = "fil4prod"))]
         let subtitle = r#"Made with the Fil profiler. <a href="https://pythonspeed.com/fil/" style="text-decoration: underline;" target="_parent">Try it on your code!</a>"#;
+        #[cfg(feature = "fil4prod")]
+        let subtitle = r#"Made with the Fil4prod profiler. <a href="https://pythonspeed.com/products/fil4prod/" style="text-decoration: underline;" target="_parent">Try it on your code!</a>"#;
         write_flamegraphs(
             directory_path,
             base_filename,
