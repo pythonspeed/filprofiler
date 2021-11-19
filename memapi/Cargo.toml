@@ -37,7 +37,7 @@ cgroups-rs = "0.2.6"
 
 [dev-dependencies]
 proptest = "1.0"
-proc-maps = "0.1.8"
+proc-maps = "0.2.0"
 
 [features]
 default = []
