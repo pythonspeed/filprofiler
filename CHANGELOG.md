@@ -1,3 +1,11 @@
+# Fil 2021.11.1 (2021-11-19)
+
+
+### Bugfixes
+
+- Added back wheels for macOS Catalina (10.15). ([#253](https://github.com/pythonspeed/filprofiler/issues/253))
+
+
 # Fil 2021.11.0 (2021-11-08)
 
 
