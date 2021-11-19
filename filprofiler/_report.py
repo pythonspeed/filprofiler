@@ -89,10 +89,10 @@ and I'll try to help.</blockquote>
 <p><input type="button" onclick="fullScreen('#peak-reversed');" value="Full screen"></p></div>
 
 <br>
-<blockquote><strong>Want memory profiling for your production batch jobs?</strong>
+<blockquote><strong>Want memory and performance profiling for your production batch jobs?</strong>
 I'm working on a
-<a href="https://pythonspeed.com/fil/docs/fil4prod/difference-opensource.html"
->commercial version of Fil</a> fast and robust enough to run in production;
+<a href="https://pythonspeed.com/products/fil4prod/"
+>always-on profiler called Fil4prod</a> that is fast and robust enough to run in production;
 <a href="mailto:itamar@pythonspeed.com">send me an email</a> to participate
 in the alpha program.</blockquote>
 <br>
