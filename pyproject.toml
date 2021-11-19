@@ -16,5 +16,6 @@ start_string = "<!-- TOWNCRIER -->\n"
 underlines = ["", "", ""]
 
 [tool.cibuildwheel]
-# Disable building PyPy wheels, since we use CPython internals
-skip = "pp*"
+# Disable building PyPy wheels, since we use CPython internals, and 3.10 until
+# it's ready.
+skip = ["pp*", "cp310-*"]
