@@ -70,13 +70,14 @@ jobs:
           set -euo pipefail
           . venv/bin/activate
           make test
-      - name: "Build wheel"
-        if: startsWith(matrix.os, 'mac')
-        run: |
-            set -euo pipefail
-            . venv/bin/activate
-            make wheel
-      - name: "Build manylinux wheel"
+      - name: "Build macOS wheels"
+        if: startsWith(matrix.os, 'mac') && (matrix.python-version == '3.9')
+        uses: pypa/cibuildwheel@v2.2.2
+        env:
+          MACOSX_DEPLOYMENT_TARGET: "10.15"
+        with:
+          output-dir: dist
+      - name: "Build manylinux wheels"
         if: startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.8')
         run: |
             set -euo pipefail
