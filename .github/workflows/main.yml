@@ -73,6 +73,8 @@ jobs:
       - name: "Build wheel"
         if: startsWith(matrix.os, 'mac')
         uses: pypa/cibuildwheel@v2.2.2
+        env:
+          MACOSX_DEPLOYMENT_TARGET: "10.15"
         with:
           output-dir: dist
       - name: "Build manylinux wheel"
