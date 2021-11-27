@@ -2,6 +2,7 @@ use crate::flamegraph::filter_to_useful_callstacks;
 use crate::flamegraph::write_flamegraphs;
 use crate::flamegraph::write_lines;
 use crate::python::get_runpy_path;
+use crate::python::PrefixStripper;
 
 use super::rangemap::RangeMap;
 use super::util::new_hashmap;
@@ -160,6 +161,7 @@ impl Callstack {
     pub fn as_string(
         &self,
         to_be_post_processed: bool,
+        prefix_stripper: Option<&PrefixStripper>,
         functions: &FunctionLocations,
         separator: &'static str,
     ) -> String {
@@ -186,6 +188,9 @@ impl Callstack {
                     // Get Python code.
                     let code = crate::python::get_source_line(filename, id.line_number)
                         .unwrap_or_else(|_| "".to_string());
+                    let filename = prefix_stripper
+                        .map(|ps| ps.strip_prefix(filename))
+                        .unwrap_or(filename);
                     // Leading whitespace is dropped by SVG, so we'd like to
                     // replace it with non-breaking space. However, inferno
                     // trims whitespace
@@ -372,7 +377,7 @@ impl<'a> AllocationTracker {
         eprintln!("=fil-profile= {}", message);
         eprintln!(
             "=| {}",
-            callstack.as_string(false, &self.functions, "\n=| ")
+            callstack.as_string(false, None, &self.functions, "\n=| ")
         );
     }
 
@@ -550,11 +555,13 @@ impl<'a> AllocationTracker {
         let by_call = self.combine_callstacks(peak).into_iter();
         let id_to_callstack = self.interner.get_reverse_map();
         let functions = &self.functions;
+        let prefix_stripper = PrefixStripper::new();
         let lines = by_call.map(move |(callstack_id, size)| {
             format!(
                 "{} {}",
                 id_to_callstack.get(&callstack_id).unwrap().as_string(
                     to_be_post_processed,
+                    Some(&prefix_stripper),
                     functions,
                     ";"
                 ),
