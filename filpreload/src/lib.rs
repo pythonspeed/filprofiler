@@ -37,7 +37,7 @@ lazy_static! {
 
 /// Register a new function/filename location.
 fn add_function(filename: String, function_name: String) -> FunctionId {
-    let mut tracker_state = TRACKER_STATE.try_lock();
+    let tracker_state = TRACKER_STATE.try_lock();
     if let Some(mut tracker_state) = tracker_state {
         tracker_state
             .allocations
@@ -305,10 +305,6 @@ extern "C" {
 
     // Return whether C code has initialized.
     fn is_initialized() -> c_int;
-
-    // Increment/decrement reentrancy counter.
-    fn fil_increment_reentrancy();
-    fn fil_decrement_reentrancy();
 }
 
 struct FilMmapAPI;
