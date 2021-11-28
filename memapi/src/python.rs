@@ -63,3 +63,43 @@ impl PrefixStripper {
         path
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use pyo3::Python;
+
+    use crate::python::PrefixStripper;
+
+    /// Get the filesystem path of a Python module.
+    fn get_module_path(module: &str) -> String {
+        Python::with_gil(|py| {
+            py.eval(
+                &("__import__('".to_owned() + module + "').__file__"),
+                None,
+                None,
+            )
+            .unwrap()
+            .extract()
+            .unwrap()
+        })
+    }
+
+    #[test]
+    fn prefix_stripping() {
+        pyo3::prepare_freethreaded_python();
+        let ps = PrefixStripper::new();
+        // stdlib
+        assert_eq!(
+            ps.strip_prefix(&get_module_path("threading")),
+            "threading.py"
+        );
+        // site-packages
+        assert_eq!(
+            ps.strip_prefix(&get_module_path("filprofiler")),
+            "filprofiler/__init__.py"
+        );
+        // random paths
+        assert_eq!(ps.strip_prefix("/x/blah.py"), "/x/blah.py");
+        assert_eq!(ps.strip_prefix("foo.py"), "foo.py");
+    }
+}
