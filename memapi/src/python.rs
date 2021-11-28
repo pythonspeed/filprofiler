@@ -94,10 +94,7 @@ mod tests {
             "threading.py"
         );
         // site-packages
-        assert_eq!(
-            ps.strip_prefix(&get_module_path("filprofiler")),
-            "filprofiler/__init__.py"
-        );
+        assert_eq!(ps.strip_prefix(&get_module_path("pip")), "pip/__init__.py");
         // random paths
         assert_eq!(ps.strip_prefix("/x/blah.py"), "/x/blah.py");
         assert_eq!(ps.strip_prefix("foo.py"), "foo.py");
