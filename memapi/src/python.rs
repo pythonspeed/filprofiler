@@ -39,7 +39,7 @@ impl PrefixStripper {
                 // 2. Drop empty string, it's misleading.
                 // 3. Add '/' to end of all paths.
                 // 4. Sorted, so most specific ones are first.
-                "list(sorted([__import__('os').path.normpath(path) + '/' for path in __import__('sys').path if (isinstance(path, str) and path)]))",
+                "list(reversed(sorted([__import__('os').path.normpath(path) + '/' for path in __import__('sys').path if (isinstance(path, str) and path)])))",
                 None,
                 None,
             );
