@@ -38,8 +38,8 @@ impl PrefixStripper {
                 // 1. Drop non-string values, they're not something we can understand.
                 // 2. Drop empty string, it's misleading.
                 // 3. Add '/' to end of all paths.
-                // 4. Sorted, so most specific ones are first.
-                "list(reversed(sorted([__import__('os').path.normpath(path) + '/' for path in __import__('sys').path if (isinstance(path, str) and path)])))",
+                // 4. Sorted, so most specific (i.e. longest) ones are first.
+                "list(sorted([__import__('os').path.normpath(path) + '/' for path in __import__('sys').path if (isinstance(path, str) and path)], key=lambda i: -len(i)))",
                 None,
                 None,
             );
