@@ -725,7 +725,7 @@ impl<'a> AllocationTracker {
 
 #[cfg(test)]
 mod tests {
-    use crate::memorytracking::PARENT_PROCESS;
+    use crate::memorytracking::{ProcessUid, PARENT_PROCESS};
 
     use super::{
         Allocation, AllocationTracker, CallSiteId, Callstack, CallstackInterner, FunctionId,
@@ -745,7 +745,6 @@ mod tests {
 
         // Allocation sizes larger than 2 ** 31 are stored as MiBs, with some
         // loss of resolution.
-
         #[test]
         fn large_allocation(size in (HIGH_32BIT as usize)..(1 << 50)) {
             let allocation = Allocation::new(0, size as usize);
@@ -781,29 +780,32 @@ mod tests {
         #[test]
         fn current_allocated_matches_sum_of_allocations(
             // Allocated bytes. Will use index as the memory address.
-            allocated_sizes in prop::collection::vec(1..1000 as usize, 10..20),
+            allocated_sizes in prop::collection::vec((0..2 as u32, 1..100 as usize), 10..20),
             // Allocations to free.
             free_indices in prop::collection::btree_set(0..10 as usize, 1..5)
         ) {
             let mut tracker = AllocationTracker::new(".".to_string());
             let mut expected_memory_usage = im::vector![];
             for i in 0..allocated_sizes.len() {
+                let (process, allocation_size) = *allocated_sizes.get(i).unwrap();
+                let process = ProcessUid(process);
                 let mut cs = Callstack::new();
                 cs.start_call(0, CallSiteId::new(FunctionId::new(i as u32), 0));
                 let cs_id = tracker.get_callstack_id(&cs);
-                tracker.add_allocation(PARENT_PROCESS, i as usize,*allocated_sizes.get(i).unwrap(), cs_id);
-                expected_memory_usage.push_back(*allocated_sizes.get(i).unwrap());
+                tracker.add_allocation(process, i as usize, allocation_size, cs_id);
+                expected_memory_usage.push_back(allocation_size);
             }
-            let mut expected_sum = allocated_sizes.iter().sum();
+            let mut expected_sum = allocated_sizes.iter().map(|t| t.1).sum();
             let expected_peak : usize = expected_sum;
             prop_assert_eq!(tracker.current_allocated_bytes, expected_sum);
             prop_assert_eq!(&tracker.current_memory_usage, &expected_memory_usage);
             for i in free_indices.iter() {
-                let expected_removed = allocated_sizes.get(*i).unwrap();
+                let (process, expected_removed) = allocated_sizes.get(*i).unwrap();
+                let process = ProcessUid(*process);
                 expected_sum -= expected_removed;
-                let removed = tracker.free_allocation(PARENT_PROCESS, *i);
+                let removed = tracker.free_allocation(process, *i);
                 prop_assert_eq!(removed, Some(*expected_removed));
-                expected_memory_usage[*i] -= allocated_sizes.get(*i).unwrap();
+                expected_memory_usage[*i] -= expected_removed;
                 prop_assert_eq!(tracker.current_allocated_bytes, expected_sum);
                 prop_assert_eq!(&tracker.current_memory_usage, &expected_memory_usage);
             }
@@ -815,7 +817,7 @@ mod tests {
         #[test]
         fn current_allocated_anon_maps_matches_sum_of_allocations(
             // Allocated bytes. Will use index as the memory address.
-            allocated_sizes in prop::collection::vec(1..1000 as usize, 10..20),
+            allocated_sizes in prop::collection::vec((0..2 as u32, 1..100 as usize), 10..20),
             // Allocations to free.
             free_indices in prop::collection::btree_set(0..10 as usize, 1..5)
         ) {
@@ -824,20 +826,24 @@ mod tests {
             // Make sure addresses don't overlap:
             let addresses : Vec<usize> = (0..allocated_sizes.len()).map(|i| i * 10000).collect();
             for i in 0..allocated_sizes.len() {
+                let (process, allocation_size) = *allocated_sizes.get(i).unwrap();
+                let process = ProcessUid(process);
                 let mut cs = Callstack::new();
                 cs.start_call(0, CallSiteId::new(FunctionId::new(i as u32), 0));
                 let csid = tracker.get_callstack_id(&cs);
-                tracker.add_anon_mmap(PARENT_PROCESS, addresses[i] as usize, *allocated_sizes.get(i).unwrap(), csid);
-                expected_memory_usage.push_back(*allocated_sizes.get(i).unwrap());
+                tracker.add_anon_mmap(process, addresses[i] as usize, allocation_size, csid);
+                expected_memory_usage.push_back(allocation_size);
             }
-            let mut expected_sum = allocated_sizes.iter().sum();
+            let mut expected_sum = allocated_sizes.iter().map(|t|t.1).sum();
             let expected_peak : usize = expected_sum;
             prop_assert_eq!(tracker.current_allocated_bytes, expected_sum);
             prop_assert_eq!(&tracker.current_memory_usage, &expected_memory_usage);
             for i in free_indices.iter() {
-                expected_sum -= allocated_sizes.get(*i).unwrap();
-                tracker.free_anon_mmap(PARENT_PROCESS, addresses[*i], *allocated_sizes.get(*i).unwrap());
-                expected_memory_usage[*i] -= allocated_sizes.get(*i).unwrap();
+                let (process, allocation_size) = *allocated_sizes.get(*i).unwrap();
+                let process = ProcessUid(process);
+                expected_sum -= allocation_size;
+                tracker.free_anon_mmap(process, addresses[*i], allocation_size);
+                expected_memory_usage[*i] -= allocation_size;
                 prop_assert_eq!(tracker.current_allocated_bytes, expected_sum);
                 prop_assert_eq!(&tracker.current_memory_usage, &expected_memory_usage);
             }
