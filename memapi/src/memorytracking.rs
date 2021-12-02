@@ -538,6 +538,26 @@ impl<'a> AllocationTracker {
         }
     }
 
+    /// The process just died, remove all the allocations.
+    pub fn drop_process(&mut self, process: ProcessUid) {
+        // Before we reduce memory, let's check if we've previously hit a peak:
+        self.check_if_new_peak();
+
+        // Drop anon mmaps, call remove_memory_usage on all entries.
+        if let Some(mmaps_for_process) = self.current_anon_mmaps.remove(&process) {
+            for (size, callstack_id) in mmaps_for_process.into_iter() {
+                self.remove_memory_usage(callstack_id, size);
+            }
+        }
+
+        // Drop allocations, call remove_memory_usage on all entries.
+        if let Some(allocations_for_process) = self.current_allocations.remove(&process) {
+            for allocation in allocations_for_process.values() {
+                self.remove_memory_usage(allocation.callstack_id, allocation.size());
+            }
+        }
+    }
+
     /// Combine Callstacks and make them human-readable. Duplicate callstacks
     /// have their allocated memory summed.
     fn combine_callstacks(
@@ -851,6 +871,47 @@ mod tests {
             tracker.check_if_new_peak();
             tracker.validate();
         }
+
+        #[test]
+        fn drop_process_removes_that_process_allocations_and_mmaps(
+            // Allocated bytes. Will use index as the memory address.
+            allocated_sizes in prop::collection::vec((0..2 as u32, 1..100 as usize), 10..20),
+            allocated_mmaps in prop::collection::vec((0..2 as u32, 1..100 as usize), 10..20),
+        ) {
+            let mut tracker = AllocationTracker::new(".".to_string());
+            let mut expected_memory_usage : usize = 0;
+            // Make sure addresses don't overlap:
+            let mmap_addresses : Vec<usize> = (0..allocated_mmaps.len()).map(|i| i * 10000).collect();
+            for i in 0..allocated_sizes.len() {
+                let (process, allocation_size) = *allocated_sizes.get(i).unwrap();
+                let process = ProcessUid(process);
+                let mut cs = Callstack::new();
+                cs.start_call(0, CallSiteId::new(FunctionId::new(i as u32), 0));
+                let cs_id = tracker.get_callstack_id(&cs);
+                tracker.add_allocation(process, i as usize, allocation_size, cs_id);
+                expected_memory_usage += allocation_size;
+            }
+            for i in 0..allocated_mmaps.len() {
+                let (process, allocation_size) = *allocated_mmaps.get(i).unwrap();
+                let process = ProcessUid(process);
+                let mut cs = Callstack::new();
+                cs.start_call(0, CallSiteId::new(FunctionId::new(i as u32), 0));
+                let csid = tracker.get_callstack_id(&cs);
+                tracker.add_anon_mmap(process, mmap_addresses[i] as usize, allocation_size, csid);
+                expected_memory_usage += allocation_size;
+            }
+            prop_assert_eq!(tracker.current_allocated_bytes, expected_memory_usage);
+            let expected_peak = expected_memory_usage;
+            let to_drop = ProcessUid(1);
+            tracker.drop_process(to_drop);
+            expected_memory_usage -= allocated_sizes.iter().filter(|(p, _)| ProcessUid(*p) == to_drop).map(|(_, size)| size).sum::<usize>();
+            expected_memory_usage -= allocated_mmaps.iter().filter(|(p, _)| ProcessUid(*p) == to_drop).map(|(_, size)| size).sum::<usize>();
+            prop_assert_eq!(tracker.current_allocated_bytes, expected_memory_usage);
+            prop_assert_eq!(tracker.peak_allocated_bytes, expected_peak);
+            tracker.check_if_new_peak();
+            tracker.validate();
+        }
+
     }
 
     #[test]

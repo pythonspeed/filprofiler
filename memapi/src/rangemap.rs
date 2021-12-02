@@ -121,6 +121,11 @@ impl<V: Clone> RangeMap<V> {
         self.ranges.iter().map(|(r, _)| r.size()).sum()
     }
 
+    /// Return iterator of (length, value).
+    pub fn into_iter(self) -> impl Iterator<Item = (usize, V)> {
+        self.ranges.into_iter().map(|(r, v)| (r.size(), v))
+    }
+
     #[cfg(test)]
     pub fn as_hashmap(&self) -> HashMap<usize, (usize, &V)> {
         self.ranges
