@@ -35,3 +35,5 @@ While this means much lower performance overhead, it has some caveats:
 
 In practice, for data-intensive batch jobs with high memory usage, both these caveats are irrelevant.
 If you're trying to figure out why you're using 16GB of RAM, you'll care about the multi-gigabyte or 100s-of-megabyte sources of allocation, and the fact that a 1MB allocation is reporting the wrong callstack doesn't really matter.
+
+**If you'd like to get memory profiling automatically for all your production batch jobs, [send me an email](mailto:itamar@pythonspeed.com) to participate in the alpha program.**

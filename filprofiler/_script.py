@@ -60,8 +60,7 @@ You can also run the profiler this way:
 
   $ python -m filprofiler run yourprogram.py
 
-For more info, including documentation on Jupyter usage,
-visit https://pythonspeed.com/products/filmemoryprofiler/
+You can read the documentation at https://pythonspeed.com/fil/docs/
 """
 
 
@@ -144,7 +143,12 @@ def stage_1_benchmark(args: List[str]):
         [LD_LINUX, "--preload", library_path("_filpreload"), which("python")] + args
     )
     # 3. Store the difference.
-    result = {k: (fil_result[k] - python_result[k]) for k in fil_result}
+    result = {
+        k: "{} ({}%)".format(
+            (fil_result[k] - python_result[k]), fil_result[k] * 100 / python_result[k]
+        )
+        for k in fil_result
+    }
     with open(destination, "w+") as f:
         json.dump(result, f, sort_keys=True, indent=4)
         f.flush()

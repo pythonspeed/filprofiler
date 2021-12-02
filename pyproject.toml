@@ -14,3 +14,8 @@ title_format = "# Fil {version} ({project_date})"
 issue_format = "[#{issue}](https://github.com/pythonspeed/filprofiler/issues/{issue})"
 start_string = "<!-- TOWNCRIER -->\n"
 underlines = ["", "", ""]
+
+[tool.cibuildwheel]
+# Disable building PyPy wheels, since we use CPython internals, and 3.10 until
+# it's ready.
+skip = ["pp*", "cp310-*"]

@@ -1,16 +1,16 @@
+use crate::flamegraph::filter_to_useful_callstacks;
+use crate::flamegraph::write_flamegraphs;
+use crate::flamegraph::write_lines;
 use crate::python::get_runpy_path;
 
 use super::rangemap::RangeMap;
 use super::util::new_hashmap;
 use ahash::RandomState as ARandomState;
 use im::Vector as ImVector;
-use inferno::flamegraph;
 use itertools::Itertools;
+use std::borrow::Cow;
+use std::collections::HashMap;
 use std::path::Path;
-use std::path::PathBuf;
-use std::{borrow::Cow, io::Write};
-use std::{collections::HashMap, io::Read};
-use std::{fs, io::Seek};
 
 extern "C" {
     fn _exit(exit_code: std::os::raw::c_int);
@@ -73,13 +73,15 @@ impl FunctionLocations {
     }
 }
 
+pub type LineNumber = u16; // TODO u32, newtype
+
 /// A specific location: file + function + line number.
 #[derive(Clone, Debug, PartialEq, Eq, Copy, Hash)]
 pub struct CallSiteId {
     /// The function + filename. We use IDs for performance reasons (faster hashing).
     function: FunctionId,
     /// Line number within the _file_, 1-indexed.
-    line_number: u16,
+    line_number: LineNumber,
 }
 
 impl CallSiteId {
@@ -155,7 +157,7 @@ impl Callstack {
         callstack_id
     }
 
-    fn as_string(
+    pub fn as_string(
         &self,
         to_be_post_processed: bool,
         functions: &FunctionLocations,
@@ -251,7 +253,7 @@ impl<'a> CallstackInterner {
     }
 
     /// Add a (possibly) new Function, returning its ID.
-    pub fn get_or_insert_id<F: FnOnce() -> ()>(
+    pub fn get_or_insert_id<F: FnOnce()>(
         &mut self,
         callstack: Cow<Callstack>,
         call_on_new: F,
@@ -314,48 +316,6 @@ impl Allocation {
             self.compressed_size as usize
         }
     }
-}
-
-// Filter down to top 99% of allocated memory.
-//
-// 1. Empty callstacks are dropped.
-// 2. Top 99% of allocations, starting with largest, are kept.
-// 3. If that's less than 100 allocations, thrown in up to 100, main goal is
-//    just to not have a vast number of useless tiny allocations.
-fn filter_to_useful_callstacks(
-    allocations: &ImVector<usize>,
-) -> HashMap<CallstackId, usize, ARandomState> {
-    let total_allocated: usize = allocations.iter().sum();
-    let mut stored: usize = 0;
-    allocations
-        .iter()
-        // Convert to (callstack id, size) tuples:
-        .enumerate()
-        // Filter out callstacks with no allocations:
-        .filter(|(_, size)| **size > 0)
-        // Sort in descending size of allocation:
-        .sorted_by(|a, b| Ord::cmp(b.1, a.1))
-        // Keep track of how much total allocations we've accumulated so far:
-        .map(|(i, size)| {
-            stored += *size;
-            (stored.clone(), i as u32, size)
-        })
-        // We don't do more than 10,000 allocations. More than that uses vast
-        // amounts of memory to generate the report, and overburdens the browser
-        // displaying the SVG.
-        .take(10_000)
-        // Stop once we've hit 99% of allocations, but include at least 100 just
-        // so there's some context:
-        .scan((false, 0), |(past_threshold, taken), (stored, i, size)| {
-            if *past_threshold && (*taken > 99) {
-                return None;
-            }
-            // Stop if we've hit 99% of allocated data.
-            *past_threshold = stored > (total_allocated * 99) / 100;
-            *taken += 1;
-            Some((i, *size))
-        })
-        .collect()
 }
 
 /// The main data structure tracking everything.
@@ -537,13 +497,10 @@ impl<'a> AllocationTracker {
     /// Combine Callstacks and make them human-readable. Duplicate callstacks
     /// have their allocated memory summed.
     fn combine_callstacks(
-        &mut self,
+        &self,
         // If false, will do the current allocations:
         peak: bool,
     ) -> HashMap<CallstackId, usize, ARandomState> {
-        // First, make sure peaks are correct:
-        self.check_if_new_peak();
-
         // Would be nice to validate if data is consistent. However, there are
         // edge cases that make it slightly inconsistent (e.g. see the
         // unexpected code path in add_allocation() above), and blowing up
@@ -556,11 +513,16 @@ impl<'a> AllocationTracker {
         // We get a LOT of tiny allocations. To reduce overhead of creating
         // flamegraph (which currently loads EVERYTHING into memory), just do
         // the top 99% of allocations.
-        if peak {
-            filter_to_useful_callstacks(&self.peak_memory_usage)
+        let callstacks = if peak {
+            &self.peak_memory_usage
         } else {
-            filter_to_useful_callstacks(&self.current_memory_usage)
-        }
+            &self.current_memory_usage
+        };
+        let sum = callstacks.iter().sum();
+        filter_to_useful_callstacks(callstacks.iter().enumerate(), sum)
+            .into_iter()
+            .map(|(k, v)| (k as CallstackId, v))
+            .collect()
     }
 
     /// Dump all callstacks in peak memory usage to various files describing the
@@ -569,15 +531,26 @@ impl<'a> AllocationTracker {
         self.dump_to_flamegraph(path, true, "peak-memory", "Peak Tracked Memory Usage", true);
     }
 
+    fn write_lines(
+        &self,
+        peak: bool,
+        to_be_post_processed: bool,
+        dest: &Path,
+    ) -> std::io::Result<()> {
+        let lines = self.to_lines(peak, to_be_post_processed);
+        write_lines(lines, dest)?;
+        Ok(())
+    }
+
     fn to_lines(
-        &mut self,
+        &self,
         peak: bool,
         to_be_post_processed: bool,
     ) -> impl Iterator<Item = String> + '_ {
         let by_call = self.combine_callstacks(peak).into_iter();
         let id_to_callstack = self.interner.get_reverse_map();
         let functions = &self.functions;
-        by_call.map(move |(callstack_id, size)| {
+        let lines = by_call.map(move |(callstack_id, size)| {
             format!(
                 "{} {}",
                 id_to_callstack.get(&callstack_id).unwrap().as_string(
@@ -587,7 +560,8 @@ impl<'a> AllocationTracker {
                 ),
                 size,
             )
-        })
+        });
+        lines
     }
 
     fn dump_to_flamegraph(
@@ -598,6 +572,9 @@ impl<'a> AllocationTracker {
         title: &str,
         to_be_post_processed: bool,
     ) {
+        // First, make sure peaks are correct:
+        self.check_if_new_peak();
+
         // Print warning if we're missing allocations.
         #[cfg(not(feature = "fil4prod"))]
         {
@@ -617,98 +594,24 @@ impl<'a> AllocationTracker {
         eprintln!("=fil-profile= Preparing to write to {}", path);
         let directory_path = Path::new(path);
 
-        if !directory_path.exists() {
-            fs::create_dir_all(directory_path)
-                .expect("=fil-profile= Couldn't create the output directory.");
-        } else if !directory_path.is_dir() {
-            panic!("=fil-profile= Output path must be a directory.");
-        }
-
-        let raw_path_without_source_code = directory_path
-            .join(format!("{}.prof", base_filename))
-            .to_str()
-            .unwrap()
-            .to_string();
-
-        let raw_path_with_source_code = directory_path
-            .join(format!("{}-source.prof", base_filename))
-            .to_str()
-            .unwrap()
-            .to_string();
-
-        // Always write .prof file without source code, for use by tests and
-        // other automated post-processing.
-        if let Err(e) = write_lines(self.to_lines(peak, false), &raw_path_without_source_code) {
-            eprintln!("=fil-profile= Error writing raw profiling data: {}", e);
-            return;
-        }
-
-        // Optionally write version with source code for SVGs, if we're using
-        // source code.
-        if to_be_post_processed {
-            if let Err(e) = write_lines(self.to_lines(peak, true), &raw_path_with_source_code) {
-                eprintln!("=fil-profile= Error writing raw profiling data: {}", e);
-                return;
-            }
-        }
-
-        let raw_path = (if to_be_post_processed {
-            &raw_path_with_source_code
-        } else {
-            &raw_path_without_source_code
-        })
-        .clone();
-
-        let svg_path = directory_path
-            .join(format!("{}.svg", base_filename))
-            .to_str()
-            .unwrap()
-            .to_string();
-        match write_flamegraph(
-            &raw_path,
-            &svg_path,
-            self.peak_allocated_bytes,
-            false,
+        let title = format!(
+            "{} ({:.1} MiB)",
             title,
+            self.peak_allocated_bytes as f64 / (1024.0 * 1024.0)
+        );
+        #[cfg(not(feature = "fil4prod"))]
+        let subtitle = r#"Made with the Fil profiler. <a href="https://pythonspeed.com/fil/" style="text-decoration: underline;" target="_parent">Try it on your code!</a>"#;
+        #[cfg(feature = "fil4prod")]
+        let subtitle = r#"Made with the Fil4prod profiler. <a href="https://pythonspeed.com/products/fil4prod/" style="text-decoration: underline;" target="_parent">Try it on your code!</a>"#;
+        write_flamegraphs(
+            directory_path,
+            base_filename,
+            &title,
+            subtitle,
+            "bytes",
             to_be_post_processed,
-        ) {
-            Ok(_) => {
-                eprintln!(
-                    "=fil-profile= Wrote memory usage flamegraph to {}",
-                    svg_path
-                );
-            }
-            Err(e) => {
-                eprintln!("=fil-profile= Error writing SVG: {}", e);
-            }
-        }
-        let svg_path = directory_path
-            .join(format!("{}-reversed.svg", base_filename))
-            .to_str()
-            .unwrap()
-            .to_string();
-        match write_flamegraph(
-            &raw_path,
-            &svg_path,
-            self.peak_allocated_bytes,
-            true,
-            title,
-            to_be_post_processed,
-        ) {
-            Ok(_) => {
-                eprintln!(
-                    "=fil-profile= Wrote memory usage flamegraph to {}",
-                    svg_path
-                );
-            }
-            Err(e) => {
-                eprintln!("=fil-profile= Error writing SVG: {}", e);
-            }
-        }
-        if to_be_post_processed {
-            // Don't need this file, and it'll be quite big, so delete it.
-            let _ = std::fs::remove_file(raw_path_with_source_code);
-        }
+            |tbpp, dest| self.write_lines(peak, tbpp, dest),
+        )
     }
 
     /// Clear memory we won't be needing anymore, since we're going to exit out.
@@ -772,85 +675,12 @@ impl<'a> AllocationTracker {
     }
 }
 
-/// Write strings to disk, one line per string.
-fn write_lines<I: Iterator<Item = String>>(lines: I, path: &str) -> std::io::Result<()> {
-    let mut file = fs::File::create(path)?;
-    for line in lines {
-        file.write_all(line.as_bytes())?;
-        file.write_all(b"\n")?;
-    }
-    file.flush()?;
-    Ok(())
-}
-
-/// Write a flamegraph SVG to disk, given lines in summarized format.
-fn write_flamegraph(
-    lines_file_path: &str,
-    path: &str,
-    peak_bytes: usize,
-    reversed: bool,
-    title: &str,
-    to_be_post_processed: bool,
-) -> std::io::Result<()> {
-    let mut file = std::fs::File::create(path)?;
-    let title = format!(
-        "{}{} ({:.1} MiB)",
-        title,
-        if reversed { ", Reversed" } else { "" },
-        peak_bytes as f64 / (1024.0 * 1024.0)
-    );
-    let mut options = flamegraph::Options::default();
-    options.title = title;
-    options.count_name = "bytes".to_string();
-    options.font_size = 16;
-    options.font_type = "monospace".to_string();
-    options.frame_height = 22;
-    options.reverse_stack_order = reversed;
-    options.color_diffusion = true;
-    options.direction = flamegraph::Direction::Inverted;
-    // Maybe disable this some day; but for now it makes debugging much
-    // easier:
-    options.pretty_xml = true;
-    if to_be_post_processed {
-        // Can't put structured text into subtitle, so have to do a hack.
-        options.subtitle = Some("FIL-SUBTITLE-HERE".to_string());
-    }
-    match flamegraph::from_files(&mut options, &[PathBuf::from(lines_file_path)], &file) {
-        Err(e) => Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("{}", e),
-        )),
-        Ok(_) => {
-            file.flush()?;
-            if to_be_post_processed {
-                // Replace with real subtitle.
-                let mut file2 = std::fs::File::open(path)?;
-                let mut data = String::new();
-                file2.read_to_string(&mut data)?;
-                let data = data.replace("FIL-SUBTITLE-HERE", r#"Made with the Fil memory profiler. <a href="https://pythonspeed.com/fil/" style="text-decoration: underline;" target="_parent">Try it on your code!</a>"#);
-                // Restore normal semi-colons.
-                let data = data.replace("\u{ff1b}", ";");
-                // Restore (non-breaking) spaces.
-                let data = data.replace("\u{12e4}", "\u{00a0}");
-                // Get rid of empty-line markers:
-                let data = data.replace("\u{2800}", "");
-                file.seek(std::io::SeekFrom::Start(0))?;
-                file.set_len(0)?;
-                file.write_all(&data.as_bytes())?;
-            }
-            Ok(())
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
-        filter_to_useful_callstacks, Allocation, AllocationTracker, CallSiteId, Callstack,
-        CallstackInterner, FunctionId, FunctionLocations, HIGH_32BIT, MIB,
+        Allocation, AllocationTracker, CallSiteId, Callstack, CallstackInterner, FunctionId,
+        FunctionLocations, HIGH_32BIT, MIB,
     };
-    use im;
-    use itertools::Itertools;
     use proptest::prelude::*;
     use std::borrow::Cow;
     use std::collections::HashMap;
@@ -964,30 +794,6 @@ mod tests {
             prop_assert_eq!(tracker.peak_allocated_bytes, expected_peak);
             tracker.check_if_new_peak();
             tracker.validate();
-        }
-
-        #[test]
-        fn filtering_of_callstacks(
-            // Allocated bytes. Will use index as the memory address.
-            allocated_sizes in prop::collection::vec(0..1000 as usize, 5..15000),
-        ) {
-            let total_size : usize = allocated_sizes.iter().sum();
-            let total_size_99 = (99 * total_size) / 100;
-            let filtered = filter_to_useful_callstacks(&im::Vector::from(&allocated_sizes));
-            let filtered_size :usize = filtered.values().into_iter().sum();
-            if filtered_size >= total_size_99  {
-                if filtered.len() > 100 {
-                    // Removing any item should take us to or below 99%
-                    for value in filtered.values() {
-                        prop_assert!(filtered_size - *value <= total_size_99)
-                    }
-                }
-            } else {
-                // Cut out before 99%, so must be too many items
-                prop_assert_eq!(filtered.len(), 10000);
-                prop_assert_eq!(filtered_size, allocated_sizes.clone().iter().sorted_by(
-                    |a, b| Ord::cmp(b, a)).take(10000).sum::<usize>());
-            }
         }
     }
 
@@ -1250,6 +1056,9 @@ mod tests {
         tracker.add_allocation(2, 234, cs2_id);
         tracker.add_anon_mmap(3, 50000, cs1_id);
         tracker.add_allocation(4, 6000, cs3_id);
+
+        // Make sure we notice new peak.
+        tracker.check_if_new_peak();
 
         // 234 allocation is too small, below the 99% total allocations
         // threshold, but we always guarantee at least 100 allocations.

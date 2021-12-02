@@ -6,7 +6,6 @@ _realloc
 _malloc
 _free
 _mmap
-_mmap64
 _munmap
 _posix_memalign
 _aligned_alloc

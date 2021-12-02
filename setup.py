@@ -1,36 +1,14 @@
-from os import environ, getcwd
 from os.path import join
 from glob import glob
-import platform
 
 from setuptools import setup
 from setuptools_rust import RustExtension, Binding
-
-from cflags import CFLAGS
 
 
 def read(path):
     with open(path) as f:
         return f.read()
 
-
-# Will be used by filpreload/build.rs's usage of cc to compile C code that uses
-# Python APIs.
-environ["CFLAGS"] = CFLAGS
-
-# 'Darwin' or 'Linux'
-system = platform.system()
-
-# 'x86_64', 'arm64' (Apple M1) or 'aarch64' (AWS Graviton, Ubuntu Linux)
-machine = platform.machine()
-
-# Set public symbols to use for macOS. For some reason this doesn't work in
-# build.rs. Currently the exported symbols list breaks on macOS ARM for
-# unclear reasons, possibly the ABI is different (no `_` prefix to symbols maybe?)
-if system == "Darwin" and machine == "x86_64":
-    environ[
-        "RUSTFLAGS"
-    ] = f"-C link-arg=-Wl,-exported_symbols_list,{getcwd()}/filpreload/export_symbols.txt"
 
 setup(
     name="filprofiler",
@@ -76,7 +54,7 @@ setup(
     ],
     python_requires=">=3.6",
     license="Apache 2.0",
-    url="https://pythonspeed.com/products/filmemoryprofiler/",
+    url="https://pythonspeed.com/fil/",
     maintainer="Itamar Turner-Trauring",
     maintainer_email="itamar@pythonspeed.com",
     long_description=read("README.md"),

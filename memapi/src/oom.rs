@@ -206,18 +206,19 @@ impl RealMemoryInfo {
     pub fn get_cgroup_available_memory(&self) -> usize {
         let mut result = std::usize::MAX;
         if let Some(cgroup) = &self.cgroup {
-            let mem: &cgroups_rs::memory::MemController = cgroup.controller_of().unwrap();
-            let mem = mem.memory_stat();
-            if mem.limit_in_bytes == 0 {
-                // A limit of 0 is nonsensical. Seen on Docker with cgroups v1
-                // with no limit set, and the usage was also 0. So just assume
-                // there is no limit.
-                return result;
+            if let Some(mem) = cgroup.controller_of::<cgroups_rs::memory::MemController>() {
+                let mem = mem.memory_stat();
+                if mem.limit_in_bytes == 0 {
+                    // A limit of 0 is nonsensical. Seen on Docker with cgroups v1
+                    // with no limit set, and the usage was also 0. So just assume
+                    // there is no limit.
+                    return result;
+                }
+                result = std::cmp::min(
+                    result,
+                    (mem.limit_in_bytes - mem.usage_in_bytes as i64) as usize,
+                );
             }
-            result = std::cmp::min(
-                result,
-                (mem.limit_in_bytes - mem.usage_in_bytes as i64) as usize,
-            );
         }
         result
     }
