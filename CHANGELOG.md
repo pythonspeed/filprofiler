@@ -1,3 +1,11 @@
+# Fil 2021.12.0 (2021-12-03)
+
+
+### Features
+
+- Added Python 3.10 support. ([#242](https://github.com/pythonspeed/filprofiler/issues/242))
+
+
 # Fil 2021.11.1 (2021-11-19)
 
 
