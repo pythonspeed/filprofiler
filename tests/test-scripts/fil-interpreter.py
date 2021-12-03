@@ -283,7 +283,7 @@ def test_multiprocessing_good_error_message_fil_api(tmpdir, mode):
     start_tracing(tmpdir)
     try:
         with multiprocessing.get_context(mode).Pool(processes=1) as pool:
-            with pytest.raises(RuntimeError) as e:
+            with pytest.raises(RuntimeError):
                 pool.apply(fil_api.run_with_fil)
     finally:
         stop_tracing(tmpdir)
