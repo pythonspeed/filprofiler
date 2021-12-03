@@ -40,7 +40,7 @@ impl Range {
 ///
 /// The intended use case is tracking anonymous mmap(), where munmap() can
 /// deallocate chunks of an allocation, or even multiple allocations.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub struct RangeMap<V: Clone> {
     ranges: Vec<(Range, V)>,
 }
@@ -119,6 +119,11 @@ impl<V: Clone> RangeMap<V> {
 
     pub fn size(&self) -> usize {
         self.ranges.iter().map(|(r, _)| r.size()).sum()
+    }
+
+    /// Return iterator of (length, value).
+    pub fn into_iter(self) -> impl Iterator<Item = (usize, V)> {
+        self.ranges.into_iter().map(|(r, v)| (r.size(), v))
     }
 
     #[cfg(test)]

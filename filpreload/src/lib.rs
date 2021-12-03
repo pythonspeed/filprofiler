@@ -1,5 +1,7 @@
 use parking_lot::Mutex;
-use pymemprofile_api::memorytracking::{AllocationTracker, CallSiteId, Callstack, FunctionId};
+use pymemprofile_api::memorytracking::{
+    AllocationTracker, CallSiteId, Callstack, FunctionId, PARENT_PROCESS,
+};
 use pymemprofile_api::oom::{InfiniteMemory, OutOfMemoryEstimator, RealMemoryInfo};
 use std::cell::RefCell;
 use std::ffi::CStr;
@@ -139,9 +141,9 @@ fn add_allocation(
     })?;
 
     if is_mmap {
-        allocations.add_anon_mmap(address, size, callstack_id);
+        allocations.add_anon_mmap(PARENT_PROCESS, address, size, callstack_id);
     } else {
-        allocations.add_allocation(address, size, callstack_id);
+        allocations.add_allocation(PARENT_PROCESS, address, size, callstack_id);
     }
 
     if oom {
@@ -156,14 +158,14 @@ fn free_allocation(address: usize) {
     let mut tracker_state = TRACKER_STATE.lock();
 
     let allocations = &mut tracker_state.allocations;
-    allocations.free_allocation(address);
+    allocations.free_allocation(PARENT_PROCESS, address);
 }
 
 /// Get the size of an allocation, or 0 if it's not tracked.
 fn get_allocation_size(address: usize) -> usize {
     let tracker_state = TRACKER_STATE.lock();
     let allocations = &tracker_state.allocations;
-    allocations.get_allocation_size(address)
+    allocations.get_allocation_size(PARENT_PROCESS, address)
 }
 
 /// Reset internal state.
@@ -322,7 +324,7 @@ impl pymemprofile_api::mmap::MmapAPI for FilMmapAPI {
         let mut tracker_state = TRACKER_STATE.lock();
 
         let allocations = &mut tracker_state.allocations;
-        allocations.free_anon_mmap(address, length);
+        allocations.free_anon_mmap(PARENT_PROCESS, address, length);
     }
 
     fn is_initialized(&self) -> bool {
