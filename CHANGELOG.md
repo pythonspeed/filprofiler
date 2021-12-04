@@ -1,3 +1,11 @@
+# Fil 2021.12.1 (2021-12-03)
+
+
+### Features
+
+- Build 3.10 wheels for macOS too. ([#268](https://github.com/pythonspeed/filprofiler/issues/268))
+
+
 # Fil 2021.12.0 (2021-12-03)
 
 

@@ -1,1 +1,0 @@
-Build 3.10 wheels for macOS too.
