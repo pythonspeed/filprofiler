@@ -39,13 +39,17 @@ struct FunctionLocation {
     function_name: String,
 }
 
+pub trait FunctionLocations {
+    fn get_function_and_filename(&self, id: FunctionId) -> (&str, &str);
+}
+
 /// Stores FunctionLocations, returns a FunctionId
 #[derive(Clone)]
-pub struct FunctionLocations {
+pub struct VecFunctionLocations {
     functions: Vec<FunctionLocation>,
 }
 
-impl FunctionLocations {
+impl VecFunctionLocations {
     /// Create a new tracker.
     pub fn new() -> Self {
         Self {
@@ -63,7 +67,9 @@ impl FunctionLocations {
         // break. Seems unlikely, even with long running workers.
         FunctionId((self.functions.len() - 1) as u32)
     }
+}
 
+impl FunctionLocations for VecFunctionLocations {
     /// Get the function name and filename.
     fn get_function_and_filename(&self, id: FunctionId) -> (&str, &str) {
         if id == FunctionId::UNKNOWN {
@@ -161,7 +167,7 @@ impl Callstack {
     pub fn as_string(
         &self,
         to_be_post_processed: bool,
-        functions: &FunctionLocations,
+        functions: &dyn FunctionLocations,
         separator: &'static str,
     ) -> String {
         if self.calls.is_empty() {
@@ -245,7 +251,7 @@ pub struct CallstackInterner {
     callstack_to_id: HashMap<Callstack, u32, ARandomState>,
 }
 
-impl<'a> CallstackInterner {
+impl CallstackInterner {
     pub fn new() -> Self {
         CallstackInterner {
             max_id: 0,
@@ -328,7 +334,7 @@ impl Allocation {
 }
 
 /// The main data structure tracking everything.
-pub struct AllocationTracker {
+pub struct AllocationTracker<FL: FunctionLocations> {
     // malloc()/calloc():
     current_allocations: BTreeMap<ProcessUid, HashMap<usize, Allocation, ARandomState>>,
     // anonymous mmap(), i.e. not file backed:
@@ -336,7 +342,7 @@ pub struct AllocationTracker {
 
     // Map FunctionIds to function + filename strings, so we can store the
     // former and save memory.
-    pub functions: FunctionLocations,
+    pub functions: FL,
 
     // Map CallstackIds to Callstacks, so we can store the former and save
     // memory:
@@ -357,15 +363,15 @@ pub struct AllocationTracker {
     failed_deallocations: usize,
 }
 
-impl<'a> AllocationTracker {
-    pub fn new(default_path: String) -> AllocationTracker {
+impl<FL: FunctionLocations> AllocationTracker<FL> {
+    pub fn new(default_path: String, functions: FL) -> AllocationTracker<FL> {
         AllocationTracker {
             current_allocations: BTreeMap::from([(PARENT_PROCESS, new_hashmap())]),
             current_anon_mmaps: BTreeMap::from([(PARENT_PROCESS, RangeMap::new())]),
             interner: CallstackInterner::new(),
-            functions: FunctionLocations::new(),
             current_memory_usage: ImVector::new(),
             peak_memory_usage: ImVector::new(),
+            functions,
             current_allocated_bytes: 0,
             peak_allocated_bytes: 0,
             missing_allocated_bytes: 0,
@@ -613,13 +619,12 @@ impl<'a> AllocationTracker {
     ) -> impl Iterator<Item = String> + '_ {
         let by_call = self.combine_callstacks(peak).into_iter();
         let id_to_callstack = self.interner.get_reverse_map();
-        let functions = &self.functions;
         let lines = by_call.map(move |(callstack_id, size)| {
             format!(
                 "{} {}",
                 id_to_callstack.get(&callstack_id).unwrap().as_string(
                     to_be_post_processed,
-                    functions,
+                    &self.functions,
                     ";"
                 ),
                 size,
@@ -749,11 +754,15 @@ mod tests {
 
     use super::{
         Allocation, AllocationTracker, CallSiteId, Callstack, CallstackInterner, FunctionId,
-        FunctionLocations, HIGH_32BIT, MIB,
+        FunctionLocations, VecFunctionLocations, HIGH_32BIT, MIB,
     };
     use proptest::prelude::*;
     use std::borrow::Cow;
     use std::collections::HashMap;
+
+    fn new_tracker() -> AllocationTracker<VecFunctionLocations> {
+        AllocationTracker::new(".".to_string(), VecFunctionLocations::new())
+    }
 
     proptest! {
         // Allocation sizes smaller than 2 ** 31 are round-tripped.
@@ -780,7 +789,7 @@ mod tests {
         // Test for https://github.com/pythonspeed/filprofiler/issues/66
         #[test]
         fn correct_allocation_size_tracked(size in (1 as usize)..(1<< 50)) {
-            let mut tracker = AllocationTracker::new(".".to_string());
+            let mut tracker = new_tracker();
             let cs_id = tracker.get_callstack_id(&Callstack::new());
             tracker.add_allocation(PARENT_PROCESS, 0, size, cs_id);
             tracker.add_anon_mmap(PARENT_PROCESS, 1, size * 2, cs_id);
@@ -804,7 +813,7 @@ mod tests {
             // Allocations to free.
             free_indices in prop::collection::btree_set(0..10 as usize, 1..5)
         ) {
-            let mut tracker = AllocationTracker::new(".".to_string());
+            let mut tracker = new_tracker();
             let mut expected_memory_usage = im::vector![];
             for i in 0..allocated_sizes.len() {
                 let (process, allocation_size) = *allocated_sizes.get(i).unwrap();
@@ -841,7 +850,7 @@ mod tests {
             // Allocations to free.
             free_indices in prop::collection::btree_set(0..10 as usize, 1..5)
         ) {
-            let mut tracker = AllocationTracker::new(".".to_string());
+            let mut tracker = new_tracker();
             let mut expected_memory_usage = im::vector![];
             // Make sure addresses don't overlap:
             let addresses : Vec<usize> = (0..allocated_sizes.len()).map(|i| i * 10000).collect();
@@ -878,7 +887,7 @@ mod tests {
             allocated_sizes in prop::collection::vec((0..2 as u32, 1..100 as usize), 10..20),
             allocated_mmaps in prop::collection::vec((0..2 as u32, 1..100 as usize), 10..20),
         ) {
-            let mut tracker = AllocationTracker::new(".".to_string());
+            let mut tracker = new_tracker();
             let mut expected_memory_usage : usize = 0;
             // Make sure addresses don't overlap:
             let mmap_addresses : Vec<usize> = (0..allocated_mmaps.len()).map(|i| i * 10000).collect();
@@ -916,7 +925,7 @@ mod tests {
 
     #[test]
     fn untracked_allocation_removal() {
-        let mut tracker = AllocationTracker::new("/tmp".to_string());
+        let mut tracker = new_tracker();
         assert_eq!(tracker.free_allocation(PARENT_PROCESS, 123), None);
     }
 
@@ -1056,7 +1065,7 @@ mod tests {
         let fid1 = FunctionId::new(1u32);
         let fid3 = FunctionId::new(3u32);
 
-        let mut tracker = AllocationTracker::new(".".to_string());
+        let mut tracker = new_tracker();
         let mut cs1 = Callstack::new();
         cs1.start_call(0, CallSiteId::new(fid1, 2));
         let mut cs2 = Callstack::new();
@@ -1140,7 +1149,7 @@ mod tests {
     #[test]
     fn combine_callstacks_and_sum_allocations() {
         pyo3::prepare_freethreaded_python();
-        let mut tracker = AllocationTracker::new(".".to_string());
+        let mut tracker = new_tracker();
         let fid1 = tracker
             .functions
             .add_function("a".to_string(), "af".to_string());
@@ -1203,7 +1212,7 @@ mod tests {
 
     #[test]
     fn test_unknown_function_id() {
-        let func_locations = FunctionLocations::new();
+        let func_locations = VecFunctionLocations::new();
         let (function, filename) = func_locations.get_function_and_filename(FunctionId::UNKNOWN);
         assert_eq!(filename, "UNKNOWN DUE TO BUG");
         assert_eq!(function, "UNKNOWN");
