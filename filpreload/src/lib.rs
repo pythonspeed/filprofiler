@@ -1,6 +1,6 @@
 use parking_lot::Mutex;
 use pymemprofile_api::memorytracking::{
-    AllocationTracker, CallSiteId, Callstack, FunctionId, PARENT_PROCESS,
+    AllocationTracker, CallSiteId, Callstack, FunctionId, VecFunctionLocations, PARENT_PROCESS,
 };
 use pymemprofile_api::oom::{InfiniteMemory, OutOfMemoryEstimator, RealMemoryInfo};
 use std::cell::RefCell;
@@ -21,12 +21,12 @@ thread_local!(static THREAD_CALLSTACK: RefCell<Callstack> = RefCell::new(Callsta
 
 struct TrackerState {
     oom: OutOfMemoryEstimator,
-    allocations: AllocationTracker,
+    allocations: AllocationTracker<VecFunctionLocations>,
 }
 
 lazy_static! {
     static ref TRACKER_STATE: Mutex<TrackerState> = Mutex::new(TrackerState {
-        allocations: AllocationTracker::new("/tmp".to_string()),
+        allocations: AllocationTracker::new("/tmp".to_string(), VecFunctionLocations::new()),
         oom: OutOfMemoryEstimator::new(
             if std::env::var("__FIL_DISABLE_OOM_DETECTION") == Ok("1".to_string()) {
                 Box::new(InfiniteMemory {})
