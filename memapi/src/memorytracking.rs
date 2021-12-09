@@ -18,16 +18,16 @@ extern "C" {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct FunctionId(u32);
+pub struct FunctionId(u64);
 
 impl FunctionId {
-    pub const UNKNOWN: Self = Self(u32::MAX);
+    pub const UNKNOWN: Self = Self(u64::MAX);
 
-    pub fn new(id: u32) -> Self {
+    pub fn new(id: u64) -> Self {
         FunctionId(id)
     }
 
-    pub fn as_u32(&self) -> u32 {
+    pub fn as_u64(&self) -> u64 {
         self.0
     }
 }
@@ -65,7 +65,7 @@ impl VecFunctionLocations {
         });
         // If we ever have 2 ** 32 or more functions in our program, this will
         // break. Seems unlikely, even with long running workers.
-        FunctionId((self.functions.len() - 1) as u32)
+        FunctionId((self.functions.len() - 1) as u64)
     }
 }
 
@@ -819,7 +819,7 @@ mod tests {
                 let (process, allocation_size) = *allocated_sizes.get(i).unwrap();
                 let process = ProcessUid(process);
                 let mut cs = Callstack::new();
-                cs.start_call(0, CallSiteId::new(FunctionId::new(i as u32), 0));
+                cs.start_call(0, CallSiteId::new(FunctionId::new(i as u64), 0));
                 let cs_id = tracker.get_callstack_id(&cs);
                 tracker.add_allocation(process, i as usize, allocation_size, cs_id);
                 expected_memory_usage.push_back(allocation_size);
@@ -858,7 +858,7 @@ mod tests {
                 let (process, allocation_size) = *allocated_sizes.get(i).unwrap();
                 let process = ProcessUid(process);
                 let mut cs = Callstack::new();
-                cs.start_call(0, CallSiteId::new(FunctionId::new(i as u32), 0));
+                cs.start_call(0, CallSiteId::new(FunctionId::new(i as u64), 0));
                 let csid = tracker.get_callstack_id(&cs);
                 tracker.add_anon_mmap(process, addresses[i] as usize, allocation_size, csid);
                 expected_memory_usage.push_back(allocation_size);
@@ -895,7 +895,7 @@ mod tests {
                 let (process, allocation_size) = *allocated_sizes.get(i).unwrap();
                 let process = ProcessUid(process);
                 let mut cs = Callstack::new();
-                cs.start_call(0, CallSiteId::new(FunctionId::new(i as u32), 0));
+                cs.start_call(0, CallSiteId::new(FunctionId::new(i as u64), 0));
                 let cs_id = tracker.get_callstack_id(&cs);
                 tracker.add_allocation(process, i as usize, allocation_size, cs_id);
                 expected_memory_usage += allocation_size;
@@ -904,7 +904,7 @@ mod tests {
                 let (process, allocation_size) = *allocated_mmaps.get(i).unwrap();
                 let process = ProcessUid(process);
                 let mut cs = Callstack::new();
-                cs.start_call(0, CallSiteId::new(FunctionId::new(i as u32), 0));
+                cs.start_call(0, CallSiteId::new(FunctionId::new(i as u64), 0));
                 let csid = tracker.get_callstack_id(&cs);
                 tracker.add_anon_mmap(process, mmap_addresses[i] as usize, allocation_size, csid);
                 expected_memory_usage += allocation_size;
@@ -931,9 +931,9 @@ mod tests {
 
     #[test]
     fn callstack_line_numbers() {
-        let fid1 = FunctionId::new(1u32);
-        let fid3 = FunctionId::new(3u32);
-        let fid5 = FunctionId::new(5u32);
+        let fid1 = FunctionId::new(1u64);
+        let fid3 = FunctionId::new(3u64);
+        let fid5 = FunctionId::new(5u64);
 
         // Parent line number does nothing if it's first call:
         let mut cs1 = Callstack::new();
@@ -960,8 +960,8 @@ mod tests {
 
     #[test]
     fn callstackinterner_notices_duplicates() {
-        let fid1 = FunctionId::new(1u32);
-        let fid3 = FunctionId::new(3u32);
+        let fid1 = FunctionId::new(1u64);
+        let fid3 = FunctionId::new(3u64);
 
         let mut cs1 = Callstack::new();
         cs1.start_call(0, CallSiteId::new(fid1, 2));
@@ -1016,7 +1016,7 @@ mod tests {
             cs1.id_for_new_allocation(0, |cs| interner.get_or_insert_id(Cow::Borrowed(&cs), || ()));
         assert_eq!(id0, id0b);
 
-        let fid1 = FunctionId::new(1u32);
+        let fid1 = FunctionId::new(1u64);
 
         cs1.start_call(0, CallSiteId::new(fid1, 2));
         let id1 =
@@ -1062,8 +1062,8 @@ mod tests {
 
     #[test]
     fn peak_allocations_only_updated_on_new_peaks() {
-        let fid1 = FunctionId::new(1u32);
-        let fid3 = FunctionId::new(3u32);
+        let fid1 = FunctionId::new(1u64);
+        let fid3 = FunctionId::new(3u64);
 
         let mut tracker = new_tracker();
         let mut cs1 = Callstack::new();
