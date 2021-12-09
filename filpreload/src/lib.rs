@@ -220,7 +220,7 @@ unsafe extern "C" fn pymemprofile_add_function_location(
         function_length as usize,
     ));
     let function_id = add_function(filename.to_string(), function_name.to_string());
-    function_id.as_u32() as u64
+    function_id.as_u64()
 }
 
 /// # Safety
@@ -231,7 +231,7 @@ unsafe extern "C" fn pymemprofile_start_call(
     function_id: u64,
     line_number: u16,
 ) {
-    let function_id = FunctionId::new(function_id as u32);
+    let function_id = FunctionId::new(function_id);
     start_call(function_id, parent_line_number, line_number);
 }
 
