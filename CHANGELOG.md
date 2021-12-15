@@ -1,3 +1,11 @@
+# Fil 2021.12.2 (2021-12-15)
+
+
+### Bugfixes
+
+- Work on versions of Linux with weird glibc versions. ([#277](https://github.com/pythonspeed/filprofiler/issues/277))
+
+
 # Fil 2021.12.1 (2021-12-03)
 
 

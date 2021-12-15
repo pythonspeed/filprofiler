@@ -19,6 +19,7 @@
     - [Debugging memory leaks](./fil/leaks.md)
     - [Disabling browser pop-up reports](./fil/disabling-browser.md)
 - [Reference](./fil/reference.md)
+    - [Release notes](./fil/changelog.md)
     - [What Fil tracks](./fil/what-it-tracks.md)
     - [How threads are tracked](./fil/threading.md)
     - [Behavior impacts on NumPy (BLAS), Zarr, BLOSC, OpenMP, numexpr](./fil/threadpool-disabled.md)
