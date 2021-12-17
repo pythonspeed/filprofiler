@@ -199,13 +199,13 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "cgroups-rs"
-version = "0.2.7"
+version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31dc7b58f8b80f0e02202df9fe45fd7432572d8868bab0abcb888656833aeaba"
+checksum = "1b827f9d9f6c2fff719d25f5d44cbc8d2ef6df1ef00d055c5c14d5dc25529579"
 dependencies = [
  "libc",
  "log",
- "nix 0.20.2",
+ "nix 0.23.1",
  "regex",
 ]
 
@@ -556,9 +556,9 @@ dependencies = [
 
 [[package]]
 name = "nix"
-version = "0.20.2"
+version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5e06129fb611568ef4e868c14b326274959aa70ff7776e9d55323531c374945"
+checksum = "9f866317acbd3a240710c63f065ffb1e4fd466259045ccb504130b7f668f35c6"
 dependencies = [
  "bitflags",
  "cc",
