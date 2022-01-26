@@ -1,3 +1,27 @@
+# Fil 2021.12.2 (2021-12-15)
+
+
+### Bugfixes
+
+- Work on versions of Linux with weird glibc versions. ([#277](https://github.com/pythonspeed/filprofiler/issues/277))
+
+
+# Fil 2021.12.1 (2021-12-03)
+
+
+### Features
+
+- Build 3.10 wheels for macOS too. ([#268](https://github.com/pythonspeed/filprofiler/issues/268))
+
+
+# Fil 2021.12.0 (2021-12-03)
+
+
+### Features
+
+- Added Python 3.10 support. ([#242](https://github.com/pythonspeed/filprofiler/issues/242))
+
+
 # Fil 2021.11.1 (2021-11-19)
 
 

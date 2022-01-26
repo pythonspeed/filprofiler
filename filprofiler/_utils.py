@@ -22,4 +22,13 @@ def glibc_version() -> Tuple[int, int]:
     libc = ctypes.CDLL("libc.so.6")
     get_libc_version = libc.gnu_get_libc_version
     get_libc_version.restype = ctypes.c_char_p
-    return tuple(map(int, get_libc_version().split(b".")[:2]))
+    return _parse_glibc_version(get_libc_version())
+
+
+def _parse_glibc_version(version: bytes) -> Tuple[int, int]:
+    try:
+        return tuple(map(int, version.split(b".")[:2]))
+    except ValueError:
+        # For unparseable versions, just assume it's old, and fallback to
+        # LD_PRELOAD which always works.
+        return (1, 1)

@@ -1,5 +1,7 @@
 use parking_lot::Mutex;
-use pymemprofile_api::memorytracking::{AllocationTracker, CallSiteId, Callstack, FunctionId};
+use pymemprofile_api::memorytracking::{
+    AllocationTracker, CallSiteId, Callstack, FunctionId, VecFunctionLocations, PARENT_PROCESS,
+};
 use pymemprofile_api::oom::{InfiniteMemory, OutOfMemoryEstimator, RealMemoryInfo};
 use std::cell::RefCell;
 use std::ffi::CStr;
@@ -19,12 +21,12 @@ thread_local!(static THREAD_CALLSTACK: RefCell<Callstack> = RefCell::new(Callsta
 
 struct TrackerState {
     oom: OutOfMemoryEstimator,
-    allocations: AllocationTracker,
+    allocations: AllocationTracker<VecFunctionLocations>,
 }
 
 lazy_static! {
     static ref TRACKER_STATE: Mutex<TrackerState> = Mutex::new(TrackerState {
-        allocations: AllocationTracker::new("/tmp".to_string()),
+        allocations: AllocationTracker::new("/tmp".to_string(), VecFunctionLocations::new()),
         oom: OutOfMemoryEstimator::new(
             if std::env::var("__FIL_DISABLE_OOM_DETECTION") == Ok("1".to_string()) {
                 Box::new(InfiniteMemory {})
@@ -139,9 +141,9 @@ fn add_allocation(
     })?;
 
     if is_mmap {
-        allocations.add_anon_mmap(address, size, callstack_id);
+        allocations.add_anon_mmap(PARENT_PROCESS, address, size, callstack_id);
     } else {
-        allocations.add_allocation(address, size, callstack_id);
+        allocations.add_allocation(PARENT_PROCESS, address, size, callstack_id);
     }
 
     if oom {
@@ -156,14 +158,14 @@ fn free_allocation(address: usize) {
     let mut tracker_state = TRACKER_STATE.lock();
 
     let allocations = &mut tracker_state.allocations;
-    allocations.free_allocation(address);
+    allocations.free_allocation(PARENT_PROCESS, address);
 }
 
 /// Get the size of an allocation, or 0 if it's not tracked.
 fn get_allocation_size(address: usize) -> usize {
     let tracker_state = TRACKER_STATE.lock();
     let allocations = &tracker_state.allocations;
-    allocations.get_allocation_size(address)
+    allocations.get_allocation_size(PARENT_PROCESS, address)
 }
 
 /// Reset internal state.
@@ -218,7 +220,7 @@ unsafe extern "C" fn pymemprofile_add_function_location(
         function_length as usize,
     ));
     let function_id = add_function(filename.to_string(), function_name.to_string());
-    function_id.as_u32() as u64
+    function_id.as_u64()
 }
 
 /// # Safety
@@ -229,7 +231,7 @@ unsafe extern "C" fn pymemprofile_start_call(
     function_id: u64,
     line_number: u16,
 ) {
-    let function_id = FunctionId::new(function_id as u32);
+    let function_id = FunctionId::new(function_id);
     start_call(function_id, parent_line_number, line_number);
 }
 
@@ -318,7 +320,7 @@ impl pymemprofile_api::mmap::MmapAPI for FilMmapAPI {
         let mut tracker_state = TRACKER_STATE.lock();
 
         let allocations = &mut tracker_state.allocations;
-        allocations.free_anon_mmap(address, length);
+        allocations.free_anon_mmap(PARENT_PROCESS, address, length);
     }
 
     fn is_initialized(&self) -> bool {

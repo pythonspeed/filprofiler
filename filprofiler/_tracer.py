@@ -44,13 +44,15 @@ try:
         preload = PyDLL(library_path("_filpreload"))
     preload.fil_initialize_from_python()
 except Exception as e:
-    raise SystemExit(
+    raise RuntimeError(
         f"""\
-Failed to preload the Fil shared library: {e}.
+Process {os.getpid()} failed to preload the Fil shared library: {e}.
 
-This can happen on Linux for unknown reasons on versions of glibc older than 2.30. Upgrading to a version of Linux from 2020 or later might solve this.
+The most likely reason is you're trying to use Fil from a subprocess,
+for example in a multiprocessing task. Fil does not support memory profiling
+subprocesses at the moment.
 
-If you're on macOS or a sufficiently new Linux, you've found a bug! You can file an issue or just ask for help at:
+Otherwise, you may have found a bug. You can file an issue or just ask for help at:
 https://github.com/pythonspeed/filprofiler/issues/new/choose
 
 Full trackback:

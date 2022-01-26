@@ -18,4 +18,4 @@ underlines = ["", "", ""]
 [tool.cibuildwheel]
 # Disable building PyPy wheels, since we use CPython internals, and 3.10 until
 # it's ready.
-skip = ["pp*", "cp310-*"]
+skip = ["pp*"]

@@ -213,7 +213,7 @@ static void start_call(uint64_t function_id, uint16_t line_number) {
     uint16_t parent_line_number = 0;
     if (current_frame != NULL && current_frame->f_back != NULL) {
       PyFrameObject *f = current_frame->f_back;
-      parent_line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
+      parent_line_number = PyFrame_GetLineNumber(f);
     }
     pymemprofile_start_call(parent_line_number, function_id, line_number);
     decrement_reentrancy();
@@ -325,7 +325,7 @@ static void add_allocation(size_t address, size_t size) {
   uint16_t line_number = 0;
   PyFrameObject *f = current_frame;
   if (f != NULL) {
-    line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
+    line_number = PyFrame_GetLineNumber(f);
   }
   pymemprofile_add_allocation(address, size, line_number);
 }
@@ -334,7 +334,7 @@ static void add_anon_mmap(size_t address, size_t size) {
   uint16_t line_number = 0;
   PyFrameObject *f = current_frame;
   if (f != NULL) {
-    line_number = PyCode_Addr2Line(f->f_code, f->f_lasti);
+    line_number = PyFrame_GetLineNumber(f);
   }
   pymemprofile_add_anon_mmap(address, size, line_number);
 }
