@@ -1,3 +1,22 @@
+# Fil 2022.01.0 (2022-01-26)
+
+
+### Features
+
+- Reports now have a "open in new tab" button. Thanks to @petergaultney for the suggestion. ([#298](https://github.com/pythonspeed/filprofiler/issues/298))
+
+
+### Improved Documentation
+
+- Improved explanations in report of what it is that Fil tracks, and what a flamegraph tells you. ([#185](https://github.com/pythonspeed/filprofiler/issues/185))
+- Fix bad command name in the API documentation, thanks to @kdebrab. ([#291](https://github.com/pythonspeed/filprofiler/issues/291))
+
+
+### Misc
+
+- [#292](https://github.com/pythonspeed/filprofiler/issues/292)
+
+
 # Fil 2021.12.2 (2021-12-15)
 
 

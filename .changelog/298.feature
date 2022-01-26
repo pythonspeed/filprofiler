@@ -1,1 +1,0 @@
-Reports now have a "open in new tab" button. Thanks to @petergaultney for the suggestion.
