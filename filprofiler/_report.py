@@ -40,7 +40,7 @@ def render_report(output_path: str, now: datetime) -> str:
         margin: 4rem auto;
         font-size: 18px;
     }}
-    blockquote {{ border: 1px; border-color: black; }}
+    blockquote {{ border-width: 1px; border-color: black; border-style: solid; padding: 1em; }}
     div {{
         text-align: center;
     }}
@@ -90,11 +90,9 @@ and I'll try to help.</blockquote>
 
 <br>
 <blockquote><strong>Want memory and performance profiling for your production batch jobs?</strong>
-I'm working on a
-<a href="https://pythonspeed.com/products/fil4prod/"
->always-on profiler called Fil4prod</a> that is fast and robust enough to run in production;
-<a href="mailto:itamar@pythonspeed.com">send me an email</a> to participate
-in the alpha program.</blockquote>
+I've also created an
+<a href="https://pythonspeed.com/sciagraph/"
+>always-on profiler called Sciagraph</a> that is fast and robust enough to run in production.</blockquote>
 <br>
 
 <h2>Now what?</h2>
