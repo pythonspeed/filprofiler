@@ -126,7 +126,10 @@ In the second reversed graph all calls to <tt>f()</tt> will be merged together.<
 <ul>
 <li>If the data gets dumped from RAM to swap, Fil still counts it but it's not counted as resident in RAM.</li>
 <li>If the memory is a large chunk of all zeros, on Linux no RAM is used by OS until you actually modify that memory, but Fil will still count it.</li>
-<li>If you have memory that only gets freed on garbage collection (this will happen if you have circular references in your data structures), memory can be freed at inconsistent times across different runs, especially if you're using threads.</li>
+<li>If you have memory that only gets freed on garbage collection
+(this will happen if you have circular references in your data structures),
+memory can be freed at inconsistent times across different runs, especially
+if you're using threads.</li>
 </ul>
 
 <p>See <a href="https://pythonspeed.com/articles/measuring-memory-python/">this article</a> for more details.</p>
