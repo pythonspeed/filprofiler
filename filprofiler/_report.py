@@ -74,9 +74,16 @@ def render_report(output_path: str, now: datetime) -> str:
 <p><code>{argv}</code><p>
 
 <h2>Profiling result</h2>
-<div><iframe id="peak" src="peak-memory.svg" width="100%" height="400" scrolling="auto" frameborder="0"></iframe><br>
-<p><input type="button" onclick="fullScreen('#peak');" value="Full screen"></p></div>
-
+<div><p><input type="button" onclick="fullScreen('#peak');" value="Full screen"> · <a href="peak-memory.svg" target="_blank"><button>Open in new window</button></a></p>
+<iframe id="peak" src="peak-memory.svg" width="100%" height="400" scrolling="auto" frameborder="0"></iframe><br>
+</div>
+<br>
+<br>
+<hr>
+<br>
+<div><p><input type="button" onclick="fullScreen('#peak-reversed');" value="Full screen"> · <a href="peak-memory-reversed.svg" target="_blank"><button>Open in new window</button></a></p>
+            <iframe id="peak-reversed" src="peak-memory-reversed.svg" width="100%" height="400" scrolling="auto" frameborder="0"></iframe><br>
+</div>
 <br>
 <blockquote><strong>Need help, or does something look wrong?</strong>
 <a href="https://pythonspeed.com/fil/docs/">Read the documentation</a>,
@@ -84,18 +91,13 @@ and if that doesn't help please
 <a href="https://github.com/pythonspeed/filprofiler/issues/new?body={bugreport}">file an issue</a>
 and I'll try to help.</blockquote>
 <br>
-
-<div><iframe id="peak-reversed" src="peak-memory-reversed.svg" width="100%" height="400" scrolling="auto" frameborder="0"></iframe><br>
-<p><input type="button" onclick="fullScreen('#peak-reversed');" value="Full screen"></p></div>
-
-<br>
 <blockquote><strong>Want memory and performance profiling for your production batch jobs?</strong>
 I've also created an
 <a href="https://pythonspeed.com/sciagraph/"
 >always-on profiler called Sciagraph</a> that is fast and robust enough to run in production.</blockquote>
 <br>
 
-<h2>Now what?</h2>
+<h2>Learn how to reduce memory usage</h2>
 
 <p>Need help reducing your data processing application's memory use? Check out tips and tricks <a href="https://pythonspeed.com/memory/">here</a>.</p>
 
