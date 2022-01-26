@@ -97,11 +97,21 @@ I'm working on a
 in the alpha program.</blockquote>
 <br>
 
+<h2>Now what?</h2>
+
+<p>Need help reducing your data processing application's memory use? Check out tips and tricks <a href="https://pythonspeed.com/memory/">here</a>.</p>
+
 <h2>Understanding the graphs</h2>
 <p>The flame graphs shows the callstacks responsible for allocations at peak.</p>
 
 <p>The wider (and the redder) the bar, the more memory was allocated by that function or its callers.
 If the bar is 100% of width, that's all the allocated memory.</p>
+
+<p>The left-right axis has no meaning!
+The order of frames is somewhat arbitrary, for example beause multiple calls to the same function may well have been merged into a single callstack.
+So you can't tell from the graph which allocations happened first.
+All you're getting is that at peak allocation these time, these stacktraces were responsible for these allocations.
+</p>
 
 <p>The first graph shows the normal callgraph: if <tt>main()</tt> calls <tt>g()</tt> calls <tt>f()</tt>, let's say, then <tt>main()</tt> will be at the top.
 The second graph shows the reverse callgraph, from <tt>f()</tt> upwards.</p>
@@ -109,7 +119,18 @@ The second graph shows the reverse callgraph, from <tt>f()</tt> upwards.</p>
 <p>Why is the second graph useful? If <tt>f()</tt> is called from multiple places, in the first graph it will show up multiple times, at the bottom.
 In the second reversed graph all calls to <tt>f()</tt> will be merged together.</p>
 
-<p>Need help reducing your data processing application's memory use? Check out tips and tricks <a href="https://pythonspeed.com/memory/">here</a>.</p>
+<h2>Understanding what Fil tracks</h2>
+
+<p>Fil measures how much memory has been allocated; this is not the same as how much memory the process is actively using, nor is it the same as memory resident in RAM.</p>
+
+<ul>
+<li>If the data gets dumped from RAM to swap, Fil still counts it but it's not counted as resident in RAM.</li>
+<li>If the memory is a large chunk of all zeros, on Linux no RAM is used by OS until you actually modify that memory, but Fil will still count it.</li>
+<li>If you have memory that only gets freed on garbage collection (this will happen if you have circular references in your data structures), memory can be freed at inconsistent times across different runs, especially if you're using threads.</li>
+</ul>
+
+<p>See <a href="https://pythonspeed.com/articles/measuring-memory-python/">this article</a> for more details.</p>
+
 </body>
 </html>
 """.format(
