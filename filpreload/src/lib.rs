@@ -11,7 +11,7 @@ use std::os::raw::{c_char, c_int, c_void};
 extern crate lazy_static;
 
 #[cfg(target_os = "linux")]
-use jemallocator::Jemalloc;
+use tikv_jemallocator::Jemalloc;
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
