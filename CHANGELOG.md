@@ -1,3 +1,11 @@
+# Fil 2022.01.1 (2022-01-30)
+
+
+### Bugfixes
+
+- The jemalloc package used on Linux was unmaintained and old, and broke Conda-Forge builds; switched to a newer one. ([#302](https://github.com/pythonspeed/filprofiler/issues/302))
+
+
 # Fil 2022.01.0 (2022-01-26)
 
 

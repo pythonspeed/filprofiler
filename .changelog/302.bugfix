@@ -1,1 +1,0 @@
-The jemalloc package used on Linux was unmaintained and old, and broke Conda-Forge builds; switched to a newer one.
