@@ -10,7 +10,7 @@ edition = "2018"
 lazy_static = "1.4.0"
 parking_lot = "0.11"
 [target.'cfg(target_os = "linux")'.dependencies]
-jemallocator = "0.3.2"
+tikv-jemallocator = "0.4"
 libc = "0.2"
 
 [dependencies.pymemprofile_api]
