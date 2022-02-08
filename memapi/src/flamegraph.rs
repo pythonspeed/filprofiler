@@ -1,8 +1,4 @@
-use std::{
-    fs,
-    io::{Read, Seek, Write},
-    path::{Path, PathBuf},
-};
+use std::{fs, io::Write, path::Path};
 
 use inferno::flamegraph;
 use itertools::Itertools;
@@ -53,7 +49,7 @@ where
 }
 
 /// Write strings to disk, one line per string.
-pub fn write_lines<I: Iterator<Item = String>>(lines: I, path: &Path) -> std::io::Result<()> {
+pub fn write_lines<I: IntoIterator<Item = String>>(lines: I, path: &Path) -> std::io::Result<()> {
     let mut file = std::fs::File::create(path)?;
     for line in lines {
         file.write_all(line.as_bytes())?;
@@ -64,16 +60,37 @@ pub fn write_lines<I: Iterator<Item = String>>(lines: I, path: &Path) -> std::io
 }
 
 /// Write a flamegraph SVG to disk, given lines in summarized format.
-fn write_flamegraph(
-    lines_file_path: &str,
+pub fn write_flamegraph<I: IntoIterator<Item = String>>(
+    lines: I,
     path: &Path,
     reversed: bool,
     title: &str,
     subtitle: &str,
     count_name: &str,
     to_be_post_processed: bool,
-) -> std::io::Result<()> {
+) -> Result<(), Box<dyn std::error::Error>> {
+    let flamegraph = get_flamegraph(
+        lines,
+        reversed,
+        title,
+        subtitle,
+        count_name,
+        to_be_post_processed,
+    )?;
     let mut file = std::fs::File::create(path)?;
+    file.write_all(&flamegraph)?;
+    Ok(())
+}
+
+/// Write a flamegraph SVG to disk, given lines in summarized format.
+pub fn get_flamegraph<I: IntoIterator<Item = String>>(
+    lines: I,
+    reversed: bool,
+    title: &str,
+    subtitle: &str,
+    count_name: &str,
+    to_be_post_processed: bool,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let title = format!("{}{}", title, if reversed { ", Reversed" } else { "" },);
     let mut options = flamegraph::Options::default();
     options.title = title;
@@ -91,18 +108,14 @@ fn write_flamegraph(
         // Can't put structured text into subtitle, so have to do a hack.
         options.subtitle = Some("__FIL-SUBTITLE-HERE__".to_string());
     }
-    match flamegraph::from_files(&mut options, &[PathBuf::from(lines_file_path)], &file) {
-        Err(e) => Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("{}", e),
-        )),
+    let mut output = vec![];
+    let lines: Vec<String> = lines.into_iter().collect();
+    match flamegraph::from_lines(&mut options, lines.iter().map(|s| s.as_ref()), &mut output) {
+        Err(e) => Err(format!("{}", e).into()),
         Ok(_) => {
-            file.flush()?;
             if to_be_post_processed {
                 // Replace with real subtitle.
-                let mut file2 = std::fs::File::open(path)?;
-                let mut data = String::new();
-                file2.read_to_string(&mut data)?;
+                let data = String::from_utf8(output)?;
                 let data = data.replace("__FIL-SUBTITLE-HERE__", subtitle);
                 // Restore normal semi-colons.
                 let data = data.replace("\u{ff1b}", ";");
@@ -110,26 +123,25 @@ fn write_flamegraph(
                 let data = data.replace("\u{12e4}", "\u{00a0}");
                 // Get rid of empty-line markers:
                 let data = data.replace("\u{2800}", "");
-                file.seek(std::io::SeekFrom::Start(0))?;
-                file.set_len(0)?;
-                file.write_all(&data.as_bytes())?;
+                output = data.as_bytes().to_vec();
             }
-            Ok(())
+            Ok(output)
         }
     }
 }
 
 /// Write .prof, -source.prof, .svg and -reversed.svg files for given lines.
-pub fn write_flamegraphs<F>(
+pub fn write_flamegraphs<I, F>(
     directory_path: &Path,
     base_filename: &str,
     title: &str,
     subtitle: &str,
     count_name: &str,
     to_be_post_processed: bool,
-    write_lines: F,
+    get_lines: F,
 ) where
-    F: Fn(bool, &Path) -> std::io::Result<()>, // to_be_post_processed, dest
+    I: IntoIterator<Item = String>,
+    F: Fn(bool) -> I, // (to_be_post_processed) -> lines
 {
     if !directory_path.exists() {
         fs::create_dir_all(directory_path)
@@ -144,7 +156,7 @@ pub fn write_flamegraphs<F>(
 
     // Always write .prof file without source code, for use by tests and
     // other automated post-processing.
-    if let Err(e) = write_lines(false, &raw_path_without_source_code) {
+    if let Err(e) = write_lines(get_lines(false), &raw_path_without_source_code) {
         eprintln!("=fil-profile= Error writing raw profiling data: {}", e);
         return;
     }
@@ -152,25 +164,18 @@ pub fn write_flamegraphs<F>(
     // Optionally write version with source code for SVGs, if we're using
     // source code.
     if to_be_post_processed {
-        if let Err(e) = write_lines(true, &raw_path_with_source_code) {
+        if let Err(e) = write_lines(get_lines(true), &raw_path_with_source_code) {
             eprintln!("=fil-profile= Error writing raw profiling data: {}", e);
             return;
         }
     }
 
-    let raw_path = (if to_be_post_processed {
-        &raw_path_with_source_code
-    } else {
-        &raw_path_without_source_code
-    })
-    .clone();
-
     let svg_path = directory_path.join(format!("{}.svg", base_filename));
     match write_flamegraph(
-        &raw_path.to_str().unwrap().to_string(),
+        get_lines(to_be_post_processed),
         &svg_path,
         false,
-        &title,
+        title,
         subtitle,
         count_name,
         to_be_post_processed,
@@ -184,10 +189,10 @@ pub fn write_flamegraphs<F>(
     }
     let svg_path = directory_path.join(format!("{}-reversed.svg", base_filename));
     match write_flamegraph(
-        &raw_path.to_str().unwrap().to_string(),
+        get_lines(to_be_post_processed),
         &svg_path,
         true,
-        &title,
+        title,
         subtitle,
         count_name,
         to_be_post_processed,
@@ -216,7 +221,7 @@ mod tests {
         #[test]
         fn filtering_of_callstacks(
             // Allocated bytes. Will use index as the memory address.
-            allocated_sizes in prop::collection::vec(0..1000 as usize, 5..15000),
+            allocated_sizes in prop::collection::vec(0..1000usize, 5..15000),
         ) {
             let total_size : usize = allocated_sizes.iter().sum();
             let total_size_99 = (99 * total_size) / 100;

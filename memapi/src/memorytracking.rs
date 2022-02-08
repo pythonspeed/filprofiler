@@ -601,18 +601,7 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
         self.dump_to_flamegraph(path, true, "peak-memory", "Peak Tracked Memory Usage", true);
     }
 
-    fn write_lines(
-        &self,
-        peak: bool,
-        to_be_post_processed: bool,
-        dest: &Path,
-    ) -> std::io::Result<()> {
-        let lines = self.to_lines(peak, to_be_post_processed);
-        write_lines(lines, dest)?;
-        Ok(())
-    }
-
-    fn to_lines(
+    pub fn to_lines(
         &self,
         peak: bool,
         to_be_post_processed: bool,
@@ -679,7 +668,7 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
             subtitle,
             "bytes",
             to_be_post_processed,
-            |tbpp, dest| self.write_lines(peak, tbpp, dest),
+            |tbpp| self.to_lines(peak, tbpp),
         )
     }
 
