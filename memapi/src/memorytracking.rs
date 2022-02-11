@@ -395,6 +395,10 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
         self.current_allocated_bytes
     }
 
+    pub fn get_peak_allocated_bytes(&self) -> usize {
+        self.peak_allocated_bytes
+    }
+
     pub fn get_allocation_size(&self, process: ProcessUid, address: usize) -> usize {
         if let Some(allocation) = self
             .current_allocations
