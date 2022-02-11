@@ -609,10 +609,10 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
         &self,
         peak: bool,
         to_be_post_processed: bool,
-    ) -> impl Iterator<Item = String> + '_ {
+    ) -> impl ExactSizeIterator<Item = String> + '_ {
         let by_call = self.combine_callstacks(peak).into_iter();
         let id_to_callstack = self.interner.get_reverse_map();
-        let lines = by_call.map(move |(callstack_id, size)| {
+        by_call.map(move |(callstack_id, size)| {
             format!(
                 "{} {}",
                 id_to_callstack.get(&callstack_id).unwrap().as_string(
@@ -622,8 +622,7 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
                 ),
                 size,
             )
-        });
-        lines
+        })
     }
 
     fn dump_to_flamegraph(
