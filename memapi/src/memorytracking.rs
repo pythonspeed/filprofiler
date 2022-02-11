@@ -409,7 +409,7 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
     }
 
     /// Check if a new peak has been reached:
-    fn check_if_new_peak(&mut self) {
+    pub fn check_if_new_peak(&mut self) {
         if self.current_allocated_bytes > self.peak_allocated_bytes {
             self.peak_allocated_bytes = self.current_allocated_bytes;
             self.peak_memory_usage
