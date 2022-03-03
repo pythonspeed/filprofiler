@@ -33,7 +33,7 @@ default-features = false
 features = []
 
 [target.'cfg(target_os = "linux")'.dependencies]
-cgroups-rs = "0.2.8"
+cgroups-rs = "0.2.9"
 
 [dev-dependencies]
 proptest = "1.0"
