@@ -163,6 +163,8 @@ def disable_thread_pools():
     # import here to not show that in flamegraph.
     try:
         import numpy
+
+        del numpy
     except ImportError:
         pass
 
