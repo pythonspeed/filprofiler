@@ -8,15 +8,14 @@ __all__ = ["__version__"]
 import sys
 import os
 
-if sys.version_info[:2] > (3, 6):
-    # register_at_fork only works in Python 3.6 or later.
-    if os.getenv("__FIL_STATUS") in ("api", "program"):
 
-        def unset(_os=os):
-            _os.environ["__FIL_STATUS"] = "subprocess"
+if os.getenv("__FIL_STATUS") in ("api", "program"):
 
-        os.register_at_fork(after_in_child=unset)
-        del unset
+    def unset(_os=os):
+        _os.environ["__FIL_STATUS"] = "subprocess"
+
+    os.register_at_fork(after_in_child=unset)
+    del unset
 
 # Fallback mechanism for detecting forks, for Python 3.6 or if someone isn't
 # doing fork()-without-exec() right (i.e. not calling the C API postfork()):
@@ -28,15 +27,11 @@ try:
     from ._version import version as __version__
 except ImportError:
     # package is not installed
-    try:
-        from importlib.metadata import version, PackageNotFoundError
+    from importlib.metadata import version, PackageNotFoundError
 
-        try:
-            __version__ = version(__name__)
-        except PackageNotFoundError:
-            __version__ = "unknown"
-    except ImportError:
-        # Python 3.6 doesn't have importlib.metadata:
+    try:
+        __version__ = version(__name__)
+    except PackageNotFoundError:
         __version__ = "unknown"
 
 
