@@ -4,13 +4,14 @@ numpy
 #scikit-image
 cython
 black
-towncrier==19.9.0rc1
+towncrier
 wheel
 auditwheel
 twine
 ipython
 ipykernel
 nbconvert
+jinja2<3.1  # compatibility issues with jinja2.Markup in nbconvert
 numexpr
 blosc
 psutil

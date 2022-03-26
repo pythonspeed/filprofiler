@@ -1,6 +1,6 @@
 # Installing Fil
 
-Fil requires macOS or Linux, and Python 3.6 or Later.
+Fil requires macOS or Linux, and Python 3.7 or Later.
 You can either use Conda, a sufficiently new version of Pip, or higher-level tools like Poetry or Pipenv.
 
 ## Conda

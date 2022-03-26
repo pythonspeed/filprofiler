@@ -17,14 +17,13 @@ rm -f filprofiler/_filpreload*.so
 rm -f filprofiler/_filpreload*.dylib
 rm -rf build
 
-for PYBIN in /opt/python/cp{36,37,38,39,310}*/bin; do
+for PYBIN in /opt/python/cp{37,38,39,310}*/bin; do
     touch filpreload/src/_filpreload.c  # force rebuild of Python code with new interpreter
     export PYO3_PYTHON="$PYBIN/python"
     "${PYBIN}/pip" install -U setuptools wheel setuptools-rust pip
     "${PYBIN}/python" -m pip wheel -w /tmp/wheel --use-feature=in-tree-build .
 done
 
-auditwheel repair --plat manylinux2010_x86_64 -w dist/ /tmp/wheel/filprofiler*cp36*whl
 auditwheel repair --plat manylinux2010_x86_64 -w dist/ /tmp/wheel/filprofiler*cp37*whl
 auditwheel repair --plat manylinux2010_x86_64 -w dist/ /tmp/wheel/filprofiler*cp38*whl
 auditwheel repair --plat manylinux2010_x86_64 -w dist/ /tmp/wheel/filprofiler*cp39*whl
