@@ -11,6 +11,7 @@ twine
 ipython
 ipykernel
 nbconvert
+jinja2<3.1  # compatibility issues with jinja2.Markup in nbconvert
 numexpr
 blosc
 psutil
