@@ -9,8 +9,7 @@ In order to reduce memory usage, you first need to figure out:
 That's exactly what Fil will help you find.
 Fil an open source memory profiler designed for data processing applications written in Python, and includes native support for Jupyter.
 
-Fil comes in two editions:
+Fil is open source, and is designed for offline profiling.
+It has enough of a performance impact that you won't want to use it on production workloads, but it can profile even small amounts of memory.
 
-* **The open source edition:** designed for offline profiling.
-  It has enough of a performance impact that you won't want to use it on production workloads, but it can profile even small amounts of memory.
-* **The commercial, production version:** optimized for data-intensive programs that allocate large amounts of memory, is is fast enough to run on all your production data processing batch jobs.
+If you want memory (and performance!) profiling for your Python batch jobs in production, consider using [Sciagraph](https://pythonspeed.com/sciagraph/).
