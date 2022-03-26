@@ -8,9 +8,9 @@ edition = "2018"
 
 [dependencies]
 lazy_static = "1.4.0"
-parking_lot = "0.11"
+parking_lot = "0.12"
 [target.'cfg(target_os = "linux")'.dependencies]
-jemallocator = "0.3.2"
+tikv-jemallocator = "0.4"
 libc = "0.2"
 
 [dependencies.pymemprofile_api]
@@ -18,7 +18,7 @@ path = "../memapi"
 features = []
 
 [dependencies.pyo3]
-version = "0.15"
+version = "0.16"
 default-features = false
 
 [build-dependencies]

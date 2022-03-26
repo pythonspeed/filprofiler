@@ -59,10 +59,10 @@ $ python yourscript.py --config=myconfig
 Now you would do:
 
 ```console
-$ filprofiler python yourscript.py --config=myconfig
+$ fil-profile python yourscript.py --config=myconfig
 ```
 
-Notice that you're doing `filprofiler `**`python`**, rather than `filprofiler run` as you would if you were profiling the full script.
+Notice that you're doing `fil-profile `**`python`**, rather than `fil-profile run` as you would if you were profiling the full script.
 Only functions running for the duration of the `filprofiler.api.profile()` call will have memory profiling enabled, including of course the function you pass in.
 The rest of the code will run at (close) to normal speed and configuration.
 

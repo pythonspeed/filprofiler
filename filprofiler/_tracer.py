@@ -157,6 +157,17 @@ def disable_thread_pools():
 
     import threadpoolctl
 
+    # NumPy (really, BLAS) thread pool can allocate a lot of memory, or at
+    # least mmap() it, which leads to surprising results. See
+    # https://github.com/pythonspeed/filprofiler/issues/308. For now, just
+    # import here to not show that in flamegraph.
+    try:
+        import numpy
+
+        del numpy
+    except ImportError:
+        pass
+
     numexpr_threads = numexpr_set_num_threads(1)
     blosc_threads = blosc_set_nthreads(1)
     with threadpoolctl.threadpool_limits({"blas": 1, "openmp": 1}):
