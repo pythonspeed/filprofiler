@@ -4,13 +4,13 @@ numpy
 #scikit-image
 cython
 black
-towncrier==19.9.0rc1
+towncrier
 wheel
 auditwheel
 twine
 ipython
 ipykernel
-nbconvert
+nbconvert==6.2.0
 numexpr
 blosc
 psutil
