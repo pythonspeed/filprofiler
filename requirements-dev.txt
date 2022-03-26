@@ -10,7 +10,7 @@ auditwheel
 twine
 ipython
 ipykernel
-nbconvert==6.2.0
+nbconvert<6.3.0
 numexpr
 blosc
 psutil
