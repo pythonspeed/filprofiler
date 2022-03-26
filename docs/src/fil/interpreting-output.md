@@ -25,5 +25,5 @@ This particular flamegraph is interactive:
 These are the frames that allocated most of the memory.
 In this particular example, you can see that the most memory was allocated by a line of code in the `make_big_array()` function.
 
-Having found the source of the memory allocations at the moment of peak memory usage, you can then go and [reduce memory usage](https://pythonspeed.com/fil/).
+Having found the source of the memory allocations at the moment of peak memory usage, you can then go and [reduce memory usage](https://pythonspeed.com/memory/).
 You can then validate your changes reduced memory usage by re-running your updated program with Fil and comparing the result.
