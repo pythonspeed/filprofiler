@@ -1,0 +1,1 @@
+The directories where reports are stored now avoid the characters ':' and '.', for better compatibility with other operating systems. ([#336](https://github.com/pythonspeed/filprofiler/issues/336))
