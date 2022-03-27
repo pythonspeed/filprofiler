@@ -1,3 +1,4 @@
+#![deny(unsafe_op_in_unsafe_fn)]
 use parking_lot::Mutex;
 use pymemprofile_api::memorytracking::{
     AllocationTracker, CallSiteId, Callstack, FunctionId, VecFunctionLocations, PARENT_PROCESS,
@@ -39,7 +40,7 @@ lazy_static! {
 
 /// Register a new function/filename location.
 fn add_function(filename: String, function_name: String) -> FunctionId {
-    let mut tracker_state = TRACKER_STATE.try_lock();
+    let tracker_state = TRACKER_STATE.try_lock();
     if let Some(mut tracker_state) = tracker_state {
         tracker_state
             .allocations
@@ -211,14 +212,19 @@ unsafe extern "C" fn pymemprofile_add_function_location(
     function_name: *const c_char,
     function_length: u64,
 ) -> u64 {
-    let filename = std::str::from_utf8_unchecked(std::slice::from_raw_parts(
-        filename as *const u8,
-        filename_length as usize,
-    ));
-    let function_name = std::str::from_utf8_unchecked(std::slice::from_raw_parts(
-        function_name as *const u8,
-        function_length as usize,
-    ));
+    let filename = unsafe {
+        std::str::from_utf8_unchecked(std::slice::from_raw_parts(
+            filename as *const u8,
+            filename_length as usize,
+        ))
+    };
+    let function_name = unsafe {
+        std::str::from_utf8_unchecked(std::slice::from_raw_parts(
+            function_name as *const u8,
+            function_length as usize,
+        ))
+    };
+
     let function_id = add_function(filename.to_string(), function_name.to_string());
     function_id.as_u64()
 }
@@ -244,7 +250,7 @@ extern "C" fn pymemprofile_finish_call() {
 /// Intended for use from C.
 #[no_mangle]
 unsafe extern "C" fn pymemprofile_reset(default_path: *const c_char) {
-    let path = CStr::from_ptr(default_path)
+    let path = unsafe { CStr::from_ptr(default_path) }
         .to_str()
         .expect("Path wasn't UTF-8")
         .to_string();
@@ -255,7 +261,7 @@ unsafe extern "C" fn pymemprofile_reset(default_path: *const c_char) {
 /// Intended for use from C.
 #[no_mangle]
 unsafe extern "C" fn pymemprofile_dump_peak_to_flamegraph(path: *const c_char) {
-    let path = CStr::from_ptr(path)
+    let path = unsafe { CStr::from_ptr(path) }
         .to_str()
         .expect("Path wasn't UTF-8")
         .to_string();
@@ -276,7 +282,7 @@ unsafe extern "C" fn pymemprofile_get_current_callstack() -> *mut c_void {
 #[no_mangle]
 unsafe extern "C" fn pymemprofile_set_current_callstack(callstack: *mut c_void) {
     // The callstack is a Box created via pymemprofile_get_callstack()
-    let callstack = Box::<Callstack>::from_raw(callstack as *mut Callstack);
+    let callstack = unsafe { Box::<Callstack>::from_raw(callstack as *mut Callstack) };
     set_current_callstack(&callstack);
 }
 
@@ -336,12 +342,12 @@ impl pymemprofile_api::mmap::MmapAPI for FilMmapAPI {
 #[cfg(target_os = "macos")]
 #[no_mangle]
 pub extern "C" fn reimplemented_munmap(addr: *mut c_void, len: usize) -> c_int {
-    return pymemprofile_api::mmap::munmap_wrapper(addr, len, &FilMmapAPI {});
+    return unsafe { pymemprofile_api::mmap::munmap_wrapper(addr, len, &FilMmapAPI {}) };
 }
 
 /// On Linux we're using same name as the API we're replacing.
 #[cfg(target_os = "linux")]
 #[no_mangle]
 pub extern "C" fn munmap(addr: *mut c_void, len: usize) -> c_int {
-    return pymemprofile_api::mmap::munmap_wrapper(addr, len, &FilMmapAPI {});
+    return unsafe { pymemprofile_api::mmap::munmap_wrapper(addr, len, &FilMmapAPI {}) };
 }

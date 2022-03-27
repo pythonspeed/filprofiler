@@ -3,7 +3,7 @@ use std::process::Command;
 /// Get paths for C compilation builds, e.g. "include" or "platinclude".
 /// TODO this is copy/pasted multiple times...
 fn get_python_path(pathname: &str) -> String {
-    let exe = std::env::var("PYO3_PYTHON").unwrap_or("python".to_string());
+    let exe = std::env::var("PYO3_PYTHON").unwrap_or_else(|_| "python".to_string());
     let output = Command::new(exe)
         .arg("-c")
         .arg(format!(
