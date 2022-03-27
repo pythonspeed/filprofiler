@@ -12,9 +12,9 @@ def library_path(name):
 
 
 def timestamp_now() -> str:
-    """Return current time as a string."""
+    """Return current time as a string suitable for use in the filesystem."""
     now = datetime.now()
-    return now.isoformat(timespec="milliseconds")
+    return now.isoformat(timespec="milliseconds").replace(":", "-").replace(".", "_")
 
 
 def glibc_version() -> Tuple[int, int]:
