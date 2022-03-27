@@ -342,7 +342,7 @@ impl pymemprofile_api::mmap::MmapAPI for FilMmapAPI {
 #[cfg(target_os = "macos")]
 #[no_mangle]
 pub extern "C" fn reimplemented_munmap(addr: *mut c_void, len: usize) -> c_int {
-    return pymemprofile_api::mmap::munmap_wrapper(addr, len, &FilMmapAPI {});
+    return unsafe { pymemprofile_api::mmap::munmap_wrapper(addr, len, &FilMmapAPI {}) };
 }
 
 /// On Linux we're using same name as the API we're replacing.
