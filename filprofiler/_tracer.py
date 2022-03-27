@@ -120,6 +120,12 @@ def trace_until_exit(function, args, kwargs, output_path: str, open_browser: boo
         print("=fil-profile= Wrote HTML report to " + index_path, file=sys.stderr)
         if open_browser:
             try:
+                print(
+                    "=fil-profile= Trying to open the report in a browser.",
+                    "In some cases this may print error messages, especially on macOS.",
+                    "You can ignore those, it's just garbage output from the browser.",
+                    file=sys.stderr,
+                )
                 webbrowser.open("file://" + os.path.abspath(index_path))
             except webbrowser.Error as e:
                 print(
