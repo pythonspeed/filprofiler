@@ -1,6 +1,5 @@
 use crate::flamegraph::filter_to_useful_callstacks;
 use crate::flamegraph::write_flamegraphs;
-use crate::flamegraph::write_lines;
 use crate::python::get_runpy_path;
 
 use super::rangemap::RangeMap;

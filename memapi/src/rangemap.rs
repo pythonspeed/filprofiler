@@ -240,7 +240,7 @@ mod tests {
                 for (k, v) in removed1 {
                     *removed1_map.entry(k).or_insert(0) += v;
                 }
-                let removed2_map : HashMap<usize, usize> = removed2.iter().map(|v| *v).collect();
+                let removed2_map : HashMap<usize, usize> = removed2.iter().copied().collect();
                 prop_assert_eq!(removed1_map, removed2_map);
                 prop_assert_eq!(real_rangemap.size(), stupid_rangemap.size());
                 prop_assert_eq!(real_rangemap.as_hashmap(), stupid_rangemap.as_hashmap());
