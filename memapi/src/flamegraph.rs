@@ -82,6 +82,40 @@ pub fn write_flamegraph<I: IntoIterator<Item = String>>(
     Ok(())
 }
 
+/// Low-level interface for writing flamegraphs with post-processing:
+pub fn get_flamegraph_with_options<I: IntoIterator<Item = String>>(
+    lines: I,
+    to_be_post_processed: bool,
+    mut options: flamegraph::Options,
+    // special cased because it needs to be psot-processed:
+    subtitle: Option<&str>,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let mut output = vec![];
+    let lines: Vec<String> = lines.into_iter().collect();
+    match flamegraph::from_lines(&mut options, lines.iter().map(|s| s.as_ref()), &mut output) {
+        Err(e) => Err(format!("{}", e).into()),
+        Ok(_) => {
+            if to_be_post_processed {
+                // Replace with real subtitle.
+                let data = String::from_utf8(output)?;
+                let data = if let Some(subtitle) = subtitle {
+                    data.replace("__FIL-SUBTITLE-HERE__", subtitle)
+                } else {
+                    data
+                };
+                // Restore normal semi-colons.
+                let data = data.replace('\u{ff1b}', ";");
+                // Restore (non-breaking) spaces.
+                let data = data.replace('\u{12e4}', "\u{00a0}");
+                // Get rid of empty-line markers:
+                let data = data.replace('\u{2800}', "");
+                output = data.as_bytes().to_vec();
+            }
+            Ok(output)
+        }
+    }
+}
+
 /// Write a flamegraph SVG to disk, given lines in summarized format.
 pub fn get_flamegraph<I: IntoIterator<Item = String>>(
     lines: I,
@@ -108,26 +142,7 @@ pub fn get_flamegraph<I: IntoIterator<Item = String>>(
         // Can't put structured text into subtitle, so have to do a hack.
         options.subtitle = Some("__FIL-SUBTITLE-HERE__".to_string());
     }
-    let mut output = vec![];
-    let lines: Vec<String> = lines.into_iter().collect();
-    match flamegraph::from_lines(&mut options, lines.iter().map(|s| s.as_ref()), &mut output) {
-        Err(e) => Err(format!("{}", e).into()),
-        Ok(_) => {
-            if to_be_post_processed {
-                // Replace with real subtitle.
-                let data = String::from_utf8(output)?;
-                let data = data.replace("__FIL-SUBTITLE-HERE__", subtitle);
-                // Restore normal semi-colons.
-                let data = data.replace("\u{ff1b}", ";");
-                // Restore (non-breaking) spaces.
-                let data = data.replace("\u{12e4}", "\u{00a0}");
-                // Get rid of empty-line markers:
-                let data = data.replace("\u{2800}", "");
-                output = data.as_bytes().to_vec();
-            }
-            Ok(output)
-        }
-    }
+    get_flamegraph_with_options(lines, to_be_post_processed, options, Some(subtitle))
 }
 
 /// Write .prof, -source.prof, .svg and -reversed.svg files for given lines.
