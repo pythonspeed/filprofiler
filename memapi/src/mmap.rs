@@ -15,7 +15,9 @@ pub trait MmapAPI {
     fn is_initialized(&self) -> bool;
 }
 
-pub fn munmap_wrapper<A: MmapAPI>(addr: *mut c_void, len: usize, api: &A) -> c_int {
+/// # Safety
+/// Only call with pointers from mmap()!
+pub unsafe fn munmap_wrapper<A: MmapAPI>(addr: *mut c_void, len: usize, api: &A) -> c_int {
     if !api.is_initialized() {
         #[cfg(target_os = "macos")]
         {
@@ -86,7 +88,7 @@ mod tests {
         let fake_api = TrackMunmap {
             tracking_removed: std::cell::Cell::new((0, 0)),
         };
-        munmap_wrapper(addr, size, &fake_api);
+        unsafe { munmap_wrapper(addr, size, &fake_api) };
         assert_eq!(fake_api.tracking_removed.get(), (addr as usize, size));
         assert!(!exists_in_maps(addr as usize, size));
     }

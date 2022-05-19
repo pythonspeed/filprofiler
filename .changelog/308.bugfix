@@ -1,1 +1,0 @@
-Don't include memory usage from NumPy imports in the profiling output. This is somewhat inaccurate, but is a reasonable short-term workaround. ([#308](https://github.com/pythonspeed/filprofiler/issues/308))

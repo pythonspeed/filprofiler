@@ -118,11 +118,11 @@ impl OutOfMemoryEstimator {
         if allocated_bytes > current_threshold {
             // We've allocated enough that it's time to check for potential OOM
             // condition.
-            return self.are_we_oom(total_allocated_bytes);
+            self.are_we_oom(total_allocated_bytes)
         } else {
             self.check_threshold_bytes = current_threshold - allocated_bytes;
             debug_assert!(self.check_threshold_bytes < current_threshold);
-            return false;
+            false
         }
     }
 

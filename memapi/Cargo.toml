@@ -14,7 +14,7 @@ ahash = "0.7"
 derivative = "2.2"
 lazy_static = "1.4"
 backtrace = "0.3"
-once_cell = "1.10"
+once_cell = "1.11"
 libloading = "0.7"
 libc = "0.2"
 
@@ -37,7 +37,8 @@ cgroups-rs = "0.2.9"
 
 [dev-dependencies]
 proptest = "1.0"
-proc-maps = "0.2.0"
+proc-maps = "0.2.1"
+tempfile = "3.3.0"
 
 [features]
 default = []

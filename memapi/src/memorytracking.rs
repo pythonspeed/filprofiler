@@ -1,6 +1,6 @@
 use crate::flamegraph::filter_to_useful_callstacks;
 use crate::flamegraph::write_flamegraphs;
-use crate::flamegraph::write_lines;
+use crate::linecache::LineCacher;
 use crate::python::get_runpy_path;
 use crate::python::PrefixStripper;
 
@@ -171,6 +171,7 @@ impl Callstack {
         prefix_stripper: Option<&PrefixStripper>,
         functions: &dyn FunctionLocations,
         separator: &'static str,
+        linecache: &mut LineCacher,
     ) -> String {
         if self.calls.is_empty() {
             return "[No Python stack]".to_string();
@@ -193,11 +194,13 @@ impl Callstack {
             .map(|(id, (function, filename))| {
                 if to_be_post_processed {
                     // Get Python code.
-                    let code = crate::python::get_source_line(filename, id.line_number)
-                        .unwrap_or_else(|_| "".to_string());
+
+                    let code = linecache.get_source_line(filename, id.line_number as usize);
+                    // TODO this is a bug, we should not be calling into Python!
                     let filename = prefix_stripper
                         .map(|ps| ps.strip_prefix(filename))
                         .unwrap_or(filename);
+
                     // Leading whitespace is dropped by SVG, so we'd like to
                     // replace it with non-breaking space. However, inferno
                     // trims whitespace
@@ -392,7 +395,13 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
         eprintln!("=fil-profile= {}", message);
         eprintln!(
             "=| {}",
-            callstack.as_string(false, None, &self.functions, "\n=| ")
+            callstack.as_string(
+                false,
+                None,
+                &self.functions,
+                "\n=| ",
+                &mut LineCacher::default()
+            )
         );
     }
 
@@ -408,8 +417,7 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
         if let Some(allocation) = self
             .current_allocations
             .get(&process)
-            .map(|a| a.get(&address))
-            .flatten()
+            .and_then(|a| a.get(&address))
         {
             allocation.size()
         } else {
@@ -618,6 +626,7 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
         let by_call = self.combine_callstacks(peak).into_iter();
         let id_to_callstack = self.interner.get_reverse_map();
         let prefix_stripper = PrefixStripper::new();
+        let mut linecache = LineCacher::default();
         by_call.map(move |(callstack_id, size)| {
             format!(
                 "{} {}",
@@ -625,7 +634,8 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
                     to_be_post_processed,
                     Some(&prefix_stripper),
                     &self.functions,
-                    ";"
+                    ";",
+                    &mut linecache,
                 ),
                 size,
             )

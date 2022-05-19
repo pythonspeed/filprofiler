@@ -51,7 +51,7 @@ impl<V: Clone> RangeMap<V> {
     }
 
     pub fn add(&mut self, start: usize, length: usize, value: V) {
-        if length <= 0 {
+        if length == 0 {
             return;
         }
         self.ranges.push((Range::new(start, length), value));
@@ -59,7 +59,7 @@ impl<V: Clone> RangeMap<V> {
 
     /// Return how many bytes were removed.
     pub fn remove(&mut self, start: usize, length: usize) -> Vec<(V, usize)> {
-        if length <= 0 {
+        if length == 0 {
             return vec![];
         }
         let mut new_ranges = vec![];
@@ -158,7 +158,7 @@ mod tests {
         fn add(&mut self, start: usize, length: usize, value: V) {
             assert!(length > 0);
             for i in start..(start + length) {
-                self.items.insert(i, value.clone());
+                self.items.insert(i, value);
             }
         }
 
@@ -208,7 +208,7 @@ mod tests {
         proptest::collection::vec((1..20usize, 1..20usize), 1..20)
             .prop_map(|vec| {
                 let mut result: Vec<(usize, usize)> = Vec::new();
-                let mut previous_start = 0 as usize;
+                let mut previous_start = 0_usize;
                 for (shift_start, length) in vec.iter() {
                     previous_start += shift_start;
                     result.push((previous_start, *length));
@@ -240,7 +240,7 @@ mod tests {
                 for (k, v) in removed1 {
                     *removed1_map.entry(k).or_insert(0) += v;
                 }
-                let removed2_map : HashMap<usize, usize> = removed2.iter().map(|v| *v).collect();
+                let removed2_map : HashMap<usize, usize> = removed2.iter().copied().collect();
                 prop_assert_eq!(removed1_map, removed2_map);
                 prop_assert_eq!(real_rangemap.size(), stupid_rangemap.size());
                 prop_assert_eq!(real_rangemap.as_hashmap(), stupid_rangemap.as_hashmap());
