@@ -1,5 +1,12 @@
 # Release notes
 
+## Fil 2022.05.0 (2022-05-19)
+
+### Bugfixes
+
+- Fix a number of potential deadlock scenarios when writing out reports. ([#374](https://github.com/pythonspeed/filprofiler/issues/374), [#365](https://github.com/pythonspeed/filprofiler/issues/365), [#349](https://github.com/pythonspeed/filprofiler/issues/349))
+- Give more accurate message when running in no-browser mode (thanks to Paul-Louis NECH). ([#347](https://github.com/pythonspeed/filprofiler/issues/347))
+
 ## Fil 2022.03.0 (2022-03-27)
 
 ### Bugfixes
