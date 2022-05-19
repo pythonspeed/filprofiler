@@ -260,8 +260,8 @@ def stage_2():
     msg_browser = ", and opened automatically in a browser" if not arguments.no_browser else ", and stored in {}.".format(arguments.output_path)
     msg_fil_plan = "=fil-profile= Memory usage will be written out at exit{}.\n".format(msg_browser)
     print(
-        msg_fil_plan,
-        "=fil-profile= You can also run the following command while the program is still running to write out peak memory usage up to that point: "
+        msg_fil_plan +
+        "=fil-profile= You can also run the following command while the program is still running to write out peak memory usage up to that point: " +
         "kill -s SIGUSR2 {}".format(getpid()),
         file=sys.stderr,
     )
