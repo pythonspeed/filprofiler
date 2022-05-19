@@ -1,5 +1,6 @@
 use crate::flamegraph::filter_to_useful_callstacks;
 use crate::flamegraph::write_flamegraphs;
+use crate::linecache::LineCacher;
 use crate::python::get_runpy_path;
 
 use super::rangemap::RangeMap;
@@ -168,6 +169,7 @@ impl Callstack {
         to_be_post_processed: bool,
         functions: &dyn FunctionLocations,
         separator: &'static str,
+        linecache: &mut LineCacher,
     ) -> String {
         if self.calls.is_empty() {
             return "[No Python stack]".to_string();
@@ -190,8 +192,7 @@ impl Callstack {
             .map(|(id, (function, filename))| {
                 if to_be_post_processed {
                     // Get Python code.
-                    let code = crate::python::get_source_line(filename, id.line_number)
-                        .unwrap_or_else(|_| "".to_string());
+                    let code = linecache.get_source_line(filename, id.line_number as usize);
                     // Leading whitespace is dropped by SVG, so we'd like to
                     // replace it with non-breaking space. However, inferno
                     // trims whitespace
@@ -386,7 +387,7 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
         eprintln!("=fil-profile= {}", message);
         eprintln!(
             "=| {}",
-            callstack.as_string(false, &self.functions, "\n=| ")
+            callstack.as_string(false, &self.functions, "\n=| ", &mut LineCacher::default())
         );
     }
 
@@ -611,13 +612,15 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
     ) -> impl ExactSizeIterator<Item = String> + '_ {
         let by_call = self.combine_callstacks(peak).into_iter();
         let id_to_callstack = self.interner.get_reverse_map();
+        let mut linecache = LineCacher::default();
         by_call.map(move |(callstack_id, size)| {
             format!(
                 "{} {}",
                 id_to_callstack.get(&callstack_id).unwrap().as_string(
                     to_be_post_processed,
                     &self.functions,
-                    ";"
+                    ";",
+                    &mut linecache,
                 ),
                 size,
             )
