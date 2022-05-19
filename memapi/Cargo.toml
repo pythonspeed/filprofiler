@@ -38,6 +38,7 @@ cgroups-rs = "0.2.9"
 [dev-dependencies]
 proptest = "1.0"
 proc-maps = "0.2.1"
+tempfile = "3.3.0"
 
 [features]
 default = []

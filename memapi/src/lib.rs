@@ -1,6 +1,7 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 pub mod ffi;
 pub mod flamegraph;
+mod linecache;
 pub mod memorytracking;
 pub mod mmap;
 pub mod oom;
