@@ -18,7 +18,7 @@ path = "../memapi"
 features = []
 
 [dependencies.pyo3]
-version = "0.16"
+git = "https://github.com/pyo3/pyo3"
 default-features = false
 
 [build-dependencies]
