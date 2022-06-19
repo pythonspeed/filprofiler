@@ -72,9 +72,11 @@ jobs:
           make test
       - name: "Build macOS wheels"
         if: startsWith(matrix.os, 'mac') && (matrix.python-version == '3.9')
-        uses: pypa/cibuildwheel@v2.2.2
+        uses: pypa/cibuildwheel@v2.7.0
         env:
           MACOSX_DEPLOYMENT_TARGET: "10.15"
+          CIBW_ARCHS_MACOS: "x86_64 arm64"
+          CIBW_SKIP: "cp37-macosx_arm64 cp36*"
         with:
           output-dir: dist
       - name: "Build manylinux wheels"
