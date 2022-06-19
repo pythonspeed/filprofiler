@@ -1,4 +1,4 @@
-# Fil: A memory profiler for Python
+# Fil: A memory profiler for Python on Linux and macOS
 
 Your Python code reads some data, processes it, and uses too much memory; maybe it even dies due to an out-of-memory error.
 In order to reduce memory usage, you first need to figure out:
