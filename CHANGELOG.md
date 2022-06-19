@@ -1,5 +1,11 @@
 # Release notes
 
+## Fil 2022.06.0 (2022-06-19)
+
+### Features
+
+- Added wheels for macOS ARM/Silicon machines. ([#383](https://github.com/pythonspeed/filprofiler/issues/383))
+
 ## Fil 2022.05.0 (2022-05-19)
 
 ### Bugfixes
