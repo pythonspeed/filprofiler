@@ -42,6 +42,10 @@ jobs:
       - uses: "actions-rs/toolchain@v1"
         with:
           toolchain: stable
+      - name: "Install rust for arm64"
+        if: startsWith(matrix.os, 'mac') && (matrix.python-version == '3.9')
+        run: |
+          rustup target add aarch64-apple-darwin
       #- uses: Swatinem/rust-cache@v1
       #  with:
       #    key: "${{ matrix.os }}-${{ matrix.python-version }}"
