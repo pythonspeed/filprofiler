@@ -14,6 +14,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <errno.h>
 
 // Macro to create the publicly exposed symbol:
 #ifdef __APPLE__
@@ -26,7 +27,7 @@
 #ifdef __APPLE__
 #define REAL_IMPL(func) func
 #elif __linux__
-#define REAL_IMPL(func) _rjem_##func
+#define REAL_IMPL(func) __libc_##func
 #endif
 
 #define likely(x) __builtin_expect(!!(x), 1)
@@ -41,14 +42,13 @@ static int (*underlying_real_pthread_create)(pthread_t *thread,
                                              void *arg) = 0;
 static pid_t (*underlying_real_fork)(void) = 0;
 
-// Used on Linux to implement these APIs:
-extern void *_rjem_malloc(size_t length);
-extern void *_rjem_calloc(size_t nmemb, size_t length);
-extern void *_rjem_realloc(void *addr, size_t length);
-extern void _rjem_free(void *addr);
-extern void *_rjem_aligned_alloc(size_t alignment, size_t size);
-extern size_t _rjem_malloc_usable_size(void *ptr);
-extern int _rjem_posix_memalign(void **memptr, size_t alignment, size_t size);
+#ifdef __linux__
+extern void *__libc_malloc(size_t length);
+extern void *__libc_calloc(size_t nmemb, size_t length);
+extern void *__libc_realloc(void *addr, size_t length);
+extern void __libc_free(void *addr);
+extern void *__libc_memalign(size_t alignment, size_t size);
+#endif
 
 // Note whether we've been initialized yet or not:
 static int initialized = 0;
@@ -155,13 +155,6 @@ static void __attribute__((constructor)) constructor() {
   if (initialized) {
     return;
   }
-
-#ifdef __linux__
-  // Ensure jemalloc is initialized as early as possible. If jemalloc is
-  // initialized via mmap() -> Rust triggering allocation, it deadlocks because
-  // jemalloc uses mmap to get more memory!
-  _rjem_malloc(1);
-#endif
 
   if (sizeof((void *)0) != sizeof((size_t)0)) {
     fprintf(stderr, "BUG: expected size of size_t and void* to be the same.\n");
@@ -420,8 +413,24 @@ SYMBOL_PREFIX(realloc)(void *addr, size_t size) {
   return result;
 }
 
-__attribute__((visibility("default"))) int
-SYMBOL_PREFIX(posix_memalign)(void **memptr, size_t alignment, size_t size) {
+#if __linux__
+int __libc_posix_memalign(void **memptr, size_t alignment, size_t size) {
+  void* result = __libc_memalign(alignment, size);
+  if ((result == NULL) && size != 0) {
+    return ENOMEM;
+  } else {
+    *memptr = result;
+    return 0;
+  }
+}
+
+void* __libc_aligned_alloc(size_t alignment, size_t size) {
+  return __libc_memalign(alignment, size);
+}
+#endif
+
+__attribute__((visibility("default"))) int SYMBOL_PREFIX(posix_memalign)(
+        void **memptr, size_t alignment, size_t size) {
   increment_reentrancy();
   int result = REAL_IMPL(posix_memalign)(memptr, alignment, size);
   decrement_reentrancy();
@@ -504,15 +513,6 @@ reimplemented_aligned_alloc(size_t alignment, size_t size) {
   }
   return result;
 }
-
-#ifdef __linux__
-// Make sure we expose jemalloc variant of malloc_usable_size(), in case someone
-// actually uses it.
-__attribute__((visibility("default"))) size_t
-SYMBOL_PREFIX(malloc_usable_size)(void *ptr) {
-  return REAL_IMPL(malloc_usable_size)(ptr);
-}
-#endif
 
 // Argument for wrapper_pthread_start().
 struct NewThreadArgs {
