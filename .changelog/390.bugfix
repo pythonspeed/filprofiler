@@ -1,1 +1,0 @@
-Speed up rendering of flamegraphs in cases where there are many smaller allocations, by filtering out allocations smaller than 0.2% of total memory. Future releases may re-enable showing smaller allocations if a better fix can be found.

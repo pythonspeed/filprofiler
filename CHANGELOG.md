@@ -1,5 +1,12 @@
 # Release notes
 
+## Fil 2022.07.0 (2022-07-22)
+
+### Bugfixes
+
+- Stopped using `jemalloc` on Linux, for better compatibility with certain libraries. ([#389](https://github.com/pythonspeed/filprofiler/issues/389))
+- Speed up rendering of flamegraphs in cases where there are many smaller allocations, by filtering out allocations smaller than 0.2% of total memory. Future releases may re-enable showing smaller allocations if a better fix can be found. ([#390](https://github.com/pythonspeed/filprofiler/issues/390))
+
 ## Fil 2022.06.0 (2022-06-19)
 
 ### Features

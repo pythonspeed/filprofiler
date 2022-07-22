@@ -1,1 +1,0 @@
-Stopped using `jemalloc` on Linux, for better compatibility with certain libraries.
