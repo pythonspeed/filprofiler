@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=42", "wheel", "setuptools_scm[toml]>=3.4", "setuptools-rust"]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=7", "setuptools-rust"]
 
 [tool.setuptools_scm]
 write_to = "filprofiler/_version.py"
