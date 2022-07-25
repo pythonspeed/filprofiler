@@ -145,6 +145,8 @@ jobs:
     #if: startsWith(github.event.ref, 'refs/tags')
     env:
       CIBW_BEFORE_ALL_LINUX: "curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain stable -y"
+      CIBW_ENVIRONMENT: 'PATH="$PATH:$HOME/.cargo/bin"'
+      CIBW_SKIP: "cp27-* cp34-* cp35-* cp36-* pp* *-musllinux*"
     steps:
       - uses: actions/checkout@v3
         with:
