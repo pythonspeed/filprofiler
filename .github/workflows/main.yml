@@ -143,10 +143,18 @@ jobs:
     name: "Wheels for ARM64"
     runs-on: "ubuntu-latest"
     #if: startsWith(github.event.ref, 'refs/tags')
+    strategy:
+      fail-fast: false
+      matrix:
+        pyver: [cp37, cp38, cp39, cp310]
     env:
+      CIBW_BUILD: ${{matrix.pyver}}-*
+      CIBW_ARCHS_LINUX: aarch64
       CIBW_BEFORE_ALL_LINUX: "curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain stable -y"
       CIBW_ENVIRONMENT: 'PATH="$PATH:$HOME/.cargo/bin"'
       CIBW_SKIP: "cp27-* cp34-* cp35-* cp36-* pp* *-musllinux*"
+      CIBW_TEST_REQUIRES: pytest
+      CIBW_TEST_COMMAND: pytest {project}/tests/test_endtoend.py -k test_threaded_allocation_tracking
     steps:
       - uses: actions/checkout@v3
         with:
@@ -163,8 +171,6 @@ jobs:
           platforms: all
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.8.1
-        env:
-          CIBW_ARCHS_LINUX: aarch64
       - name: Publish distribution 📦 to PyPI
         if: startsWith(github.event.ref, 'refs/tags')
         env:
@@ -172,6 +178,6 @@ jobs:
           TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
         run: |
             set -euo pipefail
-            . venv/bin/activate
+            pip install twine
             twine check wheelhouse/*.whl
             twine upload --repository pypi wheelhouse/filprofiler*.whl
