@@ -149,7 +149,7 @@ fn get_cgroup_paths<'a>(proc_cgroups: &'a str) -> Vec<&'a str> {
 /// Real system information.
 pub struct RealMemoryInfo {
     // The current process.
-    process: psutil::process::Process,
+    process: Option<psutil::process::Process>,
     // On Linux, the current cgroup _at startup_. If it changes after startup,
     // we'll be wrong, but that's unlikely.
     #[cfg(target_os = "linux")]
@@ -191,14 +191,14 @@ impl RealMemoryInfo {
         };
         Self {
             cgroup: cgroup,
-            process: psutil::process::Process::current().unwrap(),
+            process: psutil::process::Process::current().ok(),
         }
     }
 
     #[cfg(target_os = "macos")]
     pub fn new() -> Self {
         Self {
-            process: psutil::process::Process::current().unwrap(),
+            process: psutil::process::Process::current().ok(),
         }
     }
 
@@ -244,7 +244,10 @@ impl MemoryInfo for RealMemoryInfo {
     }
 
     fn get_resident_process_memory(&self) -> usize {
-        self.process.memory_info().unwrap().rss() as usize
+        self.process
+            .as_ref()
+            .and_then(|p| p.memory_info().map(|mi| mi.rss()).ok())
+            .unwrap_or(0) as usize
     }
 
     /// Print debugging info to stderr.
@@ -266,7 +269,7 @@ impl MemoryInfo for RealMemoryInfo {
         );
         eprintln!(
             "=fil-profile= Process memory info: {:?}",
-            self.process.memory_info()
+            self.process.as_ref().map(|p| p.memory_info())
         );
     }
 }
