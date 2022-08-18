@@ -8,6 +8,8 @@ use super::util::new_hashmap;
 use ahash::RandomState as ARandomState;
 use im::Vector as ImVector;
 use itertools::Itertools;
+use serde::Deserialize;
+use serde::Serialize;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -290,11 +292,10 @@ impl CallstackInterner {
 const MIB: usize = 1024 * 1024;
 const HIGH_32BIT: u32 = 1 << 31;
 
-/// A unique identifier for a process. The idea is that each subprocess will be
-/// given a unique identifier from a counter, and that >4 billion processes is
-/// unlikely. But the internal representation can change!
-#[derive(Clone, Copy, Debug, PartialEq, Ord, PartialOrd, Eq)]
-pub struct ProcessUid(u32);
+/// A unique identifier for a process.
+#[derive(Clone, Copy, Debug, PartialEq, Ord, PartialOrd, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ProcessUid(pub u32);
 
 pub const PARENT_PROCESS: ProcessUid = ProcessUid(0);
 
