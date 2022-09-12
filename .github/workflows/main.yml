@@ -142,7 +142,7 @@ jobs:
   arm-wheels:
     name: "Wheels for ARM64"
     runs-on: "ubuntu-latest"
-    #if: startsWith(github.event.ref, 'refs/tags')
+    if: startsWith(github.event.ref, 'refs/tags')
     env:
       CIBW_ARCHS_LINUX: aarch64
       CIBW_BEFORE_ALL_LINUX: "curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain stable -y"
@@ -162,6 +162,12 @@ jobs:
           platforms: arm64
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.8.1
+        with:
+          output-dir: dist
+      - uses: actions/upload-artifact@v2
+        with:
+          name: "arm64-wheel"
+          path: dist/*.whl
       - name: Publish distribution 📦 to PyPI
         if: startsWith(github.event.ref, 'refs/tags')
         env:
@@ -170,5 +176,5 @@ jobs:
         run: |
             set -euo pipefail
             pip install twine
-            twine check wheelhouse/*.whl
-            twine upload --repository pypi wheelhouse/filprofiler*.whl
+            twine check dist/*.whl
+            twine upload --repository pypi dist/filprofiler*.whl
