@@ -80,7 +80,7 @@ jobs:
         env:
           MACOSX_DEPLOYMENT_TARGET: "10.15"
           CIBW_ARCHS_MACOS: "x86_64 arm64"
-          CIBW_SKIP: "cp37-macosx_arm64 cp36*"
+          CIBW_SKIP: "cp37-macosx_arm64 cp36* pp*"
         with:
           output-dir: dist
       - name: "Build manylinux wheels"
