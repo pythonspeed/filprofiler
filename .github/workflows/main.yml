@@ -32,7 +32,7 @@ jobs:
       PYTHONFAULTHANDLER: "true"
 
     steps:
-      - uses: "actions/checkout@v2"
+      - uses: "actions/checkout@v3"
         with:
           # We need tags to get the correct code version:
           fetch-depth: 0
@@ -125,7 +125,7 @@ jobs:
     name: "Documentation check and publish"
     runs-on: "ubuntu-latest"
     steps:
-      - uses: "actions/checkout@v2"
+      - uses: "actions/checkout@v3"
       - name: "Run mdbook"
         run: |
           set -euo pipefail
