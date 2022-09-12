@@ -139,3 +139,42 @@ jobs:
           set -euo pipefail
           curl -X POST -d '{}' "$PUBLISH_DOCS_HOOK"
 
+  arm-wheels:
+    name: "Wheels for ARM64"
+    runs-on: "ubuntu-latest"
+    if: startsWith(github.event.ref, 'refs/tags')
+    env:
+      CIBW_ARCHS_LINUX: aarch64
+      CIBW_BEFORE_ALL_LINUX: "curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain stable -y"
+      CIBW_BEFORE_BUILD: "touch filpreload/src/_filpreload.c"  # force rebuild of Python code with new interpreter
+      CIBW_ENVIRONMENT: 'PATH="$PATH:$HOME/.cargo/bin"'
+      CIBW_SKIP: "cp27-* cp34-* cp35-* cp36-* pp* *-musllinux*"
+      CIBW_TEST_COMMAND: python -m filprofiler run {project}/benchmarks/pystone.py
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          # We need tags to get the correct code version:
+          fetch-depth: 0
+      - name: Set up QEMU
+        if: runner.os == 'Linux'
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: arm64
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.8.1
+        with:
+          output-dir: dist
+      - uses: actions/upload-artifact@v2
+        with:
+          name: "arm64-wheel"
+          path: dist/*.whl
+      - name: Publish distribution 📦 to PyPI
+        if: startsWith(github.event.ref, 'refs/tags')
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: |
+            set -euo pipefail
+            pip install twine
+            twine check dist/*.whl
+            twine upload --repository pypi dist/filprofiler*.whl
