@@ -32,11 +32,11 @@ jobs:
       PYTHONFAULTHANDLER: "true"
 
     steps:
-      - uses: "actions/checkout@v2"
+      - uses: "actions/checkout@v3"
         with:
           # We need tags to get the correct code version:
           fetch-depth: 0
-      - uses: "actions/setup-python@v2"
+      - uses: "actions/setup-python@v4"
         with:
           python-version: "${{ matrix.python-version }}"
       - uses: "actions-rs/toolchain@v1"
@@ -76,11 +76,11 @@ jobs:
           make test
       - name: "Build macOS wheels"
         if: startsWith(matrix.os, 'mac') && (matrix.python-version == '3.9')
-        uses: pypa/cibuildwheel@v2.7.0
+        uses: pypa/cibuildwheel@v2.9.0
         env:
           MACOSX_DEPLOYMENT_TARGET: "10.15"
           CIBW_ARCHS_MACOS: "x86_64 arm64"
-          CIBW_SKIP: "cp37-macosx_arm64 cp36*"
+          CIBW_SKIP: "cp37-macosx_arm64 cp36* pp*"
         with:
           output-dir: dist
       - name: "Build manylinux wheels"
@@ -125,7 +125,7 @@ jobs:
     name: "Documentation check and publish"
     runs-on: "ubuntu-latest"
     steps:
-      - uses: "actions/checkout@v2"
+      - uses: "actions/checkout@v3"
       - name: "Run mdbook"
         run: |
           set -euo pipefail
@@ -139,3 +139,42 @@ jobs:
           set -euo pipefail
           curl -X POST -d '{}' "$PUBLISH_DOCS_HOOK"
 
+  arm-wheels:
+    name: "Wheels for ARM64"
+    runs-on: "ubuntu-latest"
+    if: startsWith(github.event.ref, 'refs/tags')
+    env:
+      CIBW_ARCHS_LINUX: aarch64
+      CIBW_BEFORE_ALL_LINUX: "curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain stable -y"
+      CIBW_BEFORE_BUILD: "touch filpreload/src/_filpreload.c"  # force rebuild of Python code with new interpreter
+      CIBW_ENVIRONMENT: 'PATH="$PATH:$HOME/.cargo/bin"'
+      CIBW_SKIP: "cp27-* cp34-* cp35-* cp36-* cp311-* pp* *-musllinux*"
+      CIBW_TEST_COMMAND: python -m filprofiler run {project}/benchmarks/pystone.py
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          # We need tags to get the correct code version:
+          fetch-depth: 0
+      - name: Set up QEMU
+        if: runner.os == 'Linux'
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: arm64
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.9.0
+        with:
+          output-dir: dist
+      - uses: actions/upload-artifact@v2
+        with:
+          name: "arm64-wheel"
+          path: dist/*.whl
+      - name: Publish distribution 📦 to PyPI
+        if: startsWith(github.event.ref, 'refs/tags')
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: |
+            set -euo pipefail
+            pip install twine
+            twine check dist/*.whl
+            twine upload --repository pypi dist/filprofiler*.whl

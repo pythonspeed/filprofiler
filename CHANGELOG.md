@@ -1,5 +1,11 @@
 # Release notes
 
+## Fil 2022.09.0 (2022-09-12)
+
+### Features
+
+- Added wheels for ARM on Linux (`aarch64`), useful for running native Docker images on ARM Macs. ([#395](https://github.com/pythonspeed/filprofiler/issues/395))
+
 ## Fil 2022.07.0 (2022-07-22)
 
 ### Bugfixes

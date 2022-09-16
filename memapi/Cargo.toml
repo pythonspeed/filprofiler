@@ -10,11 +10,11 @@ license = "Apache-2.0"
 [dependencies]
 im = "15"
 itertools = "0.10"
-ahash = "0.7"
+ahash = "0.8"
 derivative = "2.2"
 lazy_static = "1.4"
 backtrace = "0.3"
-once_cell = "1.13"
+once_cell = "1.14"
 libloading = "0.7"
 libc = "0.2"
 serde = {version = "1", features = ["derive"] }
