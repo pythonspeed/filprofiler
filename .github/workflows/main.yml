@@ -49,31 +49,31 @@ jobs:
       #- uses: Swatinem/rust-cache@v1
       #  with:
       #    key: "${{ matrix.os }}-${{ matrix.python-version }}"
-      - name: "Install gfortran"
-        if: contains(matrix.os, 'ubuntu')
-        run: |
-            sudo apt-get update
-            sudo apt-get install -y gfortran
-      - name: Install gfortran 2
-        if: contains(matrix.os, 'macos')
-        run: |
-          set -euo pipefail
-          brew install gcc@9 || true
-          gfortran --version || sudo ln -s /usr/local/bin/gfortran-9 /usr/local/bin/gfortran
-          gfortran --version
-      - name: "Install dependencies and code"
-        run: |
-          set -euo pipefail
-          make venv
-          . venv/bin/activate
-          python -m sysconfig
-          make
-          pip install -e .[dev]
-      - name: "Run tests"
-        run: |
-          set -euo pipefail
-          . venv/bin/activate
-          make test
+      # - name: "Install gfortran"
+      #   if: contains(matrix.os, 'ubuntu')
+      #   run: |
+      #       sudo apt-get update
+      #       sudo apt-get install -y gfortran
+      # - name: Install gfortran 2
+      #   if: contains(matrix.os, 'macos')
+      #   run: |
+      #     set -euo pipefail
+      #     brew install gcc@9 || true
+      #     gfortran --version || sudo ln -s /usr/local/bin/gfortran-9 /usr/local/bin/gfortran
+      #     gfortran --version
+      # - name: "Install dependencies and code"
+      #   run: |
+      #     set -euo pipefail
+      #     make venv
+      #     . venv/bin/activate
+      #     python -m sysconfig
+      #     make
+      #     pip install -e .[dev]
+      # - name: "Run tests"
+      #   run: |
+      #     set -euo pipefail
+      #     . venv/bin/activate
+      #     make test
       - name: "Build macOS wheels"
         if: startsWith(matrix.os, 'mac') && (matrix.python-version == '3.9')
         uses: pypa/cibuildwheel@v2.9.0
@@ -81,6 +81,7 @@ jobs:
           MACOSX_DEPLOYMENT_TARGET: "10.15"
           CIBW_ARCHS_MACOS: "x86_64 arm64"
           CIBW_SKIP: "cp37-macosx_arm64 cp36* pp*"
+          CIBW_TEST_COMMAND: python -m filprofiler run {project}/benchmarks/pystone.py
         with:
           output-dir: dist
       - name: "Build manylinux wheels"
