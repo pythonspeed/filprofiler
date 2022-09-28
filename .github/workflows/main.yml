@@ -80,7 +80,7 @@ jobs:
         env:
           MACOSX_DEPLOYMENT_TARGET: "10.15"
           CIBW_ARCHS_MACOS: "x86_64 arm64"
-          CIBW_SKIP: "cp37-macosx_arm64 cp36* pp*"
+          CIBW_SKIP: "cp37-macosx_arm64 cp36* pp* cp311*"
           CIBW_TEST_COMMAND: python -m filprofiler run {project}/benchmarks/pystone.py
         with:
           output-dir: dist
