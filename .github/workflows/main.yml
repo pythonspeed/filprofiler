@@ -23,8 +23,8 @@ jobs:
     name: "${{ matrix.os }}: Python ${{ matrix.python-version }}"
     strategy:
       matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10"]
-        os: ["ubuntu-20.04", "macos-10.15"]
+        python-version: ["3.9"] #["3.7", "3.8", "3.9", "3.10"]
+        os: ["macos-10.15"] #["ubuntu-20.04", "macos-10.15"]
 
     runs-on: "${{ matrix.os }}"
 
@@ -84,20 +84,20 @@ jobs:
           CIBW_TEST_COMMAND: python -m filprofiler run {project}/benchmarks/pystone.py
         with:
           output-dir: dist
-      - name: "Build manylinux wheels"
-        if: startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.8')
-        run: |
-            set -euo pipefail
-            . venv/bin/activate
-            make manylinux-wheel
-            # Test wheel
-            deactivate
-            python3.8 -m venv venv2
-            . venv2/bin/activate
-            pip install -r requirements-dev.txt
-            pip install dist/*-cp38-*manylinux*.whl
-            mv filprofiler filprofiler.disabled
-            make test-python-no-deps
+      # - name: "Build manylinux wheels"
+      #   if: startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.8')
+      #   run: |
+      #       set -euo pipefail
+      #       . venv/bin/activate
+      #       make manylinux-wheel
+      #       # Test wheel
+      #       deactivate
+      #       python3.8 -m venv venv2
+      #       . venv2/bin/activate
+      #       pip install -r requirements-dev.txt
+      #       pip install dist/*-cp38-*manylinux*.whl
+      #       mv filprofiler filprofiler.disabled
+      #       make test-python-no-deps
       - uses: actions/upload-artifact@v2
         with:
           name: "${{ matrix.os }}-${{ matrix.python-version }}-wheel"
