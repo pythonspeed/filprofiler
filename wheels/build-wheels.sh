@@ -5,7 +5,7 @@ mkdir /tmp/home
 mkdir /tmp/wheel
 export HOME=/tmp/home
 
-curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain stable -y
+curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain 1.63 -y
 export PATH="$HOME/.cargo/bin:$PATH"
 
 cd /src

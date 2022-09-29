@@ -46,9 +46,9 @@ jobs:
         if: startsWith(matrix.os, 'mac') && (matrix.python-version == '3.9')
         run: |
           rustup target add aarch64-apple-darwin
-      #- uses: Swatinem/rust-cache@v1
-      #  with:
-      #    key: "${{ matrix.os }}-${{ matrix.python-version }}"
+      # - uses: Swatinem/rust-cache@v1
+      #   with:
+      #     key: "${{ matrix.os }}-${{ matrix.python-version }}"
       - name: "Install gfortran"
         if: contains(matrix.os, 'ubuntu')
         run: |
@@ -80,7 +80,9 @@ jobs:
         env:
           MACOSX_DEPLOYMENT_TARGET: "10.15"
           CIBW_ARCHS_MACOS: "x86_64 arm64"
-          CIBW_SKIP: "cp37-macosx_arm64 cp36* pp*"
+          CIBW_SKIP: "cp37-macosx_arm64 cp36* pp* cp311*"
+          CIBW_BEFORE_BUILD: "touch filpreload/src/_filpreload.c"  # force rebuild of Python code with new interpreter
+          CIBW_TEST_COMMAND: python -m filprofiler run {project}/benchmarks/pystone.py
         with:
           output-dir: dist
       - name: "Build manylinux wheels"
