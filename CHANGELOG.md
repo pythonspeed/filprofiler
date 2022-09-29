@@ -1,5 +1,11 @@
 # Release notes
 
+## Fil 2022.09.1 (2022-09-29)
+
+### Bugfixes
+
+- Hopefully fixed segfault on macOS, on Python 3.7 and perhaps other versions. ([#412](https://github.com/pythonspeed/filprofiler/issues/412))
+
 ## Fil 2022.09.0 (2022-09-12)
 
 ### Features
