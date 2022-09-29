@@ -19,7 +19,7 @@ extern "C" {
     fn _exit(exit_code: std::os::raw::c_int);
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FunctionId(u64);
 
 impl FunctionId {
@@ -85,7 +85,7 @@ impl FunctionLocations for VecFunctionLocations {
 pub type LineNumber = u16; // TODO u32, newtype
 
 /// A specific location: file + function + line number.
-#[derive(Clone, Debug, PartialEq, Eq, Copy, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Copy, Hash, Serialize, Deserialize)]
 pub struct CallSiteId {
     /// The function + filename. We use IDs for performance reasons (faster hashing).
     function: FunctionId,
@@ -103,7 +103,7 @@ impl CallSiteId {
 }
 
 /// The current Python callstack.
-#[derive(Derivative)]
+#[derive(Derivative, Serialize, Deserialize)]
 #[derivative(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Callstack {
     calls: Vec<CallSiteId>,
