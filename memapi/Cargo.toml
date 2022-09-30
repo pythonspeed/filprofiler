@@ -19,7 +19,9 @@ libloading = "0.7"
 libc = "0.2"
 
 [dependencies.inferno]
-version = "0.11"
+# Temporary fork until https://github.com/jonhoo/inferno/pull/262 is merged.
+git = "https://github.com/itamarst/inferno.git"
+branch = "monospace-fonts"
 default-features = false
 
 [dependencies.psutil]
@@ -33,7 +35,7 @@ default-features = false
 features = []
 
 [target.'cfg(target_os = "linux")'.dependencies]
-cgroups-rs = "0.2.10"
+cgroups-rs = "0.2.11"
 
 [dev-dependencies]
 proptest = "1.0"
