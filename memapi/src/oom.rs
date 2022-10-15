@@ -132,18 +132,18 @@ impl OutOfMemoryEstimator {
 }
 
 #[cfg(target_os = "linux")]
-fn get_cgroup_paths<'a>(proc_cgroups: &'a str) -> Vec<&'a str> {
+fn get_cgroup_paths<'a>(proc_cgroups: &'a str) -> Option<Vec<&'a str>> {
     let mut result = vec![];
     for line in proc_cgroups.lines() {
         // TODO better error handling?
         let mut parts = line.splitn(3, ":");
-        let subsystems = parts.nth(1).unwrap();
+        let subsystems = parts.nth(1)?;
         if (subsystems == "") || subsystems.split(",").any(|s| s == "memory") {
-            let cgroup_path = parts.nth(0).unwrap().strip_prefix("/").unwrap();
+            let cgroup_path = parts.nth(0)?.strip_prefix("/")?;
             result.push(cgroup_path);
         }
     }
-    result
+    Some(result)
 }
 
 /// Real system information.
@@ -167,14 +167,14 @@ impl RealMemoryInfo {
                     return None;
                 }
             };
-            let cgroup_paths = get_cgroup_paths(&contents);
-            for path in cgroup_paths {
+            let cgroup_paths = get_cgroup_paths(&contents)?;
+            if let Some(path) = cgroup_paths.into_iter().next() {
                 let h = cgroups_rs::hierarchies::auto();
                 let cgroup = cgroups_rs::Cgroup::load(h, path);
                 // Make sure memory_stat() works. Sometimes it doesn't
                 // (https://github.com/pythonspeed/filprofiler/issues/147). If
                 // it doesn't, this'll panic.
-                let mem: &cgroups_rs::memory::MemController = cgroup.controller_of().unwrap();
+                let mem: &cgroups_rs::memory::MemController = cgroup.controller_of()?;
                 let _mem = mem.memory_stat();
                 return Some(cgroup);
             }
@@ -190,7 +190,7 @@ impl RealMemoryInfo {
             }
         };
         Self {
-            cgroup: cgroup,
+            cgroup,
             process: psutil::process::Process::current().ok(),
         }
     }
@@ -231,14 +231,18 @@ impl RealMemoryInfo {
 
 impl MemoryInfo for RealMemoryInfo {
     fn total_memory(&self) -> usize {
-        psutil::memory::virtual_memory().unwrap().total() as usize
+        psutil::memory::virtual_memory()
+            .map(|vm| vm.total() as usize)
+            .unwrap_or(0)
     }
 
     /// Return how much free memory we have, as bytes.
     fn get_available_memory(&self) -> usize {
         // This will include memory that can become available by syncing
         // filesystem buffers to disk, which is probably what we want.
-        let available = psutil::memory::virtual_memory().unwrap().available() as usize;
+        let available = psutil::memory::virtual_memory()
+            .map(|vm| vm.available() as usize)
+            .unwrap_or(std::usize::MAX);
         let cgroup_available = self.get_cgroup_available_memory();
         std::cmp::min(available, cgroup_available)
     }
@@ -261,8 +265,11 @@ impl MemoryInfo for RealMemoryInfo {
         eprintln!(
             "=fil-profile= cgroup (e.g. container) memory info: {:?}",
             if let Some(cgroup) = &self.cgroup {
-                let mem: &cgroups_rs::memory::MemController = cgroup.controller_of().unwrap();
-                Some(mem.memory_stat())
+                if let Some(mem) = &cgroup.controller_of::<cgroups_rs::memory::MemController>() {
+                    Some(mem.memory_stat())
+                } else {
+                    None
+                }
             } else {
                 None
             }
