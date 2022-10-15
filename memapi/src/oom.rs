@@ -132,14 +132,14 @@ impl OutOfMemoryEstimator {
 }
 
 #[cfg(target_os = "linux")]
-fn get_cgroup_paths<'a>(proc_cgroups: &'a str) -> Option<Vec<&'a str>> {
+fn get_cgroup_paths(proc_cgroups: &str) -> Option<Vec<&str>> {
     let mut result = vec![];
     for line in proc_cgroups.lines() {
         // TODO better error handling?
-        let mut parts = line.splitn(3, ":");
+        let mut parts = line.splitn(3, ':');
         let subsystems = parts.nth(1)?;
-        if (subsystems == "") || subsystems.split(",").any(|s| s == "memory") {
-            let cgroup_path = parts.nth(0)?.strip_prefix("/")?;
+        if subsystems.is_empty() || subsystems.split(',').any(|s| s == "memory") {
+            let cgroup_path = parts.next()?.strip_prefix('/')?;
             result.push(cgroup_path);
         }
     }
@@ -156,9 +156,9 @@ pub struct RealMemoryInfo {
     cgroup: Option<cgroups_rs::Cgroup>,
 }
 
-impl RealMemoryInfo {
+impl Default for RealMemoryInfo {
     #[cfg(target_os = "linux")]
-    pub fn new() -> Self {
+    fn default() -> Self {
         let get_cgroup = || {
             let contents = match read_to_string("/proc/self/cgroup") {
                 Ok(contents) => contents,
@@ -196,12 +196,14 @@ impl RealMemoryInfo {
     }
 
     #[cfg(target_os = "macos")]
-    pub fn new() -> Self {
+    fn default() -> Self {
         Self {
             process: psutil::process::Process::current().ok(),
         }
     }
+}
 
+impl RealMemoryInfo {
     #[cfg(target_os = "linux")]
     pub fn get_cgroup_available_memory(&self) -> usize {
         let mut result = std::usize::MAX;
@@ -265,11 +267,10 @@ impl MemoryInfo for RealMemoryInfo {
         eprintln!(
             "=fil-profile= cgroup (e.g. container) memory info: {:?}",
             if let Some(cgroup) = &self.cgroup {
-                if let Some(mem) = &cgroup.controller_of::<cgroups_rs::memory::MemController>() {
-                    Some(mem.memory_stat())
-                } else {
-                    None
-                }
+                cgroup
+                    .controller_of::<cgroups_rs::memory::MemController>()
+                    .as_ref()
+                    .map(|mem| mem.memory_stat())
             } else {
                 None
             }
@@ -376,7 +377,7 @@ mod tests {
     proptest! {
         // Random allocations don't break invariants
         #[test]
-        fn not_oom(allocated_sizes in prop::collection::vec(1..1000 as usize, 10..2000)) {
+        fn not_oom(allocated_sizes in prop::collection::vec(1..1000usize, 10..2000)) {
             let (mut estimator, memory_info) = setup_estimator();
             let mut allocated = 0;
             for size in allocated_sizes {
