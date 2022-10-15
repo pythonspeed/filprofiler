@@ -383,12 +383,13 @@ def test_out_of_memory_slow_leak_cgroups():
 
     expected_alloc = ((str(script), "<module>", 3),)
 
+    failed_alloc_size = match(allocations, {expected_alloc: big}, lambda kb: kb * 1024)
     # Should've allocated at least a little before running out, unless testing
     # environment is _really_ restricted, in which case other tests would've
     # failed.
-    failed_alloc_size = match(allocations, {expected_alloc: big}, lambda kb: kb * 1024)
-    assert failed_alloc_size > 0.7 * memory_limit
-    assert failed_alloc_size < 1.3 * memory_limit
+    assert failed_alloc_size > 100 * 1024 * 1024
+    # Shouldn't have allocated much beyond the limit.
+    assert failed_alloc_size < 1.1 * memory_limit
 
 
 def test_external_behavior():
