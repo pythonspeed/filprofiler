@@ -254,6 +254,7 @@ def test_out_of_memory():
     written out.
     """
     script = TEST_SCRIPTS / "oom.py"
+    # Exit code 53 means out-of-memory detection was triggered
     output_dir = profile(script, expect_exit_code=53)
     time.sleep(10)  # wait for child process to finish
     allocations = get_allocations(
@@ -285,6 +286,7 @@ def test_out_of_memory_slow_leak():
     written out.
     """
     script = TEST_SCRIPTS / "oom-slow.py"
+    # Exit code 53 means out-of-memory detection was triggered
     output_dir = profile(script, expect_exit_code=53)
     time.sleep(10)  # wait for child process to finish
     allocations = get_allocations(
@@ -367,6 +369,7 @@ def test_out_of_memory_slow_leak_cgroups():
     memory_limit = available_memory // 4
     output_dir = profile(
         script,
+        # Exit code 53 means out-of-memory detection was triggered
         expect_exit_code=53,
         argv_prefix=get_systemd_run_args(memory_limit),
     )
@@ -384,12 +387,8 @@ def test_out_of_memory_slow_leak_cgroups():
     expected_alloc = ((str(script), "<module>", 3),)
 
     failed_alloc_size = match(allocations, {expected_alloc: big}, lambda kb: kb * 1024)
-    # Should've allocated at least a little before running out, unless testing
-    # environment is _really_ restricted, in which case other tests would've
-    # failed.
-    assert failed_alloc_size > 100 * 1024 * 1024
-    # Shouldn't have allocated much beyond the limit.
-    assert failed_alloc_size < 1.1 * memory_limit
+    # We shouldn't trigger OOM detection too soon.
+    assert failed_alloc_size > 0.7 * memory_limit
 
 
 def test_external_behavior():
