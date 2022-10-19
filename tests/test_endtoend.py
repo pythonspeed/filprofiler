@@ -254,6 +254,7 @@ def test_out_of_memory():
     written out.
     """
     script = TEST_SCRIPTS / "oom.py"
+    # Exit code 53 means out-of-memory detection was triggered
     output_dir = profile(script, expect_exit_code=53)
     time.sleep(10)  # wait for child process to finish
     allocations = get_allocations(
@@ -285,6 +286,7 @@ def test_out_of_memory_slow_leak():
     written out.
     """
     script = TEST_SCRIPTS / "oom-slow.py"
+    # Exit code 53 means out-of-memory detection was triggered
     output_dir = profile(script, expect_exit_code=53)
     time.sleep(10)  # wait for child process to finish
     allocations = get_allocations(
@@ -326,7 +328,7 @@ def test_out_of_memory_detection_disabled():
         assert False, "process succeeded?!"
 
 
-def get_systemd_run_args(available_memory):
+def get_systemd_run_args(memory_limit):
     """
     Figure out if we're on system with cgroups v2, or not, and return
     appropriate systemd-run args.
@@ -340,7 +342,7 @@ def get_systemd_run_args(available_memory):
         "--gid",
         str(os.getegid()),
         "-p",
-        f"MemoryLimit={available_memory // 4}B",
+        f"MemoryLimit={memory_limit}B",
         "--scope",
         "--same-dir",
     ]
@@ -364,10 +366,12 @@ def test_out_of_memory_slow_leak_cgroups():
     """
     available_memory = psutil.virtual_memory().available
     script = TEST_SCRIPTS / "oom-slow.py"
+    memory_limit = available_memory // 4
     output_dir = profile(
         script,
+        # Exit code 53 means out-of-memory detection was triggered
         expect_exit_code=53,
-        argv_prefix=get_systemd_run_args(available_memory),
+        argv_prefix=get_systemd_run_args(memory_limit),
     )
     time.sleep(10)  # wait for child process to finish
     allocations = get_allocations(
@@ -382,10 +386,9 @@ def test_out_of_memory_slow_leak_cgroups():
 
     expected_alloc = ((str(script), "<module>", 3),)
 
-    # Should've allocated at least a little before running out, unless testing
-    # environment is _really_ restricted, in which case other tests would've
-    # failed.
-    assert match(allocations, {expected_alloc: big}, as_mb) > 100
+    failed_alloc_size = match(allocations, {expected_alloc: big}, lambda kb: kb * 1024)
+    # We shouldn't trigger OOM detection too soon.
+    assert failed_alloc_size > 0.7 * memory_limit
 
 
 def test_external_behavior():
@@ -506,7 +509,7 @@ def test_jupyter(tmpdir):
             continue
         else:
             actual_path = key
-    assert actual_path != None
+    assert actual_path is not None
     assert actual_path[0][0] != actual_path[1][0]  # code is in different cells
     path2 = (
         (re.compile(".*ipy.*"), "__magic_run_with_fil", 2),

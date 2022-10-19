@@ -32,7 +32,7 @@ lazy_static! {
             if std::env::var("__FIL_DISABLE_OOM_DETECTION") == Ok("1".to_string()) {
                 Box::new(InfiniteMemory {})
             } else {
-                Box::new(RealMemoryInfo::new())
+                Box::new(RealMemoryInfo::default())
             }
         ),
     });
