@@ -39,7 +39,7 @@ cgroups-rs = "0.2.11"
 
 [dev-dependencies]
 proptest = "1.0"
-proc-maps = "0.2.1"
+proc-maps = "0.3.0"
 tempfile = "3.3.0"
 
 [features]
