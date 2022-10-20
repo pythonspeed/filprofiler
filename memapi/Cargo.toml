@@ -14,13 +14,15 @@ ahash = "0.8"
 derivative = "2.2"
 lazy_static = "1.4"
 backtrace = "0.3"
-once_cell = "1.14"
+once_cell = "1.15"
 libloading = "0.7"
 libc = "0.2"
 serde = {version = "1", features = ["derive"] }
 
 [dependencies.inferno]
-version = "0.11"
+# Temporary fork until https://github.com/jonhoo/inferno/pull/262 is merged.
+git = "https://github.com/itamarst/inferno.git"
+branch = "monospace-fonts"
 default-features = false
 
 [dependencies.psutil]
@@ -29,16 +31,16 @@ default-features = false
 features = ["memory", "process"]
 
 [dependencies.pyo3]
-version = "0.16"
+version = "0.17"
 default-features = false
 features = []
 
 [target.'cfg(target_os = "linux")'.dependencies]
-cgroups-rs = "0.2.10"
+cgroups-rs = "0.2.11"
 
 [dev-dependencies]
 proptest = "1.0"
-proc-maps = "0.2.1"
+proc-maps = "0.3.0"
 tempfile = "3.3.0"
 
 [features]
