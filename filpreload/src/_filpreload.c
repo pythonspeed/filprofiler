@@ -1,10 +1,16 @@
 #include "Python.h"
+#if PY_MINOR_VERSION < 11
 #include "code.h"
+#else
+#include "internal/pycore_code.h"
+#include "internal/pycore_frame.h"
+#endif
+#include "frameobject.h"
 #include "object.h"
+
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
-#include "frameobject.h"
 #include <dlfcn.h>
 #include <pthread.h>
 #include <stdatomic.h>
@@ -237,23 +243,24 @@ fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
     */
     uint64_t function_id = 0;
     assert(extra_code_index != -1);
-    _PyCode_GetExtra((PyObject *)frame->f_code, extra_code_index,
-                     (void **)&function_id);
+    PyCodeObject *code = PyFrame_GetCode(frame);
+    _PyCode_GetExtra((PyObject *)code, extra_code_index, (void **)&function_id);
     if (function_id == 0) {
       Py_ssize_t filename_length, function_length;
-      const char* filename = PyUnicode_AsUTF8AndSize(frame->f_code->co_filename,
+      const char* filename = PyUnicode_AsUTF8AndSize(code->co_filename,
                                                      &filename_length);
-      const char* function_name = PyUnicode_AsUTF8AndSize(frame->f_code->co_name,
+      const char* function_name = PyUnicode_AsUTF8AndSize(code->co_name,
                                                           &function_length);
       increment_reentrancy();
       function_id = pymemprofile_add_function_location(filename, (uint64_t)filename_length, function_name, (uint64_t)function_length);
       decrement_reentrancy();
-      _PyCode_SetExtra((PyObject *)frame->f_code, extra_code_index,
+      _PyCode_SetExtra((PyObject *)code, extra_code_index,
                        (void *)function_id + 1);
     } else {
       function_id -= 1;
     }
     start_call(function_id, frame->f_lineno);
+    Py_DECREF(code);
     break;
   case PyTrace_RETURN:
     finish_call();
