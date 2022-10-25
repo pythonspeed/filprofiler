@@ -135,6 +135,7 @@ pub fn get_flamegraph<I: IntoIterator<Item = String>>(
     options.reverse_stack_order = reversed;
     options.color_diffusion = true;
     options.direction = flamegraph::Direction::Inverted;
+    options.min_width = 0.2;
     // Maybe disable this some day; but for now it makes debugging much
     // easier:
     options.pretty_xml = true;
