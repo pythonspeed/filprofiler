@@ -1,4 +1,6 @@
 #include "Python.h"
+#include "ceval.h"
+#include "pyframe.h"
 #if PY_MINOR_VERSION < 11
 #include "code.h"
 #else
@@ -124,8 +126,22 @@ static inline int should_track_memory() {
   return (likely(initialized) && atomic_load_explicit(&tracking_allocations, memory_order_acquire) && !am_i_reentrant());
 }
 
-// Current thread's Python state:
-static _Thread_local PyFrameObject *current_frame = NULL;
+// Current thread's Python state; typically only set in C functions where GIL
+// might be released.
+static _Thread_local int current_line_number = -1;
+
+static inline int get_current_line_number() {
+  if (PyGILState_Check()) {
+    PyFrameObject *frame = PyEval_GetFrame();
+    if (frame != NULL) {
+      return PyFrame_GetLineNumber(frame);
+    }
+  }
+  if (current_line_number != -1) {
+    return current_line_number;
+  }
+  return 0;
+}
 
 // The file and function name responsible for an allocation.
 struct FunctionLocation {
@@ -206,7 +222,7 @@ static void __attribute__((constructor)) constructor() {
   initialized = 1;
 }
 
-static void start_call(uint64_t function_id, uint16_t line_number) {
+static void start_call(uint64_t function_id, uint16_t line_number, PyFrameObject* current_frame) {
   if (should_track_memory()) {
     increment_reentrancy();
     uint16_t parent_line_number = 0;
@@ -232,15 +248,13 @@ __attribute__((visibility("hidden"))) int
 fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
   switch (what) {
   case PyTrace_CALL:
-    // Store the current frame, so malloc() can look up line number:
-    current_frame = frame;
-
     /*
       We want an efficient identifier for filename+fuction name. So we register
       the function + filename with some Rust code that gives back its ID, and
       then store the ID. Due to bad API design, value 0 indicates "no result",
       so we actually store the result + 1.
     */
+    current_line_number = frame->f_lineno;
     uint64_t function_id = 0;
     assert(extra_code_index != -1);
     PyCodeObject *code = PyFrame_GetCode(frame);
@@ -259,13 +273,24 @@ fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
     } else {
       function_id -= 1;
     }
-    start_call(function_id, frame->f_lineno);
+    start_call(function_id, current_line_number, frame);
     Py_DECREF(code);
     break;
   case PyTrace_RETURN:
     finish_call();
-    // We're done with this frame, so set the parent frame:
-    current_frame = frame->f_back;
+    if (frame->f_back == NULL) {
+      current_line_number = -1;
+    } else {
+      current_line_number = frame->f_back->f_lineno;
+    }
+    break;
+  case PyTrace_C_CALL:
+    // C calls might release GIL, in which case they won't change the line
+    // number, so record it.
+    current_line_number = frame->f_lineno;
+    break;
+  case PyTrace_C_RETURN:
+    current_line_number = -1;
     break;
   default:
     break;
@@ -322,20 +347,12 @@ fil_dump_peak_to_flamegraph(const char *path) {
 
 // *** End APIs called by Python ***
 static void add_allocation(size_t address, size_t size) {
-  uint16_t line_number = 0;
-  PyFrameObject *f = current_frame;
-  if (f != NULL) {
-    line_number = PyFrame_GetLineNumber(f);
-  }
+  uint16_t line_number = get_current_line_number();
   pymemprofile_add_allocation(address, size, line_number);
 }
 
 static void add_anon_mmap(size_t address, size_t size) {
-  uint16_t line_number = 0;
-  PyFrameObject *f = current_frame;
-  if (f != NULL) {
-    line_number = PyFrame_GetLineNumber(f);
-  }
+  uint16_t line_number = get_current_line_number();
   pymemprofile_add_anon_mmap(address, size, line_number);
 }
 
