@@ -280,16 +280,17 @@ fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
     break;
   case PyTrace_RETURN:
     finish_call();
-    if (frame->f_back == NULL) {
+    PyFrameObject* parent = PyFrame_GetBack(frame);
+    if (parent == NULL) {
       current_line_number = -1;
     } else {
-      current_line_number = frame->f_back->f_lineno;
+      current_line_number = PyFrame_GetLineNumber(parent);
     }
     break;
   case PyTrace_C_CALL:
     // C calls might release GIL, in which case they won't change the line
     // number, so record it.
-    current_line_number = frame->f_lineno;
+    current_line_number = PyFrame_GetLineNumber(frame);
     break;
   case PyTrace_C_RETURN:
     current_line_number = -1;
