@@ -234,7 +234,8 @@ fn runpy_prefix_length(calls: std::slice::Iter<(CallSiteId, (&str, &str))>) -> u
     let mut length = 0;
     let runpy_path = get_runpy_path();
     for (_, (_, filename)) in calls {
-        if *filename == runpy_path {
+        // On Python 3.11 it uses <frozen runpy> for some reason.
+        if *filename == runpy_path || *filename == "<frozen runpy>" {
             length += 1;
         } else {
             return length;
