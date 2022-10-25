@@ -226,9 +226,11 @@ static void start_call(uint64_t function_id, uint16_t line_number, PyFrameObject
   if (should_track_memory()) {
     increment_reentrancy();
     uint16_t parent_line_number = 0;
-    if (current_frame != NULL && current_frame->f_back != NULL) {
-      PyFrameObject *f = current_frame->f_back;
-      parent_line_number = PyFrame_GetLineNumber(f);
+    if (current_frame != NULL) {
+      PyFrameObject *parent = PyFrame_GetBack(current_frame);
+      if (parent != NULL ){
+        parent_line_number = PyFrame_GetLineNumber(parent);
+      }
     }
     pymemprofile_start_call(parent_line_number, function_id, line_number);
     decrement_reentrancy();
