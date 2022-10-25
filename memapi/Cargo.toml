@@ -19,9 +19,7 @@ libloading = "0.7"
 libc = "0.2"
 
 [dependencies.inferno]
-# Temporary fork until https://github.com/jonhoo/inferno/pull/262 is merged.
-git = "https://github.com/itamarst/inferno.git"
-branch = "monospace-fonts"
+version = "0.11"
 default-features = false
 
 [dependencies.psutil]

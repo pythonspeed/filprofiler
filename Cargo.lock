@@ -424,7 +424,8 @@ dependencies = [
 [[package]]
 name = "inferno"
 version = "0.11.9"
-source = "git+https://github.com/itamarst/inferno.git?branch=monospace-fonts#41b1c3b39430e77534b4954443bc7d5b32acc60f"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb31a5d9068fccb34562007cd564bb08fff1478255b0534c549e93fcb658cd90"
 dependencies = [
  "ahash 0.7.6",
  "atty",
