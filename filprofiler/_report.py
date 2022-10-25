@@ -89,7 +89,8 @@ def render_report(output_path: str, now: datetime) -> str:
             and memory bottlenecks by continuously profiling in production.</strong></p></blockquote>
 <br>
             <br>
-<div style="text-align: center;"><p><input type="button" onclick="fullScreen('#peak-reversed');" value="Full screen"> · <a href="peak-memory-reversed.svg" target="_blank"><button>Open in new window</button></a></p>
+<div style="text-align: center;"><p><input type="button" onclick="fullScreen('#peak-reversed');" value="Full screen"> ·
+<a href="peak-memory-reversed.svg" target="_blank"><button>Open in new window</button></a></p>
             <iframe id="peak-reversed" src="peak-memory-reversed.svg" width="100%" height="400" scrolling="auto" frameborder="0"></iframe><br>
 </div>
 <div class="center">
