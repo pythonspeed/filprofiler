@@ -36,14 +36,15 @@ def render_report(output_path: str, now: datetime) -> str:
     body {{
         font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif;
         line-height: 1.2;
-        max-width: 40rem;
+        max-width: 90%;
         margin: 4rem auto;
         font-size: 18px;
     }}
-    blockquote {{ border-width: 1px; border-color: black; border-style: solid; padding: 1em; }}
-    div {{
-        text-align: center;
+    .center {{
+       max-width: 40rem;
+       margin: 0 auto;
     }}
+    blockquote {{ border-width: 1px; border-color: black; border-style: solid; padding: 1em; }}
   </style>
   <script>
    function compatRequestFullscreen(elem) {{
@@ -74,29 +75,31 @@ def render_report(output_path: str, now: datetime) -> str:
 <p><code>{argv}</code><p>
 
 <h2>Profiling result</h2>
-<div><p><input type="button" onclick="fullScreen('#peak');" value="Full screen"> · <a href="peak-memory.svg" target="_blank"><button>Open in new window</button></a></p>
+<div style="text-align: center;"><p><input type="button" onclick="fullScreen('#peak');" value="Full screen"> · <a href="peak-memory.svg" target="_blank"><button>Open in new window</button></a></p>
 <iframe id="peak" src="peak-memory.svg" width="100%" height="400" scrolling="auto" frameborder="0"></iframe><br>
 </div>
+<blockquote class="center">
+            <p style="text-align: center;"><em>Check out my other project:</em></p>
+            <h3>Find memory and performance bottlenecks in production!</h3>
+            <p>When your data pipeline is too slow in production, reproducing the problem
+            on your laptop is hard or impossible—which means identifying and fixing the problem can be tricky.</p>
+            <p>What if you knew the cause of the problem as soon as you realized it was happening?</p>
+            <p>That's why you need
+            <strong><a href="https://sciagraph.com/">the Sciagraph profiler</a></strong>, designed to <strong>find performance
+            and memory bottlenecks by continuously profiling in production.</strong></p></blockquote>
 <br>
-<br>
-<hr>
-<br>
-<div><p><input type="button" onclick="fullScreen('#peak-reversed');" value="Full screen"> · <a href="peak-memory-reversed.svg" target="_blank"><button>Open in new window</button></a></p>
+            <br>
+<div style="text-align: center;"><p><input type="button" onclick="fullScreen('#peak-reversed');" value="Full screen"> ·
+<a href="peak-memory-reversed.svg" target="_blank"><button>Open in new window</button></a></p>
             <iframe id="peak-reversed" src="peak-memory-reversed.svg" width="100%" height="400" scrolling="auto" frameborder="0"></iframe><br>
 </div>
-<br>
+<div class="center">
 <blockquote><strong>Need help, or does something look wrong?</strong>
 <a href="https://pythonspeed.com/fil/docs/">Read the documentation</a>,
 and if that doesn't help please
 <a href="https://github.com/pythonspeed/filprofiler/issues/new?body={bugreport}">file an issue</a>
 and I'll try to help.</blockquote>
 <br>
-<blockquote><strong>Want memory and performance profiling for your production batch jobs?</strong>
-I've also created an
-<a href="https://pythonspeed.com/sciagraph/"
->always-on profiler called Sciagraph</a> that is fast and robust enough to run in production.</blockquote>
-<br>
-
 <h2>Learn how to reduce memory usage</h2>
 
 <p>Need help reducing your data processing application's memory use? Check out tips and tricks <a href="https://pythonspeed.com/memory/">here</a>.</p>
@@ -133,7 +136,7 @@ if you're using threads.</li>
 </ul>
 
 <p>See <a href="https://pythonspeed.com/articles/measuring-memory-python/">this article</a> for more details.</p>
-
+</div>
 </body>
 </html>
 """.format(
