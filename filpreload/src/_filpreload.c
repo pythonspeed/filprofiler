@@ -23,6 +23,20 @@
 #include <stdbool.h>
 #include <errno.h>
 
+#if PY_MINOR_VERSION < 9
+PyFrameObject *PyFrame_GetBack(PyFrameObject *frame) {
+  if (frame->f_back != NULL) {
+    Py_INCREF(frame->f_back);
+  }
+  return frame->f_back;
+}
+
+PyCodeObject *PyFrame_GetCode(PyFrameObject *frame) {
+  Py_INCREF(frame->f_code);
+  return frame->f_code;
+}
+#endif
+
 // Macro to create the publicly exposed symbol:
 #ifdef __APPLE__
 #define SYMBOL_PREFIX(func) reimplemented_##func
@@ -40,9 +54,9 @@
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
-// Underlying APIs we're wrapping:
-static void *(*underlying_real_mmap)(void *addr, size_t length, int prot,
-                                     int flags, int fd, off_t offset) = 0;
+    // Underlying APIs we're wrapping:
+    static void *(*underlying_real_mmap)(void *addr, size_t length, int prot,
+                                         int flags, int fd, off_t offset) = 0;
 static int (*underlying_real_pthread_create)(pthread_t *thread,
                                              const pthread_attr_t *attr,
                                              void *(*start_routine)(void *),
@@ -229,6 +243,7 @@ static void start_call(uint64_t function_id, uint16_t line_number, PyFrameObject
       PyFrameObject *parent = PyFrame_GetBack(current_frame);
       if (parent != NULL ){
         parent_line_number = PyFrame_GetLineNumber(parent);
+        Py_DECREF(parent);
       }
     }
     pymemprofile_start_call(parent_line_number, function_id, line_number);
@@ -271,19 +286,21 @@ fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
       decrement_reentrancy();
       _PyCode_SetExtra((PyObject *)code, extra_code_index,
                        (void *)function_id + 1);
+      Py_DECREF(code);
     } else {
       function_id -= 1;
     }
     start_call(function_id, current_line_number, frame);
-    Py_DECREF(code);
     break;
   case PyTrace_RETURN:
     finish_call();
-    PyFrameObject* parent = PyFrame_GetBack(frame);
-    if (parent == NULL) {
-      current_line_number = -1;
-    } else {
-      current_line_number = PyFrame_GetLineNumber(parent);
+    if (frame != NULL) {
+      PyFrameObject* parent = PyFrame_GetBack(frame);
+      if (parent == NULL) {
+        current_line_number = -1;
+      } else {
+        current_line_number = PyFrame_GetLineNumber(parent);
+      }
     }
     break;
   case PyTrace_C_CALL:
