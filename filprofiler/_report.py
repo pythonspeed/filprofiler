@@ -76,16 +76,18 @@ def render_report(output_path: str, now: datetime) -> str:
 
 <h2>Profiling result</h2>
 <div style="text-align: center;"><p><input type="button" onclick="fullScreen('#peak');" value="Full screen"> · <a href="peak-memory.svg" target="_blank"><button>Open in new window</button></a></p>
-<iframe id="peak" src="peak-memory.svg" width="100%" height="400" scrolling="auto" frameborder="0"></iframe><br>
+<iframe id="peak" src="peak-memory.svg" width="100%" height="400" scrolling="auto" frameborder="0"></iframe>
 </div>
+<br>
 <blockquote class="center">
             <p style="text-align: center;"><em>Check out my other project:</em></p>
             <h3>Find memory and performance bottlenecks in production!</h3>
             <p>When your data pipeline is too slow in production, reproducing the problem
             on your laptop is hard or impossible—which means identifying and fixing the problem can be tricky.</p>
             <p>What if you knew the cause of the problem as soon as you realized it was happening?</p>
-            <p>That's why you need
-            <strong><a href="https://sciagraph.com/">the Sciagraph profiler</a></strong>, designed to <strong>find performance
+            <p>That's how
+            <strong><a href="https://sciagraph.com/">the Sciagraph profiler</a></strong> can help you:
+            it's designed to <strong>find performance
             and memory bottlenecks by continuously profiling in production.</strong></p></blockquote>
 <br>
             <br>
@@ -93,6 +95,7 @@ def render_report(output_path: str, now: datetime) -> str:
 <a href="peak-memory-reversed.svg" target="_blank"><button>Open in new window</button></a></p>
             <iframe id="peak-reversed" src="peak-memory-reversed.svg" width="100%" height="400" scrolling="auto" frameborder="0"></iframe><br>
 </div>
+
 <div class="center">
 <blockquote><strong>Need help, or does something look wrong?</strong>
 <a href="https://pythonspeed.com/fil/docs/">Read the documentation</a>,
