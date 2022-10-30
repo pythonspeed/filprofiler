@@ -1,6 +1,5 @@
 #include "Python.h"
 #include "ceval.h"
-#include "pyframe.h"
 #if PY_MINOR_VERSION < 11
 #include "code.h"
 #else
