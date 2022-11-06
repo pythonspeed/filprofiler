@@ -1,6 +1,6 @@
 # Using Fil for the first time
 
-First, [install Fil](#installation).
+First, [install Fil](installation.md).
 
 Then, create a Python file called `example.py` with the following code:
 
