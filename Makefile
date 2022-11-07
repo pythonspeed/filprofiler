@@ -40,17 +40,13 @@ test-python-no-deps:
 	cd tests/test-scripts && python -m numpy.f2py -c fortran.f90 -m fortran
 	env RUST_BACKTRACE=1 py.test -v tests/
 
-.PHONY: docker-image
-docker-image:
-	docker build -t manylinux-rust -f wheels/Dockerfile.build .
-
 .PHONY: wheel
 wheel:
 	python setup.py bdist_wheel
 
 .PHONY: manylinux-wheel
 manylinux-wheel:
-	docker run -u $(shell id -u):$(shell id -g) -v $(PWD):/src quay.io/pypa/manylinux2010_x86_64:latest /src/wheels/build-wheels.sh
+	docker run -u $(shell id -u):$(shell id -g) -v $(PWD):/src quay.io/pypa/manylinux2014_x86_64:latest /src/wheels/build-wheels.sh
 
 .PHONY: clean
 clean:
