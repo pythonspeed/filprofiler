@@ -40,10 +40,6 @@ test-python-no-deps:
 	cd tests/test-scripts && python -m numpy.f2py -c fortran.f90 -m fortran
 	env RUST_BACKTRACE=1 py.test -v tests/
 
-.PHONY: docker-image
-docker-image:
-	docker build -t manylinux-rust -f wheels/Dockerfile.build .
-
 .PHONY: wheel
 wheel:
 	python setup.py bdist_wheel
