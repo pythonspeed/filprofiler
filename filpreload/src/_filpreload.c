@@ -300,6 +300,7 @@ fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
         current_line_number = -1;
       } else {
         current_line_number = PyFrame_GetLineNumber(parent);
+        Py_DECREF(parent);
       }
     }
     break;
