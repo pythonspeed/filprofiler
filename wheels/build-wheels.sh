@@ -24,9 +24,9 @@ for PYBIN in /opt/python/cp{37,38,39,310,311}*/bin; do
     "${PYBIN}/python" -m pip wheel -w /tmp/wheel .
 done
 
-auditwheel repair --plat manylinux2010_x86_64 -w dist/ /tmp/wheel/filprofiler*cp37*whl
-auditwheel repair --plat manylinux2010_x86_64 -w dist/ /tmp/wheel/filprofiler*cp38*whl
-auditwheel repair --plat manylinux2010_x86_64 -w dist/ /tmp/wheel/filprofiler*cp39*whl
-auditwheel repair --plat manylinux2010_x86_64 -w dist/ /tmp/wheel/filprofiler*cp310*whl
-auditwheel repair --plat manylinux2010_x86_64 -w dist/ /tmp/wheel/filprofiler*cp311*whl
+auditwheel repair --plat manylinux2014_x86_64 -w dist/ /tmp/wheel/filprofiler*cp37*whl
+auditwheel repair --plat manylinux2014_x86_64 -w dist/ /tmp/wheel/filprofiler*cp38*whl
+auditwheel repair --plat manylinux2014_x86_64 -w dist/ /tmp/wheel/filprofiler*cp39*whl
+auditwheel repair --plat manylinux2014_x86_64 -w dist/ /tmp/wheel/filprofiler*cp310*whl
+auditwheel repair --plat manylinux2014_x86_64 -w dist/ /tmp/wheel/filprofiler*cp311*whl
 
