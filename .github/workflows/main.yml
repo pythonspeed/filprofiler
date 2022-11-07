@@ -76,7 +76,7 @@ jobs:
           make test
       - name: "Build macOS wheels"
         if: startsWith(matrix.os, 'mac') && (matrix.python-version == '3.9')
-        uses: pypa/cibuildwheel@v2.9.0
+        uses: pypa/cibuildwheel@v2.11.2
         env:
           MACOSX_DEPLOYMENT_TARGET: "10.15"
           CIBW_ARCHS_MACOS: "x86_64 arm64"
@@ -87,12 +87,17 @@ jobs:
           output-dir: dist
       - name: "Build manylinux wheels"
         if: startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.8')
+        uses: pypa/cibuildwheel@v2.11.2
+        env:
+          CIBW_SKIP: "cp36* pp* *musl*"
+          CIBW_BEFORE_BUILD: "touch filpreload/src/_filpreload.c"  # force rebuild of Python code with new interpreter
+          CIBW_TEST_COMMAND: python -m filprofiler run {project}/benchmarks/pystone.py
+        with:
+          output-dir: dist
+      - name: "Test manylinux, just a bit"
+        if: startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.8')
         run: |
             set -euo pipefail
-            . venv/bin/activate
-            make manylinux-wheel
-            # Test wheel
-            deactivate
             python3.8 -m venv venv2
             . venv2/bin/activate
             pip install -r requirements-dev.txt
