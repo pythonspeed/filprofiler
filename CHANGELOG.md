@@ -1,5 +1,11 @@
 # Release notes
 
+## 2022.11.0 (2022-11-07)
+
+### Features
+
+- Added initial Python 3.11 support; unfortunately this increased performance overhead a little. ([#381](https://github.com/pythonspeed/filprofiler/issues/381))
+
 ## 2022.10.0 (2022-10-19)
 
 ### Bugfixes
