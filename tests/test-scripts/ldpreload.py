@@ -2,10 +2,9 @@
 
 from ctypes import c_void_p
 
+from pymalloc import pyfree, pymalloc
+
 from filprofiler._tracer import preload
-
-from pymalloc import pymalloc, pyfree
-
 
 address = pymalloc(365)
 assert preload.pymemprofile_get_allocation_size(c_void_p(address)) == 365

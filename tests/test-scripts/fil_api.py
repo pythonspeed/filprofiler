@@ -1,6 +1,7 @@
 """Some code that uses the Fil API."""
 
 from tempfile import mkdtemp
+
 from filprofiler.api import profile
 
 

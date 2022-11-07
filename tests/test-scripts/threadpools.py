@@ -1,7 +1,7 @@
 """Validate that number of threads in thread pools is set to 1."""
 
-import numexpr
 import blosc
+import numexpr
 import threadpoolctl
 
 # APIs that return previous number of threads:

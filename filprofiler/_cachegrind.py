@@ -2,9 +2,9 @@
 Cachegrind performance metrics.
 """
 
-from typing import List, Dict
 from subprocess import check_call, check_output
 from tempfile import NamedTemporaryFile
+from typing import Dict, List
 
 
 def _run(args_list: List[str]) -> Dict[str, int]:

@@ -1,7 +1,8 @@
-from time import sleep
 import threading
+from time import sleep
 
 import numpy
+
 
 def thread1():
     # Main allocation after main thread exits:

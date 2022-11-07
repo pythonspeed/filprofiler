@@ -1,8 +1,8 @@
-from os.path import join
 from glob import glob
+from os.path import join
 
 from setuptools import setup
-from setuptools_rust import RustExtension, Binding
+from setuptools_rust import Binding, RustExtension
 
 
 def read(path):

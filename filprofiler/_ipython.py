@@ -4,14 +4,13 @@ a Jupyter notebook.
 """
 
 from pathlib import Path
-from textwrap import indent
 from tempfile import mkdtemp
+from textwrap import indent
 
-from IPython.core.magic import Magics, magics_class, cell_magic
+from IPython.core.magic import Magics, cell_magic, magics_class
 from IPython.display import IFrame, display
 
 from .api import profile
-
 
 HOPEFULLY_UNIQUE_VAR = "__arghbldsada__"
 

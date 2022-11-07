@@ -1,23 +1,25 @@
 """End-to-end tests."""
 
-from subprocess import check_call, check_output, CalledProcessError, run, PIPE
-from tempfile import mkdtemp, NamedTemporaryFile
-from pathlib import Path
 import os
-import time
-import sys
-from typing import Union
 import re
 import shutil
+import sys
+import time
 from glob import glob
+from pathlib import Path
+from subprocess import PIPE, CalledProcessError, check_call, check_output, run
+from tempfile import NamedTemporaryFile, mkdtemp
+from typing import Union
 from xml.etree import ElementTree
 
 import numpy.core.numeric
-from pampy import match, _ as ANY, MatchError
-import pytest
 import psutil
+import pytest
+from pampy import MatchError
+from pampy import _ as ANY
+from pampy import match
 
-from filprofiler._testing import get_allocations, big, as_mb
+from filprofiler._testing import as_mb, big, get_allocations
 from filprofiler._utils import glibc_version
 
 TEST_SCRIPTS = Path("tests") / "test-scripts"

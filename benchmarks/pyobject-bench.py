@@ -1,4 +1,5 @@
-import resource, time
+import resource
+import time
 
 start = time.time()
 

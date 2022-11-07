@@ -5,33 +5,30 @@ To run:
 $ fil-profile python -m pytest tests/test-scripts/fil-interpreter.py
 """
 
-import sys
-import os
-from ctypes import c_void_p
-import re
-from pathlib import Path
-from subprocess import check_output, check_call
 import multiprocessing
+import os
+import re
+import sys
+from ctypes import c_void_p
+from pathlib import Path
+from subprocess import check_call, check_output
 
-import pytest
+import fil_api
 import numpy as np
 import numpy.core.numeric
-from pampy import _ as ANY, match
+import pytest
+import threadpoolctl
 from IPython.core.displaypub import CapturingDisplayPublisher
 from IPython.core.interactiveshell import InteractiveShell
-import threadpoolctl
-
-from filprofiler._tracer import (
-    preload,
-    start_tracing,
-    stop_tracing,
-    disable_thread_pools,
-)
-from filprofiler._testing import get_allocations, big, as_mb
-from filprofiler._ipython import run_with_profile
-from filprofiler.api import profile
+from pampy import _ as ANY
+from pampy import match
 from pymalloc import pymalloc
-import fil_api
+
+from filprofiler._ipython import run_with_profile
+from filprofiler._testing import as_mb, big, get_allocations
+from filprofiler._tracer import (disable_thread_pools, preload, start_tracing,
+                                 stop_tracing)
+from filprofiler.api import profile
 
 
 def test_no_profiling():
@@ -189,8 +186,8 @@ def test_profiling_disables_threadpools(tmpdir, profile_func):
     cwd = os.getcwd()
     os.chdir(tmpdir)
 
-    import numexpr
     import blosc
+    import numexpr
 
     numexpr.set_num_threads(3)
     blosc.set_nthreads(3)

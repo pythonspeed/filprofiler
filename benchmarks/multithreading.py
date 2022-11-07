@@ -1,7 +1,7 @@
-import time
 import sys
-
+import time
 from threading import Thread
+
 from pymalloc import lots_of_allocs
 
 

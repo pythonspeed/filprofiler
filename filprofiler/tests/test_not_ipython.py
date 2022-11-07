@@ -1,8 +1,9 @@
 """Tests for trying to use IPython when you're not running via Fil."""
 
+import sys
+
 from IPython.core.interactiveshell import InteractiveShell
 from IPython.utils.capture import capture_output
-import sys
 
 
 def test_helpful_error():

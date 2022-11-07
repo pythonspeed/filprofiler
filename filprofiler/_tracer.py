@@ -1,19 +1,19 @@
 """Trace code, so that libpymemprofile_api know's where we are."""
 
 import atexit
-from ctypes import PyDLL
-from datetime import datetime
 import os
 import sys
 import threading
+import traceback
 import webbrowser
 from contextlib import contextmanager
+from ctypes import PyDLL
+from datetime import datetime
 from pathlib import Path
 from typing import Union
-import traceback
 
-from ._utils import timestamp_now, library_path
 from ._report import render_report
+from ._utils import library_path, timestamp_now
 
 
 def check_if_fil_preloaded():

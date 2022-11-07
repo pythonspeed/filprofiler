@@ -1,11 +1,10 @@
-import time
 import sys
+import time
 
 import numpy as np
-
+from scipy.ndimage import fourier_shift
 from skimage import data
 from skimage.registration import phase_cross_correlation
-from scipy.ndimage import fourier_shift
 from skimage.transform import rescale
 
 start = time.time()

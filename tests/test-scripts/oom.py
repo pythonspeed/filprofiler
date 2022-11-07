@@ -1,4 +1,3 @@
-import os, signal
 import numpy
 
 # This is peak:

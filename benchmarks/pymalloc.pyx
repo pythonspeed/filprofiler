@@ -1,5 +1,6 @@
-from libc.stdlib cimport malloc, free
 from libc.stdint cimport uint64_t
+from libc.stdlib cimport free, malloc
+
 
 def lots_of_allocs():
     cdef uint64_t i, j

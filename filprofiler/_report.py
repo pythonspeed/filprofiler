@@ -5,11 +5,12 @@ Eventually this might all be in Rust, but for now it's easier to do some of it
 post-fact in Python.
 """
 
-from datetime import datetime
 import os
 import shlex
 import sys
+from datetime import datetime
 from urllib.parse import quote_plus as url_quote
+
 from . import __version__
 
 DEBUGGING_INFO = url_quote(

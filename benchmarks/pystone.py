@@ -66,9 +66,8 @@ FALSE = 0
 
 def main(loops=LOOPS):
     benchtime, stones = pystones(loops)
-    print("Pystone(%s) time for %d passes = %g" % \
-          (__version__, loops, benchtime))
-    print("This machine benchmarks at %g pystones/second" % stones)
+    print(f"Pystone({__version__}) time for {loops} passes = {benchtime}")
+    print(f"This machine benchmarks at {stones} pystones/second")
 
 
 def pystones(loops=LOOPS):
@@ -234,8 +233,7 @@ def Func1(CharPar1, CharPar2):
     CharLoc2 = CharLoc1
     if CharLoc2 != CharPar2:
         return Ident1
-    else:
-        return Ident2
+    return Ident2
 
 def Func2(StrParI1, StrParI2):
     IntLoc = 1
@@ -247,16 +245,15 @@ def Func2(StrParI1, StrParI2):
         IntLoc = 7
     if CharLoc == 'X':
         return TRUE
-    else:
-        if StrParI1 > StrParI2:
-            IntLoc = IntLoc + 7
-            return TRUE
-        else:
-            return FALSE
+    if StrParI1 > StrParI2:
+        IntLoc = IntLoc + 7
+        return TRUE
+    return FALSE
 
 def Func3(EnumParIn):
     EnumLoc = EnumParIn
-    if EnumLoc == Ident3: return TRUE
+    if EnumLoc == Ident3:
+        return TRUE
     return FALSE
 
 if __name__ == '__main__':
@@ -269,9 +266,10 @@ if __name__ == '__main__':
     if nargs > 1:
         error("%d arguments are too many;" % nargs)
     elif nargs == 1:
-        try: loops = int(sys.argv[1])
+        try:
+            loops = int(sys.argv[1])
         except ValueError:
-            error("Invalid argument %r;" % sys.argv[1])
+            error(f"Invalid argument {sys.argv[1]};")
     else:
         loops = LOOPS
     main(loops)

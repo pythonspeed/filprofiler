@@ -1,7 +1,8 @@
-from time import sleep
 import threading
+from time import sleep
 
 import numpy
+
 
 def h(i):
     return numpy.ones((1024, 1024, i), dtype=numpy.uint8)

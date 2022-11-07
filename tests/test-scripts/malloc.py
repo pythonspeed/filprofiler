@@ -1,14 +1,10 @@
+import ctypes
 import os
 import sys
 from argparse import ArgumentParser
-from pymalloc import (
-    pymalloc,
-    pyrealloc,
-    pyaligned_alloc,
-    pyallocation_api,
-    pyposix_memalign,
-)
-import ctypes
+
+from pymalloc import (pyaligned_alloc, pyallocation_api, pymalloc,
+                      pyposix_memalign, pyrealloc)
 
 CPP = ctypes.PyDLL(os.path.join(os.path.dirname(__file__), "cpp.so"))
 sys.path.append(os.path.dirname(__file__))

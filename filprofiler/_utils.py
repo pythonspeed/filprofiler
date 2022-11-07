@@ -1,8 +1,8 @@
 """Utilities."""
 
-from importlib.util import find_spec
-from datetime import datetime
 import ctypes
+from datetime import datetime
+from importlib.util import find_spec
 from typing import Tuple
 
 

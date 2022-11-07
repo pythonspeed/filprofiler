@@ -6,19 +6,19 @@ Command-line tools. Because of LD_PRELOAD, it's actually a two stage setup:
 """
 
 import json
-import sys
 import os
-from os import environ, execve, getpid, makedirs
-from os.path import abspath, dirname, join, exists
-from argparse import ArgumentParser, RawDescriptionHelpFormatter, REMAINDER
-from typing import List
 import runpy
 import signal
+import sys
+from argparse import REMAINDER, ArgumentParser, RawDescriptionHelpFormatter
+from os import environ, execve, getpid, makedirs
+from os.path import abspath, dirname, exists, join
 from shutil import which
-from ._utils import library_path, glibc_version, timestamp_now
-from ._cachegrind import benchmark
-from . import __version__, __file__
+from typing import List
 
+from . import __file__, __version__
+from ._cachegrind import benchmark
+from ._utils import glibc_version, library_path, timestamp_now
 
 LICENSE = """\
 Copyright 2021 Hyphenated Enterprises LLC
@@ -249,7 +249,7 @@ def stage_2():
 
     # Only import here since we don't want the parent process accessing any of
     # the _filpread.so code.
-    from ._tracer import trace_until_exit, create_report
+    from ._tracer import create_report, trace_until_exit
 
     signal.signal(
         signal.SIGUSR2,

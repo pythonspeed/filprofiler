@@ -2,12 +2,11 @@
 
 __all__ = ["__version__"]
 
+import os
 # If we're running with Fil preloaded, after forks make sure Fil is no longer
 # enabled, since we don't yet support child processes. This is also done in C
 # code; doing it only in Python or only C doesn't seem to work.
 import sys
-import os
-
 
 if os.getenv("__FIL_STATUS") in ("api", "program"):
 
@@ -27,7 +26,7 @@ try:
     from ._version import version as __version__
 except ImportError:
     # package is not installed
-    from importlib.metadata import version, PackageNotFoundError
+    from importlib.metadata import PackageNotFoundError, version
 
     try:
         __version__ = version(__name__)
@@ -37,8 +36,9 @@ except ImportError:
 
 def load_ipython_extension(ipython):
     """Load our IPython magic."""
-    from IPython.core.error import UsageError
     import os
+
+    from IPython.core.error import UsageError
 
     if os.environ.get("__FIL_STATUS") != "api":
         raise UsageError(
