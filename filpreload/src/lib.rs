@@ -313,10 +313,6 @@ extern "C" {
 
     // Return whether C code has initialized.
     fn is_initialized() -> c_int;
-
-    // Increment/decrement reentrancy counter.
-    fn fil_increment_reentrancy();
-    fn fil_decrement_reentrancy();
 }
 
 struct FilMmapAPI;

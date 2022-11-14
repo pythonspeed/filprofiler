@@ -6,7 +6,7 @@ MAKEFLAGS += --no-builtin-rules
 
 .PHONY: build
 build:
-	pip install -e .
+	pip install .
 	python setup.py install_data
 
 target/release/libfilpreload.so: Cargo.lock memapi/Cargo.toml memapi/src/*.rs filpreload/src/*.rs filpreload/src/*.c

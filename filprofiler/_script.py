@@ -241,8 +241,17 @@ def stage_2():
             PARSER.print_help()
             sys.exit(2)
         script = rest[0]
+
+        # Current directory might be added to sys.path as side-effect of how
+        # this code runs. We do NOT want that, it doesn't match normal Python
+        # behavior.
+        try:
+            sys.path.remove(os.getcwd())
+        except ValueError:
+            pass
         # Make directory where script is importable:
         sys.path.insert(0, dirname(abspath(script)))
+
         function = runpy.run_path
         func_args = (script,)
         func_kwargs = {"run_name": "__main__"}
