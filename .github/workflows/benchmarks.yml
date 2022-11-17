@@ -35,7 +35,7 @@ jobs:
           auto-update-conda: false
           activate-environment: benchmark
           environment-file: benchmarks/conda-linux-64.lock
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
       - name: Benchmark
         run: |
           set -euo pipefail
