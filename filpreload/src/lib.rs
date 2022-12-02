@@ -1,5 +1,6 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 use parking_lot::Mutex;
+use pymemprofile_api::memorytracking::LineNumberInfo::LineNumber;
 use pymemprofile_api::memorytracking::{
     AllocationTracker, CallSiteId, Callstack, FunctionId, VecFunctionLocations, PARENT_PROCESS,
 };
@@ -57,8 +58,10 @@ fn add_function(filename: String, function_name: String) -> FunctionId {
 /// Add to per-thread function stack:
 fn start_call(call_site: FunctionId, parent_line_number: u16, line_number: u16) {
     THREAD_CALLSTACK.with(|cs| {
-        cs.borrow_mut()
-            .start_call(parent_line_number, CallSiteId::new(call_site, line_number));
+        cs.borrow_mut().start_call(
+            parent_line_number as u32,
+            CallSiteId::new(call_site, LineNumber(line_number as u32)),
+        );
     });
 }
 
@@ -136,7 +139,7 @@ fn add_allocation(
     // Will fail during thread shutdown, but not much we can do at that point.
     let callstack_id = THREAD_CALLSTACK.try_with(|tcs| {
         let mut callstack = tcs.borrow_mut();
-        callstack.id_for_new_allocation(line_number, |callstack| {
+        callstack.id_for_new_allocation(line_number as u32, |callstack| {
             allocations.get_callstack_id(callstack)
         })
     })?;

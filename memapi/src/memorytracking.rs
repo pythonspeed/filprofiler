@@ -82,7 +82,23 @@ impl FunctionLocations for VecFunctionLocations {
     }
 }
 
-pub type LineNumber = u16; // TODO u32, newtype
+/// Either the line number, or the bytecode index needed to get it.
+#[derive(Copy, Clone, Serialize, Deserialize, Hash, Eq, PartialEq, Debug)]
+pub enum LineNumberInfo {
+    LineNumber(u32),
+    BytecodeIndex(i32),
+}
+
+impl LineNumberInfo {
+    fn get_line_number(&self) -> u32 {
+        if let LineNumberInfo::LineNumber(lineno) = self {
+            *lineno
+        } else {
+            debug_assert!(false, "This should never happen.");
+            0
+        }
+    }
+}
 
 /// A specific location: file + function + line number.
 #[derive(Clone, Debug, PartialEq, Eq, Copy, Hash, Serialize, Deserialize)]
@@ -90,11 +106,11 @@ pub struct CallSiteId {
     /// The function + filename. We use IDs for performance reasons (faster hashing).
     function: FunctionId,
     /// Line number within the _file_, 1-indexed.
-    line_number: LineNumber,
+    line_number: LineNumberInfo,
 }
 
 impl CallSiteId {
-    pub fn new(function: FunctionId, line_number: u16) -> CallSiteId {
+    pub fn new(function: FunctionId, line_number: LineNumberInfo) -> CallSiteId {
         CallSiteId {
             function,
             line_number,
@@ -108,7 +124,7 @@ impl CallSiteId {
 pub struct Callstack {
     calls: Vec<CallSiteId>,
     #[derivative(Hash = "ignore", PartialEq = "ignore")]
-    cached_callstack_id: Option<(u16, CallstackId)>, // first bit is line number
+    cached_callstack_id: Option<(u32, CallstackId)>, // first bit is line number
 }
 
 impl Callstack {
@@ -126,10 +142,10 @@ impl Callstack {
         }
     }
 
-    pub fn start_call(&mut self, parent_line_number: u16, callsite_id: CallSiteId) {
+    pub fn start_call(&mut self, parent_line_number: u32, callsite_id: CallSiteId) {
         if parent_line_number != 0 {
             if let Some(mut call) = self.calls.last_mut() {
-                call.line_number = parent_line_number;
+                call.line_number = LineNumberInfo::LineNumber(parent_line_number);
             }
         }
         self.calls.push(callsite_id);
@@ -141,7 +157,7 @@ impl Callstack {
         self.cached_callstack_id = None;
     }
 
-    pub fn id_for_new_allocation<F>(&mut self, line_number: u16, get_callstack_id: F) -> CallstackId
+    pub fn id_for_new_allocation<F>(&mut self, line_number: u32, get_callstack_id: F) -> CallstackId
     where
         F: FnOnce(&Callstack) -> CallstackId,
     {
@@ -156,7 +172,7 @@ impl Callstack {
         // Set the new line number:
         if line_number != 0 {
             if let Some(call) = self.calls.last_mut() {
-                call.line_number = line_number;
+                call.line_number = LineNumberInfo::LineNumber(line_number);
             }
         }
 
@@ -194,7 +210,8 @@ impl Callstack {
             .map(|(id, (function, filename))| {
                 if to_be_post_processed {
                     // Get Python code.
-                    let code = linecache.get_source_line(filename, id.line_number as usize);
+                    let code = linecache
+                        .get_source_line(filename, id.line_number.get_line_number() as usize);
                     // Leading whitespace is dropped by SVG, so we'd like to
                     // replace it with non-breaking space. However, inferno
                     // trims whitespace
@@ -215,7 +232,7 @@ impl Callstack {
                     format!(
                         "{filename}:{line} ({function});\u{2800}{code}",
                         filename = filename,
-                        line = id.line_number,
+                        line = id.line_number.get_line_number(),
                         function = function,
                         code = &code.trim_end(),
                     )
@@ -223,7 +240,7 @@ impl Callstack {
                     format!(
                         "{filename}:{line} ({function})",
                         filename = filename,
-                        line = id.line_number,
+                        line = id.line_number.get_line_number(),
                         function = function,
                     )
                 }
@@ -748,6 +765,7 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
 mod tests {
     use crate::memorytracking::{ProcessUid, PARENT_PROCESS};
 
+    use super::LineNumberInfo::LineNumber;
     use super::{
         Allocation, AllocationTracker, CallSiteId, Callstack, CallstackInterner, FunctionId,
         FunctionLocations, VecFunctionLocations, HIGH_32BIT, MIB,
@@ -815,7 +833,7 @@ mod tests {
                 let (process, allocation_size) = *allocated_sizes.get(i).unwrap();
                 let process = ProcessUid(process);
                 let mut cs = Callstack::new();
-                cs.start_call(0, CallSiteId::new(FunctionId::new(i as u64), 0));
+                cs.start_call(0, CallSiteId::new(FunctionId::new(i as u64), LineNumber(0)));
                 let cs_id = tracker.get_callstack_id(&cs);
                 tracker.add_allocation(process, i as usize, allocation_size, cs_id);
                 expected_memory_usage.push_back(allocation_size);
@@ -854,7 +872,7 @@ mod tests {
                 let (process, allocation_size) = *allocated_sizes.get(i).unwrap();
                 let process = ProcessUid(process);
                 let mut cs = Callstack::new();
-                cs.start_call(0, CallSiteId::new(FunctionId::new(i as u64), 0));
+                cs.start_call(0, CallSiteId::new(FunctionId::new(i as u64),  LineNumber(0)));
                 let csid = tracker.get_callstack_id(&cs);
                 tracker.add_anon_mmap(process, addresses[i] as usize, allocation_size, csid);
                 expected_memory_usage.push_back(allocation_size);
@@ -891,7 +909,7 @@ mod tests {
                 let (process, allocation_size) = *allocated_sizes.get(i).unwrap();
                 let process = ProcessUid(process);
                 let mut cs = Callstack::new();
-                cs.start_call(0, CallSiteId::new(FunctionId::new(i as u64), 0));
+                cs.start_call(0, CallSiteId::new(FunctionId::new(i as u64), LineNumber(0)));
                 let cs_id = tracker.get_callstack_id(&cs);
                 tracker.add_allocation(process, i as usize, allocation_size, cs_id);
                 expected_memory_usage += allocation_size;
@@ -900,7 +918,7 @@ mod tests {
                 let (process, allocation_size) = *allocated_mmaps.get(i).unwrap();
                 let process = ProcessUid(process);
                 let mut cs = Callstack::new();
-                cs.start_call(0, CallSiteId::new(FunctionId::new(i as u64), 0));
+                cs.start_call(0, CallSiteId::new(FunctionId::new(i as u64), LineNumber(0)));
                 let csid = tracker.get_callstack_id(&cs);
                 tracker.add_anon_mmap(process, mmap_addresses[i] as usize, allocation_size, csid);
                 expected_memory_usage += allocation_size;
@@ -933,9 +951,10 @@ mod tests {
 
         // Parent line number does nothing if it's first call:
         let mut cs1 = Callstack::new();
-        let id1 = CallSiteId::new(fid1, 2);
-        let id2 = CallSiteId::new(fid3, 45);
-        let id3 = CallSiteId::new(fid5, 6);
+        // CallSiteId::new($a, $b) ==>> CallSiteId::new($a, LineNumber($b))
+        let id1 = CallSiteId::new(fid1, LineNumber(2));
+        let id2 = CallSiteId::new(fid3, LineNumber(45));
+        let id3 = CallSiteId::new(fid5, LineNumber(6));
         cs1.start_call(123, id1);
         assert_eq!(cs1.calls, vec![id1]);
 
@@ -950,7 +969,11 @@ mod tests {
         cs2.start_call(12, id3);
         assert_eq!(
             cs2.calls,
-            vec![CallSiteId::new(fid1, 10), CallSiteId::new(fid3, 12), id3]
+            vec![
+                CallSiteId::new(fid1, LineNumber(10)),
+                CallSiteId::new(fid3, LineNumber(12)),
+                id3
+            ]
         );
     }
 
@@ -960,10 +983,10 @@ mod tests {
         let fid3 = FunctionId::new(3u64);
 
         let mut cs1 = Callstack::new();
-        cs1.start_call(0, CallSiteId::new(fid1, 2));
+        cs1.start_call(0, CallSiteId::new(fid1, LineNumber(2)));
         let cs1b = cs1.clone();
         let mut cs2 = Callstack::new();
-        cs2.start_call(0, CallSiteId::new(fid3, 4));
+        cs2.start_call(0, CallSiteId::new(fid3, LineNumber(4)));
         let cs3 = Callstack::new();
         let cs3b = Callstack::new();
 
@@ -1014,7 +1037,7 @@ mod tests {
 
         let fid1 = FunctionId::new(1u64);
 
-        cs1.start_call(0, CallSiteId::new(fid1, 2));
+        cs1.start_call(0, CallSiteId::new(fid1, LineNumber(2)));
         let id1 =
             cs1.id_for_new_allocation(1, |cs| interner.get_or_insert_id(Cow::Borrowed(&cs), || ()));
         let id2 =
@@ -1025,7 +1048,7 @@ mod tests {
         assert_ne!(id2, id0);
         assert_ne!(id2, id1);
 
-        cs1.start_call(3, CallSiteId::new(fid1, 2));
+        cs1.start_call(3, CallSiteId::new(fid1, LineNumber(2)));
         let id3 =
             cs1.id_for_new_allocation(4, |cs| interner.get_or_insert_id(Cow::Borrowed(&cs), || ()));
         assert_ne!(id3, id0);
@@ -1041,7 +1064,7 @@ mod tests {
         assert_eq!(id1, id1c);
 
         // Check for cache invalidation in start_call:
-        cs1.start_call(1, CallSiteId::new(fid1, 1));
+        cs1.start_call(1, CallSiteId::new(fid1, LineNumber(1)));
         let id4 =
             cs1.id_for_new_allocation(1, |cs| interner.get_or_insert_id(Cow::Borrowed(&cs), || ()));
         assert_ne!(id4, id0);
@@ -1063,9 +1086,9 @@ mod tests {
 
         let mut tracker = new_tracker();
         let mut cs1 = Callstack::new();
-        cs1.start_call(0, CallSiteId::new(fid1, 2));
+        cs1.start_call(0, CallSiteId::new(fid1, LineNumber(2)));
         let mut cs2 = Callstack::new();
-        cs2.start_call(0, CallSiteId::new(fid3, 4));
+        cs2.start_call(0, CallSiteId::new(fid3, LineNumber(4)));
 
         let cs1_id = tracker.get_callstack_id(&cs1);
 
@@ -1156,12 +1179,12 @@ mod tests {
             .functions
             .add_function("c".to_string(), "cf".to_string());
 
-        let id1 = CallSiteId::new(fid1, 1);
+        let id1 = CallSiteId::new(fid1, LineNumber(1));
         // Same function, different line number—should be different item:
-        let id1_different = CallSiteId::new(fid1, 7);
-        let id2 = CallSiteId::new(fid2, 2);
+        let id1_different = CallSiteId::new(fid1, LineNumber(7));
+        let id2 = CallSiteId::new(fid2, LineNumber(2));
 
-        let id3 = CallSiteId::new(fid3, 3);
+        let id3 = CallSiteId::new(fid3, LineNumber(3));
         let mut cs1 = Callstack::new();
         cs1.start_call(0, id1);
         cs1.start_call(0, id2.clone());
