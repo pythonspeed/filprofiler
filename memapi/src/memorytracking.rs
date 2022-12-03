@@ -104,9 +104,9 @@ impl LineNumberInfo {
 #[derive(Clone, Debug, PartialEq, Eq, Copy, Hash, Serialize, Deserialize)]
 pub struct CallSiteId {
     /// The function + filename. We use IDs for performance reasons (faster hashing).
-    function: FunctionId,
+    pub function: FunctionId,
     /// Line number within the _file_, 1-indexed.
-    line_number: LineNumberInfo,
+    pub line_number: LineNumberInfo,
 }
 
 impl CallSiteId {
@@ -140,6 +140,10 @@ impl Callstack {
             calls: vec,
             cached_callstack_id: None,
         }
+    }
+
+    pub fn to_vec(&self) -> Vec<CallSiteId> {
+        self.calls.clone()
     }
 
     pub fn start_call(&mut self, parent_line_number: u32, callsite_id: CallSiteId) {
