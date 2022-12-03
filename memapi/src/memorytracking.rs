@@ -352,6 +352,10 @@ impl Allocation {
     }
 }
 
+fn same_callstack(callstack: &Callstack) -> Cow<Callstack> {
+    Cow::Borrowed(callstack)
+}
+
 /// The main data structure tracking everything.
 pub struct AllocationTracker<FL: FunctionLocations> {
     // malloc()/calloc():
@@ -624,18 +628,22 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
         self.dump_to_flamegraph(path, true, "peak-memory", "Peak Tracked Memory Usage", true);
     }
 
-    pub fn to_lines(
-        &self,
+    pub fn to_lines<'a, F>(
+        &'a self,
         peak: bool,
         to_be_post_processed: bool,
-    ) -> impl ExactSizeIterator<Item = String> + '_ {
+        update_callstack: F,
+    ) -> impl ExactSizeIterator<Item = String> + '_
+    where
+        F: Fn(&Callstack) -> Cow<Callstack> + 'a,
+    {
         let by_call = self.combine_callstacks(peak).into_iter();
         let id_to_callstack = self.interner.get_reverse_map();
         let mut linecache = LineCacher::default();
         by_call.map(move |(callstack_id, size)| {
             format!(
                 "{} {}",
-                id_to_callstack.get(&callstack_id).unwrap().as_string(
+                update_callstack(id_to_callstack.get(&callstack_id).unwrap()).as_string(
                     to_be_post_processed,
                     &self.functions,
                     ";",
@@ -692,7 +700,7 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
             subtitle,
             "bytes",
             to_be_post_processed,
-            |tbpp| self.to_lines(peak, tbpp),
+            |tbpp| self.to_lines(peak, tbpp, same_callstack),
         )
     }
 
@@ -763,7 +771,7 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
 
 #[cfg(test)]
 mod tests {
-    use crate::memorytracking::{ProcessUid, PARENT_PROCESS};
+    use crate::memorytracking::{same_callstack, ProcessUid, PARENT_PROCESS};
 
     use super::LineNumberInfo::LineNumber;
     use super::{
@@ -1223,7 +1231,7 @@ mod tests {
             "c:3 (cf) 234",
             "a:7 (af);b:2 (bf) 6000",
         ];
-        let mut result2: Vec<String> = tracker.to_lines(true, false).collect();
+        let mut result2: Vec<String> = tracker.to_lines(true, false, same_callstack).collect();
         result2.sort();
         expected2.sort();
         assert_eq!(expected2, result2);
