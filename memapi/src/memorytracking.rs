@@ -13,6 +13,7 @@ use serde::Serialize;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::num::NonZeroI32;
 use std::path::Path;
 
 extern "C" {
@@ -86,7 +87,7 @@ impl FunctionLocations for VecFunctionLocations {
 #[derive(Copy, Clone, Serialize, Deserialize, Hash, Eq, PartialEq, Debug)]
 pub enum LineNumberInfo {
     LineNumber(u32),
-    BytecodeIndex(i32),
+    BytecodeIndex(NonZeroI32), // up to Sciagraph to use this appropriately
 }
 
 impl LineNumberInfo {
