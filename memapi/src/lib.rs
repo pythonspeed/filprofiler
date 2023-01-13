@@ -5,7 +5,7 @@ pub mod linecache;
 pub mod memorytracking;
 pub mod mmap;
 pub mod oom;
-mod python;
+pub mod python;
 mod rangemap;
 pub mod util;
 
