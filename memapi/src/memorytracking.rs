@@ -1,5 +1,7 @@
 use crate::flamegraph::filter_to_useful_callstacks;
 use crate::flamegraph::write_flamegraphs;
+use crate::flamegraph::CallstackCleaner;
+use crate::flamegraph::FlamegraphCallstacks;
 use crate::linecache::LineCacher;
 use crate::python::get_runpy_path;
 
@@ -41,13 +43,19 @@ struct FunctionLocation {
     function_name: String,
 }
 
+/// The clone should be cheap, ideally, so probably an immutable data structures
+/// would be good.
 pub trait FunctionLocations {
     fn get_function_and_filename(&self, id: FunctionId) -> (&str, &str);
+
+    // Like Clone.clone(), but should be cheap.
+    fn cheap_clone(&self) -> Self;
 }
 
 /// Stores FunctionLocations, returns a FunctionId
 #[derive(Clone)]
 pub struct VecFunctionLocations {
+    // TODO switch to immutable vec
     functions: Vec<FunctionLocation>,
 }
 
@@ -79,6 +87,12 @@ impl FunctionLocations for VecFunctionLocations {
         }
         let location = &self.functions[id.0 as usize];
         (&location.function_name, &location.filename)
+    }
+
+    fn cheap_clone(&self) -> Self {
+        Self {
+            functions: self.functions.clone(),
+        }
     }
 }
 
@@ -186,10 +200,10 @@ impl Callstack {
         callstack_id
     }
 
-    pub fn as_string(
+    pub fn as_string<FL: FunctionLocations>(
         &self,
         to_be_post_processed: bool,
-        functions: &dyn FunctionLocations,
+        functions: &FL,
         separator: &'static str,
         linecache: &mut LineCacher,
     ) -> String {
@@ -356,8 +370,13 @@ impl Allocation {
     }
 }
 
-fn same_callstack(callstack: &Callstack) -> Cow<Callstack> {
-    Cow::Borrowed(callstack)
+/// A CallstackCleaner that leaves the callstack unchanged.
+struct IdentityCleaner;
+
+impl CallstackCleaner for IdentityCleaner {
+    fn cleanup(&self, callstack: &Callstack) -> Cow<Callstack> {
+        Cow::Borrowed(callstack)
+    }
 }
 
 /// The main data structure tracking everything.
@@ -598,10 +617,10 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
     /// Combine Callstacks and make them human-readable. Duplicate callstacks
     /// have their allocated memory summed.
     fn combine_callstacks(
-        &self,
+        &mut self,
         // If false, will do the current allocations:
         peak: bool,
-    ) -> HashMap<CallstackId, usize, ARandomState> {
+    ) -> FlamegraphCallstacks<HashMap<Callstack, usize, ARandomState>, FL, IdentityCleaner> {
         // Would be nice to validate if data is consistent. However, there are
         // edge cases that make it slightly inconsistent (e.g. see the
         // unexpected code path in add_allocation() above), and blowing up
@@ -615,96 +634,24 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
         // flamegraph (which currently loads EVERYTHING into memory), just do
         // the top 99% of allocations.
         let callstacks = if peak {
+            self.check_if_new_peak();
             &self.peak_memory_usage
         } else {
             &self.current_memory_usage
         };
         let sum = callstacks.iter().sum();
-        filter_to_useful_callstacks(callstacks.iter().enumerate(), sum)
-            .into_iter()
-            .map(|(k, v)| (k as CallstackId, v))
-            .collect()
-    }
-
-    /// Dump all callstacks in peak memory usage to various files describing the
-    /// memory usage.
-    pub fn dump_peak_to_flamegraph(&mut self, path: &str) {
-        self.dump_to_flamegraph(path, true, "peak-memory", "Peak Tracked Memory Usage", true);
-    }
-
-    pub fn to_lines<'a, F>(
-        &'a self,
-        peak: bool,
-        to_be_post_processed: bool,
-        update_callstack: F,
-    ) -> impl ExactSizeIterator<Item = String> + '_
-    where
-        F: Fn(&Callstack) -> Cow<Callstack> + 'a,
-    {
-        let by_call = self.combine_callstacks(peak).into_iter();
         let id_to_callstack = self.interner.get_reverse_map();
-        let mut linecache = LineCacher::default();
-        by_call.map(move |(callstack_id, size)| {
-            format!(
-                "{} {}",
-                update_callstack(id_to_callstack.get(&callstack_id).unwrap()).as_string(
-                    to_be_post_processed,
-                    &self.functions,
-                    ";",
-                    &mut linecache,
-                ),
-                size,
-            )
-        })
-    }
-
-    fn dump_to_flamegraph(
-        &mut self,
-        path: &str,
-        peak: bool,
-        base_filename: &str,
-        title: &str,
-        to_be_post_processed: bool,
-    ) {
-        // First, make sure peaks are correct:
-        self.check_if_new_peak();
-
-        // Print warning if we're missing allocations.
-        #[cfg(not(feature = "fil4prod"))]
-        {
-            let allocated_bytes = if peak {
-                self.peak_allocated_bytes
-            } else {
-                self.current_allocated_bytes
-            };
-            if self.missing_allocated_bytes > 0 {
-                eprintln!("=fil-profile= WARNING: {:.2}% ({} bytes) of tracked memory somehow disappeared. If this is a small percentage you can just ignore this warning, since the missing allocations won't impact the profiling results. If the % is high, please run `export FIL_DEBUG=1` to get more output', re-run Fil on your script, and then file a bug report at https://github.com/pythonspeed/filprofiler/issues/new", self.missing_allocated_bytes as f64 * 100.0 / allocated_bytes as f64, self.missing_allocated_bytes);
-            }
-            if self.failed_deallocations > 0 {
-                eprintln!("=fil-profile= WARNING: Encountered {} deallocations of untracked allocations. A certain number are expected in normal operation, of allocations created before Fil started tracking, and even more if you're using the Fil API to turn tracking on and off.", self.failed_deallocations);
-            }
-        }
-
-        eprintln!("=fil-profile= Preparing to write to {}", path);
-        let directory_path = Path::new(path);
-
-        let title = format!(
-            "{} ({:.1} MiB)",
-            title,
-            self.peak_allocated_bytes as f64 / (1024.0 * 1024.0)
-        );
-        #[cfg(not(feature = "fil4prod"))]
-        let subtitle = r#"Made with the Fil profiler. <a href="https://pythonspeed.com/fil/" style="text-decoration: underline;" target="_parent">Try it on your code!</a>"#;
-        #[cfg(feature = "fil4prod")]
-        let subtitle = r#"Made with the Fil4prod profiler. <a href="https://pythonspeed.com/products/fil4prod/" style="text-decoration: underline;" target="_parent">Try it on your code!</a>"#;
-        write_flamegraphs(
-            directory_path,
-            base_filename,
-            &title,
-            subtitle,
-            "bytes",
-            to_be_post_processed,
-            |tbpp| self.to_lines(peak, tbpp, same_callstack),
+        FlamegraphCallstacks::new(
+            filter_to_useful_callstacks(callstacks.iter().enumerate(), sum)
+                .into_iter()
+                .filter_map(|(k, v)| {
+                    id_to_callstack
+                        .get(&(k as CallstackId))
+                        .map(|cs| ((**cs).clone(), v))
+                })
+                .collect(),
+            self.functions.cheap_clone(),
+            IdentityCleaner {},
         )
     }
 
