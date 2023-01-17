@@ -1,5 +1,4 @@
 use crate::flamegraph::filter_to_useful_callstacks;
-use crate::flamegraph::write_flamegraphs;
 use crate::flamegraph::CallstackCleaner;
 use crate::flamegraph::FlamegraphCallstacks;
 use crate::linecache::LineCacher;
@@ -15,7 +14,6 @@ use serde::Serialize;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
-use std::path::Path;
 
 extern "C" {
     fn _exit(exit_code: std::os::raw::c_int);
@@ -371,10 +369,10 @@ impl Allocation {
 }
 
 /// A CallstackCleaner that leaves the callstack unchanged.
-struct IdentityCleaner;
+pub struct IdentityCleaner;
 
 impl CallstackCleaner for IdentityCleaner {
-    fn cleanup(&self, callstack: &Callstack) -> Cow<Callstack> {
+    fn cleanup<'a>(&self, callstack: &'a Callstack) -> Cow<'a, Callstack> {
         Cow::Borrowed(callstack)
     }
 }
@@ -400,7 +398,7 @@ pub struct AllocationTracker<FL: FunctionLocations> {
     current_allocated_bytes: usize,
     peak_allocated_bytes: usize,
     // Default directory to write out data lacking other info:
-    default_path: String,
+    pub default_path: String,
 
     // Allocations that somehow disappeared. Not relevant for sampling profiler.
     missing_allocated_bytes: usize,
@@ -616,7 +614,7 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
 
     /// Combine Callstacks and make them human-readable. Duplicate callstacks
     /// have their allocated memory summed.
-    fn combine_callstacks(
+    pub fn combine_callstacks(
         &mut self,
         // If false, will do the current allocations:
         peak: bool,
@@ -661,24 +659,6 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
         self.peak_memory_usage.clear();
     }
 
-    /// Dump information about where we are.
-    pub fn oom_dump(&mut self) {
-        eprintln!(
-            "=fil-profile= We'll try to dump out SVGs. Note that no HTML file will be written."
-        );
-        let default_path = self.default_path.clone();
-        self.dump_to_flamegraph(
-            &default_path,
-            false,
-            "out-of-memory",
-            "Current allocations at out-of-memory time",
-            false,
-        );
-        unsafe {
-            _exit(53);
-        }
-    }
-
     /// Validate internal state is in a good state. This won't pass until
     /// check_if_new_peak() is called.
     fn validate(&self) {
@@ -702,6 +682,22 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
         );
         assert!(self.current_memory_usage.iter().sum::<usize>() == self.current_allocated_bytes);
         assert!(self.peak_memory_usage.iter().sum::<usize>() == self.peak_allocated_bytes);
+    }
+
+    /// Warn of untracked allocations; only relevant if you are profiling _all_
+    /// allocations, i.e. Fil but not Sciagraph.
+    pub fn warn_on_problems(&self, peak: bool) {
+        let allocated_bytes = if peak {
+            self.get_peak_allocated_bytes()
+        } else {
+            self.get_current_allocated_bytes()
+        };
+        if self.missing_allocated_bytes > 0 {
+            eprintln!("=fil-profile= WARNING: {:.2}% ({} bytes) of tracked memory somehow disappeared. If this is a small percentage you can just ignore this warning, since the missing allocations won't impact the profiling results. If the % is high, please run `export FIL_DEBUG=1` to get more output', re-run Fil on your script, and then file a bug report at https://github.com/pythonspeed/filprofiler/issues/new", self.missing_allocated_bytes as f64 * 100.0 / allocated_bytes as f64, self.missing_allocated_bytes);
+        }
+        if self.failed_deallocations > 0 {
+            eprintln!("=fil-profile= WARNING: Encountered {} deallocations of untracked allocations. A certain number are expected in normal operation, of allocations created before Fil started tracking, and even more if you're using the Fil API to turn tracking on and off.", self.failed_deallocations);
+        }
     }
 
     /// Reset internal state in way that doesn't invalidate e.g. thread-local

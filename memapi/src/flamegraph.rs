@@ -66,7 +66,7 @@ pub fn write_lines<I: IntoIterator<Item = String>>(lines: I, path: &Path) -> std
 
 /// A strategy for cleaning up callstacks before rendering them to text.
 pub trait CallstackCleaner {
-    fn cleanup(&self, callstack: &Callstack) -> Cow<Callstack>;
+    fn cleanup<'a>(&self, callstack: &'a Callstack) -> Cow<'a, Callstack>;
 }
 
 /// The data needed to create a flamegraph.
@@ -99,7 +99,7 @@ where
         by_call.map(move |(callstack, size)| {
             format!(
                 "{} {}",
-                (self.update_callstack)(callstack).as_string(
+                self.callstack_cleaner.cleanup(callstack).as_string(
                     to_be_post_processed,
                     &self.functions,
                     ";",
@@ -112,7 +112,7 @@ where
 
     /// Low-level interface for writing flamegraphs with post-processing:
     pub fn get_flamegraph_with_options(
-        &self,
+        &'a self,
         to_be_post_processed: bool,
         mut options: flamegraph::Options,
         // special cased because it needs to be psot-processed:
@@ -147,7 +147,7 @@ where
 
     /// Write a flamegraph SVG to disk, given lines in summarized format.
     pub fn get_flamegraph(
-        &self,
+        &'a self,
         reversed: bool,
         title: &str,
         subtitle: &str,
@@ -177,7 +177,7 @@ where
 
     /// Write a flamegraph SVG to disk.
     pub fn write_flamegraph(
-        &self,
+        &'a self,
         path: &Path,
         reversed: bool,
         title: &str,
@@ -194,7 +194,7 @@ where
 
     /// Write .prof, -source.prof, .svg and -reversed.svg files for given lines.
     pub fn write_flamegraphs(
-        &self,
+        &'a self,
         directory_path: &Path,
         base_filename: &str,
         title: &str,
