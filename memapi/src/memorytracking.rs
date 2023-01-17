@@ -236,12 +236,12 @@ impl Callstack {
                     // which I can't be bothered to fix right now, so for
                     // now do hack where we shove in some other character
                     // that can be fixed in post-processing.
-                    let code = code.replace(" ", "\u{12e4}");
+                    let code = code.replace(' ', "\u{12e4}");
                     // Semicolons are used as separator in the flamegraph
                     // input format, so need to replace them with some other
                     // character. We use "full-width semicolon", and then
                     // replace it back in post-processing.
-                    let code = code.replace(";", "\u{ff1b}");
+                    let code = code.replace(';', "\u{ff1b}");
                     // The \u{2800} is to ensure we don't have empty lines,
                     // and that whitespace doesn't get trimmed from start;
                     // we'll get rid of this in post-processing.
