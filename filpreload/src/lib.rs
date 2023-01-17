@@ -379,8 +379,8 @@ extern "C" {
     fn is_initialized() -> c_int;
 
     // Increment/decrement reentrancy counter.
-    fn fil_increment_reentrancy();
-    fn fil_decrement_reentrancy();
+    //fn fil_increment_reentrancy();
+    //fn fil_decrement_reentrancy();
 }
 
 struct FilMmapAPI;
@@ -398,7 +398,7 @@ impl pymemprofile_api::mmap::MmapAPI for FilMmapAPI {
     }
 
     fn is_initialized(&self) -> bool {
-        return unsafe { is_initialized() == 1 };
+        unsafe { is_initialized() == 1 }
     }
 }
 
