@@ -236,7 +236,12 @@ impl Callstack {
                     // which I can't be bothered to fix right now, so for
                     // now do hack where we shove in some other character
                     // that can be fixed in post-processing.
-                    let code = code.replace(' ', "\u{12e4}");
+                    let code = code.trim_end().replace(' ', "\u{12e4}");
+                    // Tabs == 8 spaces in Python.
+                    let code = code.replace(
+                        '\t',
+                        "\u{12e4}\u{12e4}\u{12e4}\u{12e4}\u{12e4}\u{12e4}\u{12e4}\u{12e4}",
+                    );
                     // Semicolons are used as separator in the flamegraph
                     // input format, so need to replace them with some other
                     // character. We use "full-width semicolon", and then
@@ -718,7 +723,7 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
 
 #[cfg(test)]
 mod tests {
-    use crate::memorytracking::{same_callstack, ProcessUid, PARENT_PROCESS};
+    use crate::memorytracking::{ProcessUid, PARENT_PROCESS};
 
     use super::LineNumberInfo::LineNumber;
     use super::{
@@ -1178,7 +1183,7 @@ mod tests {
             "c:3 (cf) 234",
             "a:7 (af);b:2 (bf) 6000",
         ];
-        let mut result2: Vec<String> = tracker.to_lines(true, false, same_callstack).collect();
+        let mut result2: Vec<String> = tracker.combine_callstacks(true).to_lines(false).collect();
         result2.sort();
         expected2.sort();
         assert_eq!(expected2, result2);

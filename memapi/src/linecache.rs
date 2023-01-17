@@ -4,15 +4,10 @@
 //! that can result in deadlocks.
 
 use crate::python;
-use ahash::RandomState;
-use std::collections::HashMap;
 
-/// Wrapper around Python's linecache, with extra caching so we can call Python
-/// less.
+/// Wrapper around Python's linecache.
 #[derive(Default)]
-pub struct LineCacher {
-    linecache: HashMap<(String, usize), String, RandomState>,
-}
+pub struct LineCacher {}
 
 impl LineCacher {
     /// Get the source code line for the given file.
@@ -20,19 +15,14 @@ impl LineCacher {
         if line_number == 0 {
             return String::new();
         }
-        let entry = self
-            .linecache
-            .entry((filename.to_string(), line_number))
-            .or_insert_with(|| {
-                python::get_source_line(&filename, line_number).unwrap_or(String::new())
-            });
-        entry.clone()
+        python::get_source_line(filename, line_number).unwrap_or_default()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pyo3::prelude::*;
     use rusty_fork::rusty_fork_test;
     use std::io::Write;
 
@@ -57,9 +47,27 @@ mod tests {
             assert_eq!(cache.get_source_line(path, 4), "");
 
             // Present line numbers
-            assert_eq!(cache.get_source_line(path, 1), "abc");
-            assert_eq!(cache.get_source_line(path, 2), "def");
-            assert_eq!(cache.get_source_line(path, 3), "ghijk");
+            assert_eq!(cache.get_source_line(path, 1), "abc\n");
+            assert_eq!(cache.get_source_line(path, 2), "def\n");
+            assert_eq!(cache.get_source_line(path, 3), "ghijk\n");
+        }
+
+        /// The linecache can read random crap shoved into the linecache module.
+        #[test]
+        fn linecacher_from_arbitrary_source() {
+            pyo3::prepare_freethreaded_python();
+            let mut cache = LineCacher::default();
+
+            Python::with_gil(|py| {
+                let blah = vec!["arr\n", "boo"];
+                let linecache = PyModule::import(py, "linecache")?;
+                linecache
+                    .getattr("cache")?.set_item("blah", (8, 0, blah, "blah"))?;
+                Ok::<(), PyErr>(())
+            }).unwrap();
+
+            assert_eq!(cache.get_source_line("blah", 1), "arr\n");
+            assert_eq!(cache.get_source_line("blah", 2), "boo");
         }
     }
 }
