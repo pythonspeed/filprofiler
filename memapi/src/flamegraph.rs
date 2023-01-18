@@ -285,7 +285,7 @@ mod tests {
         ) {
             let total_size : usize = allocated_sizes.iter().sum();
             let total_size_99 = (99 * total_size) / 100;
-            let callstacks = (&allocated_sizes).iter().enumerate();
+            let callstacks = allocated_sizes.iter().enumerate();
             let filtered : HashMap<usize,usize>  = filter_to_useful_callstacks(callstacks, total_size).collect();
             let filtered_size :usize = filtered.values().into_iter().sum();
             if filtered_size >= total_size_99  {
