@@ -79,6 +79,7 @@ pub struct FlamegraphCallstacks<D, FL: FunctionLocations, UC> {
 impl<'a, D, FL, UC> FlamegraphCallstacks<D, FL, UC>
 where
     &'a D: IntoIterator<Item = (&'a Callstack, &'a usize)>,
+    <&'a D as IntoIterator>::IntoIter: ExactSizeIterator,
     D: 'a,
     FL: FunctionLocations,
     UC: CallstackCleaner,
