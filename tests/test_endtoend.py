@@ -618,7 +618,10 @@ def test_tabs():
             svg = f.read()
 
         # Tabs are still there:
-        assert ">\tarr1, arr2 = make_".replace(" ", "\u00a0") in svg
+        assert (
+            ">\tarr1, arr2 = make_".replace(" ", "\u00a0").replace("\t", "\u00a0" * 8)
+            in svg
+        )
 
         # It's valid XML:
         ElementTree.fromstring(svg)
