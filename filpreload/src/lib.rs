@@ -2,7 +2,8 @@
 use parking_lot::Mutex;
 use pymemprofile_api::memorytracking::LineNumberInfo::LineNumber;
 use pymemprofile_api::memorytracking::{
-    AllocationTracker, CallSiteId, Callstack, FunctionId, VecFunctionLocations, PARENT_PROCESS,
+    AllocationTracker, CallSiteId, Callstack, FunctionId, IdentityCleaner, VecFunctionLocations,
+    PARENT_PROCESS,
 };
 use pymemprofile_api::oom::{InfiniteMemory, OutOfMemoryEstimator, RealMemoryInfo};
 use std::cell::RefCell;
@@ -220,7 +221,7 @@ fn dump_to_flamegraph(
         } else {
             allocations.get_current_allocated_bytes()
         };
-        let flamegraph_callstacks = allocations.combine_callstacks(peak);
+        let flamegraph_callstacks = allocations.combine_callstacks(peak, IdentityCleaner);
         (allocated_bytes, flamegraph_callstacks)
     };
 

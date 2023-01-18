@@ -619,11 +619,12 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
 
     /// Combine Callstacks and make them human-readable. Duplicate callstacks
     /// have their allocated memory summed.
-    pub fn combine_callstacks(
+    pub fn combine_callstacks<CC: CallstackCleaner>(
         &mut self,
         // If false, will do the current allocations:
         peak: bool,
-    ) -> FlamegraphCallstacks<HashMap<Callstack, usize, ARandomState>, FL, IdentityCleaner> {
+        callstack_cleaner: CC,
+    ) -> FlamegraphCallstacks<HashMap<Callstack, usize, ARandomState>, FL, CC> {
         // Would be nice to validate if data is consistent. However, there are
         // edge cases that make it slightly inconsistent (e.g. see the
         // unexpected code path in add_allocation() above), and blowing up
@@ -654,7 +655,7 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
                 })
                 .collect(),
             self.functions.cheap_clone(),
-            IdentityCleaner {},
+            callstack_cleaner,
         )
     }
 
@@ -723,7 +724,7 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
 
 #[cfg(test)]
 mod tests {
-    use crate::memorytracking::{ProcessUid, PARENT_PROCESS};
+    use crate::memorytracking::{IdentityCleaner, ProcessUid, PARENT_PROCESS};
 
     use super::LineNumberInfo::LineNumber;
     use super::{
@@ -1183,7 +1184,10 @@ mod tests {
             "c:3 (cf) 234",
             "a:7 (af);b:2 (bf) 6000",
         ];
-        let mut result2: Vec<String> = tracker.combine_callstacks(true).to_lines(false).collect();
+        let mut result2: Vec<String> = tracker
+            .combine_callstacks(true, IdentityCleaner)
+            .to_lines(false)
+            .collect();
         result2.sort();
         expected2.sort();
         assert_eq!(expected2, result2);
