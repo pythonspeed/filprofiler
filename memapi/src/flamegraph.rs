@@ -118,35 +118,12 @@ where
     pub fn get_flamegraph_with_options(
         &'a self,
         to_be_post_processed: bool,
-        mut options: flamegraph::Options,
+        options: flamegraph::Options,
         // special cased because it needs to be psot-processed:
         subtitle: Option<&str>,
     ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         let lines = self.to_lines(to_be_post_processed);
-        let mut output = vec![];
-        let lines: Vec<String> = lines.into_iter().collect();
-        match flamegraph::from_lines(&mut options, lines.iter().map(|s| s.as_ref()), &mut output) {
-            Err(e) => Err(format!("{}", e).into()),
-            Ok(_) => {
-                if to_be_post_processed {
-                    // Replace with real subtitle.
-                    let data = String::from_utf8(output)?;
-                    let data = if let Some(subtitle) = subtitle {
-                        data.replace("__FIL-SUBTITLE-HERE__", subtitle)
-                    } else {
-                        data
-                    };
-                    // Restore normal semi-colons.
-                    let data = data.replace('\u{ff1b}', ";");
-                    // Restore (non-breaking) spaces.
-                    let data = data.replace('\u{12e4}', "\u{00a0}");
-                    // Get rid of empty-line markers:
-                    let data = data.replace('\u{2800}', "");
-                    output = data.as_bytes().to_vec();
-                }
-                Ok(output)
-            }
-        }
+        get_flamegraph_with_options(lines, to_be_post_processed, options, subtitle)
     }
 
     /// Write a flamegraph SVG to disk, given lines in summarized format.
@@ -158,25 +135,14 @@ where
         count_name: &str,
         to_be_post_processed: bool,
     ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        let title = format!("{}{}", title, if reversed { ", Reversed" } else { "" },);
-        let mut options = flamegraph::Options::default();
-        options.title = title;
-        options.count_name = count_name.to_string();
-        options.font_size = 16;
-        options.font_type = "monospace".to_string();
-        options.frame_height = 22;
-        options.reverse_stack_order = reversed;
-        options.color_diffusion = true;
-        options.direction = flamegraph::Direction::Inverted;
-        options.min_width = 0.2;
-        // Maybe disable this some day; but for now it makes debugging much
-        // easier:
-        options.pretty_xml = true;
-        if to_be_post_processed {
-            // Can't put structured text into subtitle, so have to do a hack.
-            options.subtitle = Some("__FIL-SUBTITLE-HERE__".to_string());
-        }
-        self.get_flamegraph_with_options(to_be_post_processed, options, Some(subtitle))
+        get_flamegraph(
+            self.to_lines(to_be_post_processed),
+            reversed,
+            title,
+            subtitle,
+            count_name,
+            to_be_post_processed,
+        )
     }
 
     /// Write a flamegraph SVG to disk.
@@ -271,6 +237,70 @@ where
             let _ = std::fs::remove_file(raw_path_with_source_code);
         }
     }
+}
+
+/// Low-level interface for writing flamegraphs with post-processing:
+pub fn get_flamegraph_with_options<I: IntoIterator<Item = String>>(
+    lines: I,
+    to_be_post_processed: bool,
+    mut options: flamegraph::Options,
+    // special cased because it needs to be psot-processed:
+    subtitle: Option<&str>,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let mut output = vec![];
+    let lines: Vec<String> = lines.into_iter().collect();
+    match flamegraph::from_lines(&mut options, lines.iter().map(|s| s.as_ref()), &mut output) {
+        Err(e) => Err(format!("{}", e).into()),
+        Ok(_) => {
+            if to_be_post_processed {
+                // Replace with real subtitle.
+                let data = String::from_utf8(output)?;
+                let data = if let Some(subtitle) = subtitle {
+                    data.replace("__FIL-SUBTITLE-HERE__", subtitle)
+                } else {
+                    data
+                };
+                // Restore normal semi-colons.
+                let data = data.replace('\u{ff1b}', ";");
+                // Restore (non-breaking) spaces.
+                let data = data.replace('\u{12e4}', "\u{00a0}");
+                // Get rid of empty-line markers:
+                let data = data.replace('\u{2800}', "");
+                output = data.as_bytes().to_vec();
+            }
+            Ok(output)
+        }
+    }
+}
+
+/// Write a flamegraph SVG to disk, given lines in summarized format.
+pub fn get_flamegraph<I: IntoIterator<Item = String>>(
+    lines: I,
+    reversed: bool,
+    title: &str,
+    subtitle: &str,
+    count_name: &str,
+    to_be_post_processed: bool,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let title = format!("{}{}", title, if reversed { ", Reversed" } else { "" },);
+    let mut options = flamegraph::Options::default();
+    options.title = title;
+    options.count_name = count_name.to_string();
+    options.font_size = 16;
+    options.font_type = "monospace".to_string();
+    options.frame_height = 22;
+    options.reverse_stack_order = reversed;
+    options.color_diffusion = true;
+    options.direction = flamegraph::Direction::Inverted;
+    options.min_width = 0.2;
+    // Maybe disable this some day; but for now it makes debugging much
+    // easier:
+    options.pretty_xml = true;
+    if to_be_post_processed {
+        // Can't put structured text into subtitle, so have to do a hack.
+        options.subtitle = Some("__FIL-SUBTITLE-HERE__".to_string());
+    }
+    get_flamegraph_with_options(lines, to_be_post_processed, options, Some(subtitle))
 }
 
 #[cfg(test)]
