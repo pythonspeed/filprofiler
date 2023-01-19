@@ -94,7 +94,10 @@ where
 
     /// Create iterator over the line-based string format parsed by the inferno
     /// crate.
-    pub fn to_lines(&'a self, to_be_post_processed: bool) -> impl Iterator<Item = String> + 'a {
+    pub fn to_lines(
+        &'a self,
+        to_be_post_processed: bool,
+    ) -> impl ExactSizeIterator<Item = String> + 'a {
         let by_call = (&self.data).into_iter();
         let mut linecache = LineCacher::default();
         by_call.map(move |(callstack, size)| {
