@@ -89,6 +89,7 @@ fn set_current_callstack(callstack: &Callstack) {
 }
 
 extern "C" {
+    fn _exit(exit_code: std::os::raw::c_int);
     fn free(address: *mut c_void);
 }
 
@@ -169,7 +170,7 @@ fn add_allocation(
             false,
         );
         unsafe {
-            libc::_exit(53);
+            _exit(53);
         }
     };
     Ok(())
