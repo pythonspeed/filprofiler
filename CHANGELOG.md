@@ -1,5 +1,11 @@
 # Release notes
 
+## 2023.1.0 (2023-1-20)
+
+### Bugfixes
+
+- Fix regression where source code would sometimes be missing from flamegraphs, most notably in Jupyter profiling. ([#474](https://github.com/pythonspeed/filprofiler/issues/474))
+
 ## 2022.11.0 (2022-11-07)
 
 ### Features

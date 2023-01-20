@@ -76,19 +76,16 @@ def render_report(output_path: str, now: datetime) -> str:
 
 <h2>Profiling result</h2>
 <div style="text-align: center;"><p><input type="button" onclick="fullScreen('#peak');" value="Full screen"> · <a href="peak-memory.svg" target="_blank"><button>Open in new window</button></a></p>
-<iframe id="peak" src="peak-memory.svg" width="100%" height="400" scrolling="auto" frameborder="0"></iframe>
+<iframe id="peak" src="peak-memory.svg" width="100%" height="700" scrolling="auto" frameborder="0"></iframe>
 </div>
 <br>
 <blockquote class="center">
-            <p style="text-align: center;"><em>Check out my other project:</em></p>
-            <h3>Find memory and performance bottlenecks in production!</h3>
-            <p>When your data pipeline is too slow in production, reproducing the problem
-            on your laptop is hard or impossible—which means identifying and fixing the problem can be tricky.</p>
-            <p>What if you knew the cause of the problem as soon as you realized it was happening?</p>
-            <p>That's how
-            <strong><a href="https://sciagraph.com/">the Sciagraph profiler</a></strong> can help you:
-            it's designed to <strong>find performance
-            and memory bottlenecks by continuously profiling in production.</strong></p></blockquote>
+            <h3>Find performance bottlenecks in your data processing jobs with the Sciagraph profiler</h3>
+            <p><strong><a href="https://sciagraph.com/">The Sciagraph profiler</a></strong> can help you
+            <strong>find performance
+            and memory bottlenecks with low overhead, so you can use it in both development and production.</strong></p>
+            <p>Unlike Fil, it includes performance profiling. Sciagraph's memory profiling uses sampling so it runs faster than Fil, but unlike Fil
+            it can't accurately profile small allocations or run natively on macOS.</p></blockquote>
 <br>
             <br>
 <div style="text-align: center;"><p><input type="button" onclick="fullScreen('#peak-reversed');" value="Full screen"> ·

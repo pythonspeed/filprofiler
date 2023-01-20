@@ -1,5 +1,6 @@
 use crate::flamegraph::filter_to_useful_callstacks;
-use crate::flamegraph::write_flamegraphs;
+use crate::flamegraph::CallstackCleaner;
+use crate::flamegraph::FlamegraphCallstacks;
 use crate::linecache::LineCacher;
 use crate::python::get_runpy_path;
 
@@ -13,7 +14,6 @@ use serde::Serialize;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
-use std::path::Path;
 
 extern "C" {
     fn _exit(exit_code: std::os::raw::c_int);
@@ -41,27 +41,32 @@ struct FunctionLocation {
     function_name: String,
 }
 
+/// The clone should be cheap, ideally, so probably an immutable data structures
+/// would be good.
 pub trait FunctionLocations {
     fn get_function_and_filename(&self, id: FunctionId) -> (&str, &str);
+
+    // Like Clone.clone(), but should be cheap.
+    fn cheap_clone(&self) -> Self;
 }
 
 /// Stores FunctionLocations, returns a FunctionId
 #[derive(Clone)]
 pub struct VecFunctionLocations {
-    functions: Vec<FunctionLocation>,
+    functions: ImVector<FunctionLocation>,
 }
 
 impl VecFunctionLocations {
     /// Create a new tracker.
     pub fn new() -> Self {
         Self {
-            functions: Vec::with_capacity(8192),
+            functions: ImVector::new(),
         }
     }
 
     /// Register a function, get back its id.
     pub fn add_function(&mut self, filename: String, function_name: String) -> FunctionId {
-        self.functions.push(FunctionLocation {
+        self.functions.push_back(FunctionLocation {
             filename,
             function_name,
         });
@@ -79,6 +84,12 @@ impl FunctionLocations for VecFunctionLocations {
         }
         let location = &self.functions[id.0 as usize];
         (&location.function_name, &location.filename)
+    }
+
+    fn cheap_clone(&self) -> Self {
+        Self {
+            functions: self.functions.clone(),
+        }
     }
 }
 
@@ -186,10 +197,10 @@ impl Callstack {
         callstack_id
     }
 
-    pub fn as_string(
+    pub fn as_string<FL: FunctionLocations>(
         &self,
         to_be_post_processed: bool,
-        functions: &dyn FunctionLocations,
+        functions: &FL,
         separator: &'static str,
         linecache: &mut LineCacher,
     ) -> String {
@@ -224,12 +235,17 @@ impl Callstack {
                     // which I can't be bothered to fix right now, so for
                     // now do hack where we shove in some other character
                     // that can be fixed in post-processing.
-                    let code = code.replace(" ", "\u{12e4}");
+                    let code = code.trim_end().replace(' ', "\u{12e4}");
+                    // Tabs == 8 spaces in Python.
+                    let code = code.replace(
+                        '\t',
+                        "\u{12e4}\u{12e4}\u{12e4}\u{12e4}\u{12e4}\u{12e4}\u{12e4}\u{12e4}",
+                    );
                     // Semicolons are used as separator in the flamegraph
                     // input format, so need to replace them with some other
                     // character. We use "full-width semicolon", and then
                     // replace it back in post-processing.
-                    let code = code.replace(";", "\u{ff1b}");
+                    let code = code.replace(';', "\u{ff1b}");
                     // The \u{2800} is to ensure we don't have empty lines,
                     // and that whitespace doesn't get trimmed from start;
                     // we'll get rid of this in post-processing.
@@ -356,8 +372,13 @@ impl Allocation {
     }
 }
 
-fn same_callstack(callstack: &Callstack) -> Cow<Callstack> {
-    Cow::Borrowed(callstack)
+/// A CallstackCleaner that leaves the callstack unchanged.
+pub struct IdentityCleaner;
+
+impl CallstackCleaner for IdentityCleaner {
+    fn cleanup<'a>(&self, callstack: &'a Callstack) -> Cow<'a, Callstack> {
+        Cow::Borrowed(callstack)
+    }
 }
 
 /// The main data structure tracking everything.
@@ -381,7 +402,7 @@ pub struct AllocationTracker<FL: FunctionLocations> {
     current_allocated_bytes: usize,
     peak_allocated_bytes: usize,
     // Default directory to write out data lacking other info:
-    default_path: String,
+    pub default_path: String,
 
     // Allocations that somehow disappeared. Not relevant for sampling profiler.
     missing_allocated_bytes: usize,
@@ -597,11 +618,12 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
 
     /// Combine Callstacks and make them human-readable. Duplicate callstacks
     /// have their allocated memory summed.
-    fn combine_callstacks(
-        &self,
+    pub fn combine_callstacks<CC: CallstackCleaner>(
+        &mut self,
         // If false, will do the current allocations:
         peak: bool,
-    ) -> HashMap<CallstackId, usize, ARandomState> {
+        callstack_cleaner: CC,
+    ) -> FlamegraphCallstacks<HashMap<Callstack, usize, ARandomState>, FL, CC> {
         // Would be nice to validate if data is consistent. However, there are
         // edge cases that make it slightly inconsistent (e.g. see the
         // unexpected code path in add_allocation() above), and blowing up
@@ -615,96 +637,24 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
         // flamegraph (which currently loads EVERYTHING into memory), just do
         // the top 99% of allocations.
         let callstacks = if peak {
+            self.check_if_new_peak();
             &self.peak_memory_usage
         } else {
             &self.current_memory_usage
         };
         let sum = callstacks.iter().sum();
-        filter_to_useful_callstacks(callstacks.iter().enumerate(), sum)
-            .into_iter()
-            .map(|(k, v)| (k as CallstackId, v))
-            .collect()
-    }
-
-    /// Dump all callstacks in peak memory usage to various files describing the
-    /// memory usage.
-    pub fn dump_peak_to_flamegraph(&mut self, path: &str) {
-        self.dump_to_flamegraph(path, true, "peak-memory", "Peak Tracked Memory Usage", true);
-    }
-
-    pub fn to_lines<'a, F>(
-        &'a self,
-        peak: bool,
-        to_be_post_processed: bool,
-        update_callstack: F,
-    ) -> impl ExactSizeIterator<Item = String> + '_
-    where
-        F: Fn(&Callstack) -> Cow<Callstack> + 'a,
-    {
-        let by_call = self.combine_callstacks(peak).into_iter();
         let id_to_callstack = self.interner.get_reverse_map();
-        let mut linecache = LineCacher::default();
-        by_call.map(move |(callstack_id, size)| {
-            format!(
-                "{} {}",
-                update_callstack(id_to_callstack.get(&callstack_id).unwrap()).as_string(
-                    to_be_post_processed,
-                    &self.functions,
-                    ";",
-                    &mut linecache,
-                ),
-                size,
-            )
-        })
-    }
-
-    fn dump_to_flamegraph(
-        &mut self,
-        path: &str,
-        peak: bool,
-        base_filename: &str,
-        title: &str,
-        to_be_post_processed: bool,
-    ) {
-        // First, make sure peaks are correct:
-        self.check_if_new_peak();
-
-        // Print warning if we're missing allocations.
-        #[cfg(not(feature = "fil4prod"))]
-        {
-            let allocated_bytes = if peak {
-                self.peak_allocated_bytes
-            } else {
-                self.current_allocated_bytes
-            };
-            if self.missing_allocated_bytes > 0 {
-                eprintln!("=fil-profile= WARNING: {:.2}% ({} bytes) of tracked memory somehow disappeared. If this is a small percentage you can just ignore this warning, since the missing allocations won't impact the profiling results. If the % is high, please run `export FIL_DEBUG=1` to get more output', re-run Fil on your script, and then file a bug report at https://github.com/pythonspeed/filprofiler/issues/new", self.missing_allocated_bytes as f64 * 100.0 / allocated_bytes as f64, self.missing_allocated_bytes);
-            }
-            if self.failed_deallocations > 0 {
-                eprintln!("=fil-profile= WARNING: Encountered {} deallocations of untracked allocations. A certain number are expected in normal operation, of allocations created before Fil started tracking, and even more if you're using the Fil API to turn tracking on and off.", self.failed_deallocations);
-            }
-        }
-
-        eprintln!("=fil-profile= Preparing to write to {}", path);
-        let directory_path = Path::new(path);
-
-        let title = format!(
-            "{} ({:.1} MiB)",
-            title,
-            self.peak_allocated_bytes as f64 / (1024.0 * 1024.0)
-        );
-        #[cfg(not(feature = "fil4prod"))]
-        let subtitle = r#"Made with the Fil profiler. <a href="https://pythonspeed.com/fil/" style="text-decoration: underline;" target="_parent">Try it on your code!</a>"#;
-        #[cfg(feature = "fil4prod")]
-        let subtitle = r#"Made with the Fil4prod profiler. <a href="https://pythonspeed.com/products/fil4prod/" style="text-decoration: underline;" target="_parent">Try it on your code!</a>"#;
-        write_flamegraphs(
-            directory_path,
-            base_filename,
-            &title,
-            subtitle,
-            "bytes",
-            to_be_post_processed,
-            |tbpp| self.to_lines(peak, tbpp, same_callstack),
+        FlamegraphCallstacks::new(
+            filter_to_useful_callstacks(callstacks.iter().enumerate(), sum)
+                .into_iter()
+                .filter_map(|(k, v)| {
+                    id_to_callstack
+                        .get(&(k as CallstackId))
+                        .map(|cs| ((**cs).clone(), v))
+                })
+                .collect(),
+            self.functions.cheap_clone(),
+            callstack_cleaner,
         )
     }
 
@@ -712,24 +662,6 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
     pub fn oom_break_glass(&mut self) {
         self.current_allocations.clear();
         self.peak_memory_usage.clear();
-    }
-
-    /// Dump information about where we are.
-    pub fn oom_dump(&mut self) {
-        eprintln!(
-            "=fil-profile= We'll try to dump out SVGs. Note that no HTML file will be written."
-        );
-        let default_path = self.default_path.clone();
-        self.dump_to_flamegraph(
-            &default_path,
-            false,
-            "out-of-memory",
-            "Current allocations at out-of-memory time",
-            false,
-        );
-        unsafe {
-            _exit(53);
-        }
     }
 
     /// Validate internal state is in a good state. This won't pass until
@@ -757,6 +689,22 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
         assert!(self.peak_memory_usage.iter().sum::<usize>() == self.peak_allocated_bytes);
     }
 
+    /// Warn of untracked allocations; only relevant if you are profiling _all_
+    /// allocations, i.e. Fil but not Sciagraph.
+    pub fn warn_on_problems(&self, peak: bool) {
+        let allocated_bytes = if peak {
+            self.get_peak_allocated_bytes()
+        } else {
+            self.get_current_allocated_bytes()
+        };
+        if self.missing_allocated_bytes > 0 {
+            eprintln!("=fil-profile= WARNING: {:.2}% ({} bytes) of tracked memory somehow disappeared. If this is a small percentage you can just ignore this warning, since the missing allocations won't impact the profiling results. If the % is high, please run `export FIL_DEBUG=1` to get more output', re-run Fil on your script, and then file a bug report at https://github.com/pythonspeed/filprofiler/issues/new", self.missing_allocated_bytes as f64 * 100.0 / allocated_bytes as f64, self.missing_allocated_bytes);
+        }
+        if self.failed_deallocations > 0 {
+            eprintln!("=fil-profile= WARNING: Encountered {} deallocations of untracked allocations. A certain number are expected in normal operation, of allocations created before Fil started tracking, and even more if you're using the Fil API to turn tracking on and off.", self.failed_deallocations);
+        }
+    }
+
     /// Reset internal state in way that doesn't invalidate e.g. thread-local
     /// caching of callstack ID.
     pub fn reset(&mut self, default_path: String) {
@@ -775,7 +723,7 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
 
 #[cfg(test)]
 mod tests {
-    use crate::memorytracking::{same_callstack, ProcessUid, PARENT_PROCESS};
+    use crate::memorytracking::{IdentityCleaner, ProcessUid, PARENT_PROCESS};
 
     use super::LineNumberInfo::LineNumber;
     use super::{
@@ -1235,7 +1183,10 @@ mod tests {
             "c:3 (cf) 234",
             "a:7 (af);b:2 (bf) 6000",
         ];
-        let mut result2: Vec<String> = tracker.to_lines(true, false, same_callstack).collect();
+        let mut result2: Vec<String> = tracker
+            .combine_callstacks(true, IdentityCleaner)
+            .to_lines(false)
+            .collect();
         result2.sort();
         expected2.sort();
         assert_eq!(expected2, result2);

@@ -1,72 +1,72 @@
-//! A line caching library, a bit like Python's linecache.
+//! A Rust wrapper around Python's linecache. We can't just emulate it because
+//! PEP 302 `__loader__`s and ipython shoving stuff into it and oh god oh god oh
+//! god Python is complicated.
 
-use std::{
-    collections::HashMap,
-    fs::File,
-    io::{BufRead, BufReader},
-};
+use crate::python;
 
-use ahash::RandomState;
-
-/// Store a cache of files in memory, allow easy reading of lines.
+/// Wrapper around Python's linecache.
 #[derive(Default)]
-pub struct LineCacher {
-    file_lines: HashMap<String, Vec<String>, RandomState>,
-}
-
-static EMPTY_STRING: String = String::new();
+pub struct LineCacher {}
 
 impl LineCacher {
-    /// Get the source code line for the given file. If the file doesn't exist
-    /// or line number is too big, an empty string is returned. Line endings are
-    /// stripped.
-    pub fn get_source_line<'a>(&'a mut self, filename: &str, line_number: usize) -> &'a str {
+    /// Get the source code line for the given file.
+    pub fn get_source_line(&mut self, filename: &str, line_number: usize) -> String {
         if line_number == 0 {
-            return &EMPTY_STRING;
+            return String::new();
         }
-        let entry =
-            self.file_lines
-                .entry(filename.to_string())
-                .or_insert_with(|| -> Vec<String> {
-                    File::open(filename)
-                        .map(|f| {
-                            BufReader::new(f)
-                                .lines()
-                                .map(|l| l.unwrap_or_else(|_| EMPTY_STRING.clone()))
-                                .collect()
-                        })
-                        .unwrap_or_else(|_| vec![])
-                });
-        entry.get(line_number - 1).unwrap_or(&EMPTY_STRING)
+        python::get_source_line(filename, line_number).unwrap_or_default()
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use pyo3::prelude::*;
+    use rusty_fork::rusty_fork_test;
     use std::io::Write;
 
-    use super::LineCacher;
+    rusty_fork_test! {
+        /// The linecache can read files.
+        #[test]
+        fn linecacher_from_file() {
+            pyo3::prepare_freethreaded_python();
+            let mut cache = LineCacher::default();
 
-    #[test]
-    fn linecache() {
-        let mut cache = LineCacher::default();
+            // Non-existent file
+            assert_eq!(cache.get_source_line("/no/such/file", 1), "");
 
-        // Non-existent file
-        assert_eq!(cache.get_source_line("/no/such/file", 1), "");
+            let mut f = tempfile::NamedTempFile::new().unwrap();
+            f.as_file_mut().write_all(b"abc\ndef\r\nghijk").unwrap();
+            let path = f.path().as_os_str().to_str().unwrap();
 
-        let mut f = tempfile::NamedTempFile::new().unwrap();
-        f.as_file_mut().write_all(b"abc\ndef\r\nghijk").unwrap();
-        let path = f.path().as_os_str().to_str().unwrap();
+            // 0 line number
+            assert_eq!(cache.get_source_line(path, 0), "");
 
-        // 0 line number
-        assert_eq!(cache.get_source_line(path, 0), "");
+            // Too high line number
+            assert_eq!(cache.get_source_line(path, 4), "");
 
-        // Too high line number
-        assert_eq!(cache.get_source_line(path, 4), "");
+            // Present line numbers
+            assert_eq!(cache.get_source_line(path, 1), "abc\n");
+            assert_eq!(cache.get_source_line(path, 2), "def\n");
+            assert_eq!(cache.get_source_line(path, 3), "ghijk\n");
+        }
 
-        // Present line numbers
-        assert_eq!(cache.get_source_line(path, 1), "abc");
-        assert_eq!(cache.get_source_line(path, 2), "def");
-        assert_eq!(cache.get_source_line(path, 3), "ghijk");
+        /// The linecache can read random crap shoved into the linecache module.
+        #[test]
+        fn linecacher_from_arbitrary_source() {
+            pyo3::prepare_freethreaded_python();
+            let mut cache = LineCacher::default();
+
+            Python::with_gil(|py| {
+                let blah = vec!["arr\n", "boo"];
+                let linecache = PyModule::import(py, "linecache")?;
+                linecache
+                    .getattr("cache")?.set_item("blah", (8, 0, blah, "blah"))?;
+                Ok::<(), PyErr>(())
+            }).unwrap();
+
+            assert_eq!(cache.get_source_line("blah", 1), "arr\n");
+            assert_eq!(cache.get_source_line("blah", 2), "boo");
+        }
     }
 }

@@ -2,12 +2,14 @@
 use parking_lot::Mutex;
 use pymemprofile_api::memorytracking::LineNumberInfo::LineNumber;
 use pymemprofile_api::memorytracking::{
-    AllocationTracker, CallSiteId, Callstack, FunctionId, VecFunctionLocations, PARENT_PROCESS,
+    AllocationTracker, CallSiteId, Callstack, FunctionId, IdentityCleaner, VecFunctionLocations,
+    PARENT_PROCESS,
 };
 use pymemprofile_api::oom::{InfiniteMemory, OutOfMemoryEstimator, RealMemoryInfo};
 use std::cell::RefCell;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_void};
+use std::path::Path;
 
 #[macro_use]
 extern crate lazy_static;
@@ -87,6 +89,7 @@ fn set_current_callstack(callstack: &Callstack) {
 }
 
 extern "C" {
+    fn _exit(exit_code: std::os::raw::c_int);
     fn free(address: *mut c_void);
 }
 
@@ -152,7 +155,23 @@ fn add_allocation(
 
     if oom {
         // Uh-oh, we're out of memory.
-        allocations.oom_dump();
+        eprintln!(
+            "=fil-profile= We'll try to dump out SVGs. Note that no HTML file will be written."
+        );
+        let default_path = allocations.default_path.clone();
+        // Release the lock, since dumping the flamegraph will reacquire it:
+        drop(tracker_state);
+
+        dump_to_flamegraph(
+            &default_path,
+            false,
+            "out-of-memory",
+            "Current allocations at out-of-memory time",
+            false,
+        );
+        unsafe {
+            _exit(53);
+        }
     };
     Ok(())
 }
@@ -180,11 +199,55 @@ fn reset(default_path: String) {
     tracker_state.allocations.reset(default_path);
 }
 
+fn dump_to_flamegraph(
+    path: &str,
+    peak: bool,
+    base_filename: &str,
+    title: &str,
+    to_be_post_processed: bool,
+) {
+    // In order to render the flamegraph, we want to load source code using
+    // Python's linecache. That means calling into Python, which might release
+    // the GIL, allowing another thread to run, and it will try to allocation
+    // and hit the TRACKER_STATE mutex. And now we're deadlocked. So we make
+    // sure flamegraph rendering does not require TRACKER_STATE to be locked.
+    let (allocated_bytes, flamegraph_callstacks) = {
+        let mut tracker_state = TRACKER_STATE.lock();
+        let allocations = &mut tracker_state.allocations;
+
+        // Print warning if we're missing allocations.
+        allocations.warn_on_problems(peak);
+        let allocated_bytes = if peak {
+            allocations.get_peak_allocated_bytes()
+        } else {
+            allocations.get_current_allocated_bytes()
+        };
+        let flamegraph_callstacks = allocations.combine_callstacks(peak, IdentityCleaner);
+        (allocated_bytes, flamegraph_callstacks)
+    };
+
+    eprintln!("=fil-profile= Preparing to write to {}", path);
+    let directory_path = Path::new(path);
+
+    let title = format!(
+        "{} ({:.1} MiB)",
+        title,
+        allocated_bytes as f64 / (1024.0 * 1024.0)
+    );
+    let subtitle = r#"Made with the Fil profiler. <a href="https://pythonspeed.com/fil/" style="text-decoration: underline;" target="_parent">Try it on your code!</a>"#;
+    flamegraph_callstacks.write_flamegraphs(
+        directory_path,
+        base_filename,
+        &title,
+        subtitle,
+        "bytes",
+        to_be_post_processed,
+    )
+}
+
 /// Dump all callstacks in peak memory usage to format used by flamegraph.
 fn dump_peak_to_flamegraph(path: &str) {
-    let mut tracker_state = TRACKER_STATE.lock();
-    let allocations = &mut tracker_state.allocations;
-    allocations.dump_peak_to_flamegraph(path);
+    dump_to_flamegraph(path, true, "peak-memory", "Peak Tracked Memory Usage", true);
 }
 
 #[no_mangle]
@@ -318,8 +381,8 @@ extern "C" {
     fn is_initialized() -> c_int;
 
     // Increment/decrement reentrancy counter.
-    fn fil_increment_reentrancy();
-    fn fil_decrement_reentrancy();
+    //fn fil_increment_reentrancy();
+    //fn fil_decrement_reentrancy();
 }
 
 struct FilMmapAPI;
@@ -337,7 +400,7 @@ impl pymemprofile_api::mmap::MmapAPI for FilMmapAPI {
     }
 
     fn is_initialized(&self) -> bool {
-        return unsafe { is_initialized() == 1 };
+        unsafe { is_initialized() == 1 }
     }
 }
 

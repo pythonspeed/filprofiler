@@ -1,7 +1,12 @@
-use std::{fs, io::Write, path::Path};
+use std::{borrow::Cow, fs, io::Write, path::Path};
 
 use inferno::flamegraph;
 use itertools::Itertools;
+
+use crate::{
+    linecache::LineCacher,
+    memorytracking::{Callstack, FunctionLocations},
+};
 
 /// Filter down to top 99% of samples.
 ///
@@ -59,27 +64,179 @@ pub fn write_lines<I: IntoIterator<Item = String>>(lines: I, path: &Path) -> std
     Ok(())
 }
 
-/// Write a flamegraph SVG to disk, given lines in summarized format.
-pub fn write_flamegraph<I: IntoIterator<Item = String>>(
-    lines: I,
-    path: &Path,
-    reversed: bool,
-    title: &str,
-    subtitle: &str,
-    count_name: &str,
-    to_be_post_processed: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let flamegraph = get_flamegraph(
-        lines,
-        reversed,
-        title,
-        subtitle,
-        count_name,
-        to_be_post_processed,
-    )?;
-    let mut file = std::fs::File::create(path)?;
-    file.write_all(&flamegraph)?;
-    Ok(())
+/// A strategy for cleaning up callstacks before rendering them to text.
+pub trait CallstackCleaner {
+    fn cleanup<'a>(&self, callstack: &'a Callstack) -> Cow<'a, Callstack>;
+}
+
+/// The data needed to create a flamegraph.
+pub struct FlamegraphCallstacks<D, FL: FunctionLocations, UC> {
+    data: D,
+    functions: FL,
+    callstack_cleaner: UC,
+}
+
+impl<'a, D, FL, UC> FlamegraphCallstacks<D, FL, UC>
+where
+    &'a D: IntoIterator<Item = (&'a Callstack, &'a usize)>,
+    <&'a D as IntoIterator>::IntoIter: ExactSizeIterator,
+    D: 'a,
+    FL: FunctionLocations,
+    UC: CallstackCleaner,
+{
+    pub fn new(data: D, functions: FL, callstack_cleaner: UC) -> Self {
+        Self {
+            data,
+            functions,
+            callstack_cleaner,
+        }
+    }
+
+    /// Create iterator over the line-based string format parsed by the inferno
+    /// crate.
+    pub fn to_lines(
+        &'a self,
+        to_be_post_processed: bool,
+    ) -> impl ExactSizeIterator<Item = String> + 'a {
+        let by_call = (&self.data).into_iter();
+        let mut linecache = LineCacher::default();
+        by_call.map(move |(callstack, size)| {
+            format!(
+                "{} {}",
+                self.callstack_cleaner.cleanup(callstack).as_string(
+                    to_be_post_processed,
+                    &self.functions,
+                    ";",
+                    &mut linecache,
+                ),
+                size,
+            )
+        })
+    }
+
+    /// Low-level interface for writing flamegraphs with post-processing:
+    pub fn get_flamegraph_with_options(
+        &'a self,
+        to_be_post_processed: bool,
+        options: flamegraph::Options,
+        // special cased because it needs to be psot-processed:
+        subtitle: Option<&str>,
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        let lines = self.to_lines(to_be_post_processed);
+        get_flamegraph_with_options(lines, to_be_post_processed, options, subtitle)
+    }
+
+    /// Write a flamegraph SVG to disk, given lines in summarized format.
+    pub fn get_flamegraph(
+        &'a self,
+        reversed: bool,
+        title: &str,
+        subtitle: &str,
+        count_name: &str,
+        to_be_post_processed: bool,
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        get_flamegraph(
+            self.to_lines(to_be_post_processed),
+            reversed,
+            title,
+            subtitle,
+            count_name,
+            to_be_post_processed,
+        )
+    }
+
+    /// Write a flamegraph SVG to disk.
+    pub fn write_flamegraph(
+        &'a self,
+        path: &Path,
+        reversed: bool,
+        title: &str,
+        subtitle: &str,
+        count_name: &str,
+        to_be_post_processed: bool,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let flamegraph =
+            self.get_flamegraph(reversed, title, subtitle, count_name, to_be_post_processed)?;
+        let mut file = std::fs::File::create(path)?;
+        file.write_all(&flamegraph)?;
+        Ok(())
+    }
+
+    /// Write .prof, -source.prof, .svg and -reversed.svg files for given lines.
+    pub fn write_flamegraphs(
+        &'a self,
+        directory_path: &Path,
+        base_filename: &str,
+        title: &str,
+        subtitle: &str,
+        count_name: &str,
+        to_be_post_processed: bool,
+    ) {
+        if !directory_path.exists() {
+            fs::create_dir_all(directory_path)
+                .expect("=fil-profile= Couldn't create the output directory.");
+        } else if !directory_path.is_dir() {
+            panic!("=fil-profile= Output path must be a directory.");
+        }
+
+        let raw_path_without_source_code = directory_path.join(format!("{}.prof", base_filename));
+
+        let raw_path_with_source_code =
+            directory_path.join(format!("{}-source.prof", base_filename));
+
+        // Always write .prof file without source code, for use by tests and
+        // other automated post-processing.
+        if let Err(e) = write_lines(self.to_lines(false), &raw_path_without_source_code) {
+            eprintln!("=fil-profile= Error writing raw profiling data: {}", e);
+            return;
+        }
+
+        // Optionally write version with source code for SVGs, if we're using
+        // source code.
+        if to_be_post_processed {
+            if let Err(e) = write_lines(self.to_lines(true), &raw_path_with_source_code) {
+                eprintln!("=fil-profile= Error writing raw profiling data: {}", e);
+                return;
+            }
+        }
+
+        let svg_path = directory_path.join(format!("{}.svg", base_filename));
+        match self.write_flamegraph(
+            &svg_path,
+            false,
+            title,
+            subtitle,
+            count_name,
+            to_be_post_processed,
+        ) {
+            Ok(_) => {
+                eprintln!("=fil-profile= Wrote flamegraph to {:?}", svg_path);
+            }
+            Err(e) => {
+                eprintln!("=fil-profile= Error writing SVG: {}", e);
+            }
+        }
+        let svg_path = directory_path.join(format!("{}-reversed.svg", base_filename));
+        match self.write_flamegraph(
+            &svg_path,
+            true,
+            title,
+            subtitle,
+            count_name,
+            to_be_post_processed,
+        ) {
+            Ok(_) => {
+                eprintln!("=fil-profile= Wrote flamegraph to {:?}", svg_path);
+            }
+            Err(e) => {
+                eprintln!("=fil-profile= Error writing SVG: {}", e);
+            }
+        }
+        if to_be_post_processed {
+            // Don't need this file, and it'll be quite big, so delete it.
+            let _ = std::fs::remove_file(raw_path_with_source_code);
+        }
+    }
 }
 
 /// Low-level interface for writing flamegraphs with post-processing:
@@ -146,86 +303,6 @@ pub fn get_flamegraph<I: IntoIterator<Item = String>>(
     get_flamegraph_with_options(lines, to_be_post_processed, options, Some(subtitle))
 }
 
-/// Write .prof, -source.prof, .svg and -reversed.svg files for given lines.
-pub fn write_flamegraphs<I, F>(
-    directory_path: &Path,
-    base_filename: &str,
-    title: &str,
-    subtitle: &str,
-    count_name: &str,
-    to_be_post_processed: bool,
-    get_lines: F,
-) where
-    I: IntoIterator<Item = String>,
-    F: Fn(bool) -> I, // (to_be_post_processed) -> lines
-{
-    if !directory_path.exists() {
-        fs::create_dir_all(directory_path)
-            .expect("=fil-profile= Couldn't create the output directory.");
-    } else if !directory_path.is_dir() {
-        panic!("=fil-profile= Output path must be a directory.");
-    }
-
-    let raw_path_without_source_code = directory_path.join(format!("{}.prof", base_filename));
-
-    let raw_path_with_source_code = directory_path.join(format!("{}-source.prof", base_filename));
-
-    // Always write .prof file without source code, for use by tests and
-    // other automated post-processing.
-    if let Err(e) = write_lines(get_lines(false), &raw_path_without_source_code) {
-        eprintln!("=fil-profile= Error writing raw profiling data: {}", e);
-        return;
-    }
-
-    // Optionally write version with source code for SVGs, if we're using
-    // source code.
-    if to_be_post_processed {
-        if let Err(e) = write_lines(get_lines(true), &raw_path_with_source_code) {
-            eprintln!("=fil-profile= Error writing raw profiling data: {}", e);
-            return;
-        }
-    }
-
-    let svg_path = directory_path.join(format!("{}.svg", base_filename));
-    match write_flamegraph(
-        get_lines(to_be_post_processed),
-        &svg_path,
-        false,
-        title,
-        subtitle,
-        count_name,
-        to_be_post_processed,
-    ) {
-        Ok(_) => {
-            eprintln!("=fil-profile= Wrote flamegraph to {:?}", svg_path);
-        }
-        Err(e) => {
-            eprintln!("=fil-profile= Error writing SVG: {}", e);
-        }
-    }
-    let svg_path = directory_path.join(format!("{}-reversed.svg", base_filename));
-    match write_flamegraph(
-        get_lines(to_be_post_processed),
-        &svg_path,
-        true,
-        title,
-        subtitle,
-        count_name,
-        to_be_post_processed,
-    ) {
-        Ok(_) => {
-            eprintln!("=fil-profile= Wrote flamegraph to {:?}", svg_path);
-        }
-        Err(e) => {
-            eprintln!("=fil-profile= Error writing SVG: {}", e);
-        }
-    }
-    if to_be_post_processed {
-        // Don't need this file, and it'll be quite big, so delete it.
-        let _ = std::fs::remove_file(raw_path_with_source_code);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::filter_to_useful_callstacks;
@@ -241,7 +318,7 @@ mod tests {
         ) {
             let total_size : usize = allocated_sizes.iter().sum();
             let total_size_99 = (99 * total_size) / 100;
-            let callstacks = (&allocated_sizes).iter().enumerate();
+            let callstacks = allocated_sizes.iter().enumerate();
             let filtered : HashMap<usize,usize>  = filter_to_useful_callstacks(callstacks, total_size).collect();
             let filtered_size :usize = filtered.values().into_iter().sum();
             if filtered_size >= total_size_99  {

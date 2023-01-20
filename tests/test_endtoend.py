@@ -491,7 +491,16 @@ def test_jupyter(tmpdir):
     assert "<iframe" in html
     [svg_path] = re.findall(r'src="([^"]*\.svg)"', html)
     assert svg_path.endswith("peak-memory.svg")
-    assert Path(tmpdir / svg_path).exists()
+    svg_path = Path(tmpdir / svg_path)
+    assert svg_path.exists()
+    with open(svg_path) as f:
+        # Make sure the source code is in the SVG:
+        assert (
+            "arr2 = numpy.ones((1024, 1024, 5), dtype=numpy.uint32)".replace(
+                " ", "\u00a0"  # non-breaking space
+            )
+            in f.read()
+        )
 
     # Allocations were tracked:
     allocations = get_allocations(output_dir)
@@ -570,7 +579,8 @@ def test_api_import(tmpdir):
 
 def test_source_rendering():
     """
-    Minimal tests that SVGs aren't completely broken in some edge cases.
+    Minimal tests that SVGs aren't completely broken in some edge cases, and
+    actually include the source code.
     """
     script = TEST_SCRIPTS / "source-code.py"
     output_dir = profile(script)
@@ -608,7 +618,10 @@ def test_tabs():
             svg = f.read()
 
         # Tabs are still there:
-        assert ">\tarr1, arr2 = make_".replace(" ", "\u00a0") in svg
+        assert (
+            ">\tarr1, arr2 = make_".replace(" ", "\u00a0").replace("\t", "\u00a0" * 8)
+            in svg
+        )
 
         # It's valid XML:
         ElementTree.fromstring(svg)
