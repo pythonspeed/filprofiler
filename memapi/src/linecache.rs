@@ -1,7 +1,6 @@
-//! A line caching library, a bit like Python's linecache.
-//!
-//! We don't want to use Python's linecache because calling back into Python for
-//! that can result in deadlocks.
+//! A Rust wrapper around Python's linecache. We can't just emulate it because
+//! PEP 302 `__loader__`s and ipython shoving stuff into it and oh god oh god oh
+//! god Python is complicated.
 
 use crate::python;
 
