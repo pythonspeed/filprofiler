@@ -53,21 +53,20 @@ pub trait FunctionLocations {
 /// Stores FunctionLocations, returns a FunctionId
 #[derive(Clone)]
 pub struct VecFunctionLocations {
-    // TODO switch to immutable vec
-    functions: Vec<FunctionLocation>,
+    functions: ImVector<FunctionLocation>,
 }
 
 impl VecFunctionLocations {
     /// Create a new tracker.
     pub fn new() -> Self {
         Self {
-            functions: Vec::with_capacity(8192),
+            functions: ImVector::new(),
         }
     }
 
     /// Register a function, get back its id.
     pub fn add_function(&mut self, filename: String, function_name: String) -> FunctionId {
-        self.functions.push(FunctionLocation {
+        self.functions.push_back(FunctionLocation {
             filename,
             function_name,
         });
