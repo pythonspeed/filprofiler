@@ -1,1 +1,0 @@
-Fix regression where source code would sometimes be missing from flamegraphs, most notably in Jupyter profiling.
