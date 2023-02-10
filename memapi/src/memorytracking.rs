@@ -286,8 +286,8 @@ impl Callstack {
                     )
                 } else {
                     format!(
-                        "{filename}:{line} ({function})",
-                        filename = filename,
+                        "{display_filename}:{line} ({function})",
+                        display_filename = display_filename,
                         line = id.line_number.get_line_number(),
                         function = function,
                     )
