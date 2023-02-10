@@ -57,7 +57,7 @@ pub trait WriteFunctionLocations {
 }
 
 pub trait ReadFunctionLocations {
-    fn get_function_and_filename(&self, id: FunctionId) -> (&str, &str);
+    fn get_function_and_filename_and_display_filename(&self, id: FunctionId) -> (&str, &str, &str);
 }
 
 /// Stores FunctionLocations, returns a FunctionId
@@ -88,12 +88,17 @@ impl VecFunctionLocations {
 
 impl ReadFunctionLocations for VecFunctionLocations {
     /// Get the function name and filename.
-    fn get_function_and_filename(&self, id: FunctionId) -> (&str, &str) {
+    fn get_function_and_filename_and_display_filename(&self, id: FunctionId) -> (&str, &str, &str) {
         if id == FunctionId::UNKNOWN {
-            return ("UNKNOWN", "UNKNOWN DUE TO BUG");
+            return ("UNKNOWN", "UNKNOWN", "UNKNOWN DUE TO BUG");
         }
         let location = &self.functions[id.0 as usize];
-        (&location.function_name, &location.filename)
+        (
+            &location.function_name,
+            &location.filename,
+            // TODO on Jupyter you might want to make display filename different...
+            &location.filename,
+        )
     }
 }
 
@@ -225,10 +230,15 @@ impl Callstack {
         if self.calls.is_empty() {
             return "[No Python stack]".to_string();
         }
-        let calls: Vec<(CallSiteId, (&str, &str))> = self
+        let calls: Vec<(CallSiteId, (&str, &str, &str))> = self
             .calls
             .iter()
-            .map(|id| (*id, functions.get_function_and_filename(id.function)))
+            .map(|id| {
+                (
+                    *id,
+                    functions.get_function_and_filename_and_display_filename(id.function),
+                )
+            })
             .collect();
         let skip_prefix = if cfg!(feature = "fil4prod") {
             0
@@ -240,7 +250,7 @@ impl Callstack {
         calls
             .into_iter()
             .skip(skip_prefix)
-            .map(|(id, (function, filename))| {
+            .map(|(id, (function, filename, display_filename))| {
                 if to_be_post_processed {
                     // Get Python code.
                     let code = linecache
@@ -268,8 +278,8 @@ impl Callstack {
                     // and that whitespace doesn't get trimmed from start;
                     // we'll get rid of this in post-processing.
                     format!(
-                        "{filename}:{line} ({function});\u{2800}{code}",
-                        filename = filename,
+                        "{display_filename}:{line} ({function});\u{2800}{code}",
+                        display_filename = display_filename,
                         line = id.line_number.get_line_number(),
                         function = function,
                         code = &code.trim_end(),
@@ -287,10 +297,10 @@ impl Callstack {
     }
 }
 
-fn runpy_prefix_length(calls: std::slice::Iter<(CallSiteId, (&str, &str))>) -> usize {
+fn runpy_prefix_length(calls: std::slice::Iter<(CallSiteId, (&str, &str, &str))>) -> usize {
     let mut length = 0;
     let runpy_path = get_runpy_path();
-    for (_, (_, filename)) in calls {
+    for (_, (_, filename, _)) in calls {
         // On Python 3.11 it uses <frozen runpy> for some reason.
         if *filename == runpy_path || *filename == "<frozen runpy>" {
             length += 1;
@@ -1229,8 +1239,10 @@ mod tests {
     #[test]
     fn test_unknown_function_id() {
         let func_locations = VecFunctionLocations::new().to_reader();
-        let (function, filename) = func_locations.get_function_and_filename(FunctionId::UNKNOWN);
-        assert_eq!(filename, "UNKNOWN DUE TO BUG");
+        let (function, filename, display_filename) =
+            func_locations.get_function_and_filename_and_display_filename(FunctionId::UNKNOWN);
+        assert_eq!(display_filename, "UNKNOWN DUE TO BUG");
+        assert_eq!(filename, "UNKNOWN");
         assert_eq!(function, "UNKNOWN");
     }
 
