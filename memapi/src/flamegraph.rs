@@ -5,7 +5,7 @@ use itertools::Itertools;
 
 use crate::{
     linecache::LineCacher,
-    memorytracking::{Callstack, FunctionLocations},
+    memorytracking::{Callstack, ReadFunctionLocations},
 };
 
 /// Filter down to top 99% of samples.
@@ -70,7 +70,7 @@ pub trait CallstackCleaner {
 }
 
 /// The data needed to create a flamegraph.
-pub struct FlamegraphCallstacks<D, FL: FunctionLocations, UC> {
+pub struct FlamegraphCallstacks<D, FL: ReadFunctionLocations, UC> {
     data: D,
     functions: FL,
     callstack_cleaner: UC,
@@ -81,7 +81,7 @@ where
     &'a D: IntoIterator<Item = (&'a Callstack, &'a usize)>,
     <&'a D as IntoIterator>::IntoIter: ExactSizeIterator,
     D: 'a,
-    FL: FunctionLocations,
+    FL: ReadFunctionLocations,
     UC: CallstackCleaner,
 {
     pub fn new(data: D, functions: FL, callstack_cleaner: UC) -> Self {

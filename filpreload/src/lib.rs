@@ -211,7 +211,7 @@ fn dump_to_flamegraph(
     // the GIL, allowing another thread to run, and it will try to allocation
     // and hit the TRACKER_STATE mutex. And now we're deadlocked. So we make
     // sure flamegraph rendering does not require TRACKER_STATE to be locked.
-    let (allocated_bytes, flamegraph_callstacks) = {
+    let (allocated_bytes, flamegraph_callstacks_factory) = {
         let mut tracker_state = TRACKER_STATE.lock();
         let allocations = &mut tracker_state.allocations;
 
@@ -222,9 +222,11 @@ fn dump_to_flamegraph(
         } else {
             allocations.get_current_allocated_bytes()
         };
-        let flamegraph_callstacks = allocations.combine_callstacks(peak, IdentityCleaner);
-        (allocated_bytes, flamegraph_callstacks)
+        let flamegraph_callstacks_factory = allocations.combine_callstacks(peak, IdentityCleaner);
+        (allocated_bytes, flamegraph_callstacks_factory)
     };
+
+    let flamegraph_callstacks = flamegraph_callstacks_factory();
 
     eprintln!("=fil-profile= Preparing to write to {}", path);
     let directory_path = Path::new(path);
