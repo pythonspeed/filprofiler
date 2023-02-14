@@ -41,13 +41,23 @@ struct FunctionLocation {
     function_name: String,
 }
 
+/// Basic usage: first clone, once any locks are released, convert to
+/// ReadFunctionLocations.
+///
 /// The clone should be cheap, ideally, so probably an immutable data structures
 /// would be good.
-pub trait FunctionLocations {
-    fn get_function_and_filename(&self, id: FunctionId) -> (&str, &str);
+pub trait WriteFunctionLocations {
+    type Reader: ReadFunctionLocations;
 
-    // Like Clone.clone(), but should be cheap.
+    /// Like Clone.clone(), but should be cheap.
     fn cheap_clone(&self) -> Self;
+
+    /// Convert to ReadFunctionLocations.
+    fn to_reader(self) -> Self::Reader;
+}
+
+pub trait ReadFunctionLocations {
+    fn get_function_and_filename_and_display_filename(&self, id: FunctionId) -> (&str, &str, &str);
 }
 
 /// Stores FunctionLocations, returns a FunctionId
@@ -76,20 +86,33 @@ impl VecFunctionLocations {
     }
 }
 
-impl FunctionLocations for VecFunctionLocations {
+impl ReadFunctionLocations for VecFunctionLocations {
     /// Get the function name and filename.
-    fn get_function_and_filename(&self, id: FunctionId) -> (&str, &str) {
+    fn get_function_and_filename_and_display_filename(&self, id: FunctionId) -> (&str, &str, &str) {
         if id == FunctionId::UNKNOWN {
-            return ("UNKNOWN", "UNKNOWN DUE TO BUG");
+            return ("UNKNOWN", "UNKNOWN", "UNKNOWN DUE TO BUG");
         }
         let location = &self.functions[id.0 as usize];
-        (&location.function_name, &location.filename)
+        (
+            &location.function_name,
+            &location.filename,
+            // TODO on Jupyter you might want to make display filename different...
+            &location.filename,
+        )
     }
+}
+
+impl WriteFunctionLocations for VecFunctionLocations {
+    type Reader = Self;
 
     fn cheap_clone(&self) -> Self {
         Self {
             functions: self.functions.clone(),
         }
+    }
+
+    fn to_reader(self) -> Self::Reader {
+        self
     }
 }
 
@@ -197,7 +220,7 @@ impl Callstack {
         callstack_id
     }
 
-    pub fn as_string<FL: FunctionLocations>(
+    pub fn as_string<FL: ReadFunctionLocations>(
         &self,
         to_be_post_processed: bool,
         functions: &FL,
@@ -207,10 +230,15 @@ impl Callstack {
         if self.calls.is_empty() {
             return "[No Python stack]".to_string();
         }
-        let calls: Vec<(CallSiteId, (&str, &str))> = self
+        let calls: Vec<(CallSiteId, (&str, &str, &str))> = self
             .calls
             .iter()
-            .map(|id| (*id, functions.get_function_and_filename(id.function)))
+            .map(|id| {
+                (
+                    *id,
+                    functions.get_function_and_filename_and_display_filename(id.function),
+                )
+            })
             .collect();
         let skip_prefix = if cfg!(feature = "fil4prod") {
             0
@@ -222,7 +250,7 @@ impl Callstack {
         calls
             .into_iter()
             .skip(skip_prefix)
-            .map(|(id, (function, filename))| {
+            .map(|(id, (function, filename, display_filename))| {
                 if to_be_post_processed {
                     // Get Python code.
                     let code = linecache
@@ -250,16 +278,16 @@ impl Callstack {
                     // and that whitespace doesn't get trimmed from start;
                     // we'll get rid of this in post-processing.
                     format!(
-                        "{filename}:{line} ({function});\u{2800}{code}",
-                        filename = filename,
+                        "{display_filename}:{line} ({function});\u{2800}{code}",
+                        display_filename = display_filename,
                         line = id.line_number.get_line_number(),
                         function = function,
                         code = &code.trim_end(),
                     )
                 } else {
                     format!(
-                        "{filename}:{line} ({function})",
-                        filename = filename,
+                        "{display_filename}:{line} ({function})",
+                        display_filename = display_filename,
                         line = id.line_number.get_line_number(),
                         function = function,
                     )
@@ -269,10 +297,10 @@ impl Callstack {
     }
 }
 
-fn runpy_prefix_length(calls: std::slice::Iter<(CallSiteId, (&str, &str))>) -> usize {
+fn runpy_prefix_length(calls: std::slice::Iter<(CallSiteId, (&str, &str, &str))>) -> usize {
     let mut length = 0;
     let runpy_path = get_runpy_path();
-    for (_, (_, filename)) in calls {
+    for (_, (_, filename, _)) in calls {
         // On Python 3.11 it uses <frozen runpy> for some reason.
         if *filename == runpy_path || *filename == "<frozen runpy>" {
             length += 1;
@@ -382,7 +410,7 @@ impl CallstackCleaner for IdentityCleaner {
 }
 
 /// The main data structure tracking everything.
-pub struct AllocationTracker<FL: FunctionLocations> {
+pub struct AllocationTracker<FL: WriteFunctionLocations> {
     // malloc()/calloc():
     current_allocations: BTreeMap<ProcessUid, HashMap<usize, Allocation, ARandomState>>,
     // anonymous mmap(), i.e. not file backed:
@@ -411,7 +439,7 @@ pub struct AllocationTracker<FL: FunctionLocations> {
     failed_deallocations: usize,
 }
 
-impl<FL: FunctionLocations> AllocationTracker<FL> {
+impl<FL: WriteFunctionLocations> AllocationTracker<FL> {
     pub fn new(default_path: String, functions: FL) -> AllocationTracker<FL> {
         AllocationTracker {
             current_allocations: BTreeMap::from([(PARENT_PROCESS, new_hashmap())]),
@@ -429,13 +457,21 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
     }
 
     /// Print a traceback for the given CallstackId.
-    pub fn print_traceback(&self, message: &'static str, callstack_id: CallstackId) {
+    ///
+    /// Should only be used with VecFunctionLocations, may cause deadlocks with
+    /// others...
+    fn print_traceback(&self, message: &'static str, callstack_id: CallstackId) {
         let id_to_callstack = self.interner.get_reverse_map();
         let callstack = id_to_callstack[&callstack_id];
         eprintln!("=fil-profile= {}", message);
         eprintln!(
             "=| {}",
-            callstack.as_string(false, &self.functions, "\n=| ", &mut LineCacher::default())
+            callstack.as_string(
+                false,
+                &self.functions.cheap_clone().to_reader(),
+                "\n=| ",
+                &mut LineCacher::default()
+            )
         );
     }
 
@@ -618,12 +654,18 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
 
     /// Combine Callstacks and make them human-readable. Duplicate callstacks
     /// have their allocated memory summed.
+    ///
+    /// We don't return the FlamegraphCallstacks, but rather a factory, because
+    /// we don't want to hold any locks while doing any potentially expensive
+    /// WriteFunctionLocations->ReadFunctionLocations conversion; by returning a
+    /// factory, that can be appropriately delayed by the caller.
     pub fn combine_callstacks<CC: CallstackCleaner>(
         &mut self,
         // If false, will do the current allocations:
         peak: bool,
         callstack_cleaner: CC,
-    ) -> FlamegraphCallstacks<HashMap<Callstack, usize, ARandomState>, FL, CC> {
+    ) -> impl FnOnce() -> FlamegraphCallstacks<HashMap<Callstack, usize, ARandomState>, FL::Reader, CC>
+    {
         // Would be nice to validate if data is consistent. However, there are
         // edge cases that make it slightly inconsistent (e.g. see the
         // unexpected code path in add_allocation() above), and blowing up
@@ -644,18 +686,19 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
         };
         let sum = callstacks.iter().sum();
         let id_to_callstack = self.interner.get_reverse_map();
-        FlamegraphCallstacks::new(
-            filter_to_useful_callstacks(callstacks.iter().enumerate(), sum)
-                .into_iter()
-                .filter_map(|(k, v)| {
-                    id_to_callstack
-                        .get(&(k as CallstackId))
-                        .map(|cs| ((**cs).clone(), v))
-                })
-                .collect(),
-            self.functions.cheap_clone(),
-            callstack_cleaner,
-        )
+        let data = filter_to_useful_callstacks(callstacks.iter().enumerate(), sum)
+            .into_iter()
+            .filter_map(|(k, v)| {
+                id_to_callstack
+                    .get(&(k as CallstackId))
+                    .map(|cs| ((**cs).clone(), v))
+            })
+            .collect();
+        let functions_writer = self.functions.cheap_clone();
+
+        // Return a closure, so we can delay doing the ReadFunctionLocations
+        // conversion if necessary:
+        || FlamegraphCallstacks::new(data, functions_writer.to_reader(), callstack_cleaner)
     }
 
     /// Clear memory we won't be needing anymore, since we're going to exit out.
@@ -723,12 +766,14 @@ impl<FL: FunctionLocations> AllocationTracker<FL> {
 
 #[cfg(test)]
 mod tests {
-    use crate::memorytracking::{IdentityCleaner, ProcessUid, PARENT_PROCESS};
+    use crate::memorytracking::{
+        IdentityCleaner, ProcessUid, ReadFunctionLocations, WriteFunctionLocations, PARENT_PROCESS,
+    };
 
     use super::LineNumberInfo::LineNumber;
     use super::{
         Allocation, AllocationTracker, CallSiteId, Callstack, CallstackInterner, FunctionId,
-        FunctionLocations, VecFunctionLocations, HIGH_32BIT, MIB,
+        VecFunctionLocations, HIGH_32BIT, MIB,
     };
     use proptest::prelude::*;
     use std::borrow::Cow;
@@ -1183,8 +1228,7 @@ mod tests {
             "c:3 (cf) 234",
             "a:7 (af);b:2 (bf) 6000",
         ];
-        let mut result2: Vec<String> = tracker
-            .combine_callstacks(true, IdentityCleaner)
+        let mut result2: Vec<String> = tracker.combine_callstacks(true, IdentityCleaner)()
             .to_lines(false)
             .collect();
         result2.sort();
@@ -1194,9 +1238,11 @@ mod tests {
 
     #[test]
     fn test_unknown_function_id() {
-        let func_locations = VecFunctionLocations::new();
-        let (function, filename) = func_locations.get_function_and_filename(FunctionId::UNKNOWN);
-        assert_eq!(filename, "UNKNOWN DUE TO BUG");
+        let func_locations = VecFunctionLocations::new().to_reader();
+        let (function, filename, display_filename) =
+            func_locations.get_function_and_filename_and_display_filename(FunctionId::UNKNOWN);
+        assert_eq!(display_filename, "UNKNOWN DUE TO BUG");
+        assert_eq!(filename, "UNKNOWN");
         assert_eq!(function, "UNKNOWN");
     }
 
