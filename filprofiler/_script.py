@@ -87,8 +87,12 @@ PARSER.add_argument(
 PARSER.add_argument(
     "--disable-oom-detection",
     action="store_true",
-    default=False,
-    help="Disable the heuristic that tries to catch out-of-memory situations before they occur",
+    default=True if sys.platform == "darwin" else False,
+    help=(
+        "Disable the heuristic that tries to catch out-of-memory situations before"
+        "they occur. OOM detection is always disabled on macOS at the moment, see "
+        "https://github.com/pythonspeed/filprofiler/issues/494"
+    ),
 )
 PARSER.add_argument(
     "--no-browser",
@@ -258,12 +262,18 @@ def stage_2():
         ),
     )
 
-    msg_browser = ", and opened automatically in a browser" if not arguments.no_browser else ", and stored in {}.".format(arguments.output_path)
-    msg_fil_plan = "=fil-profile= Memory usage will be written out at exit{}.\n".format(msg_browser)
+    msg_browser = (
+        ", and opened automatically in a browser"
+        if not arguments.no_browser
+        else ", and stored in {}.".format(arguments.output_path)
+    )
+    msg_fil_plan = "=fil-profile= Memory usage will be written out at exit{}.\n".format(
+        msg_browser
+    )
     print(
-        msg_fil_plan +
-        "=fil-profile= You can also run the following command while the program is still running to write out peak memory usage up to that point: " +
-        "kill -s SIGUSR2 {}".format(getpid()),
+        msg_fil_plan
+        + "=fil-profile= You can also run the following command while the program is still running to write out peak memory usage up to that point: "
+        + "kill -s SIGUSR2 {}".format(getpid()),
         file=sys.stderr,
     )
     if not exists(arguments.output_path):

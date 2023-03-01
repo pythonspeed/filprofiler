@@ -1,4 +1,9 @@
 # Release notes
+## 2023.3.0 (2023-3-1)
+
+### Changes
+
+* Out-of-memory detection is disabled for now on macOS, since it is prone to false positives.
 
 ## 2023.1.0 (2023-1-20)
 

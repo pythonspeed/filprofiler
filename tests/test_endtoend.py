@@ -280,6 +280,10 @@ def test_out_of_memory():
     )
 
 
+@pytest.mark.skipif(
+    sys.platform.startswith("darwin"),
+    reason="macOS doesn't have OOM detection at the moment",
+)
 def test_out_of_memory_slow_leak():
     """
     If an allocation is run that runs out of memory slowly, current allocations are
