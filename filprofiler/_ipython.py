@@ -8,7 +8,7 @@ from textwrap import indent
 from tempfile import mkdtemp
 
 from IPython.core.magic import Magics, magics_class, cell_magic
-from IPython.display import IFrame, display
+from IPython.display import IFrame, display, HTML
 
 from .api import profile
 
@@ -66,4 +66,7 @@ def run_with_profile(code_to_profile):
         return profile(code_to_profile, tempdir)
     finally:
         svg_path = tempdir / "peak-memory.svg"
-        display(IFrame(svg_path, width="100%", height="600"))
+        if svg_path.exists():
+            display(IFrame(svg_path, width="100%", height="600"))
+        else:
+            display(HTML("No report generated, perhaps zero memory was allocated."))
