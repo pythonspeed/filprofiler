@@ -1,12 +1,15 @@
 # Debugging out-of-memory crashes using Fil
 
+> **Note:** Out-of-memory detection is currently disabled on macOS.
+> This [may change in a future release](https://github.com/pythonspeed/filprofiler/issues/494).
+
 Typically when your program runs out of memory, it will crash, or get killed mysteriously by the operating system, or [other unfortunate side-effects](https://pythonspeed.com/articles/python-out-of-memory/).
 
 To help you debug these problems, Fil will heuristically try to catch out-of-memory conditions, and dump a report if thinks your program is out of memory.
 It will then exit with exit code 53.
 
 ```console
-$ fil-profile run oom.py 
+$ fil-profile run oom.py
 ...
 =fil-profile= Wrote memory usage flamegraph to fil-result/2020-06-15T12:37:13.033/out-of-memory.svg
 ```
