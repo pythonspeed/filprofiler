@@ -221,7 +221,9 @@ static void __attribute__((constructor)) constructor() {
 #endif
   // Initialize Rust static state before we start doing any calls via malloc(),
   // to ensure we don't get unpleasant reentrancy issues.
+  increment_reentrancy();
   pymemprofile_reset("/tmp");
+  decrement_reentrancy();
 
   // Drop LD_PRELOAD so that Linux subprocesses don't have this preloaded.
   unsetenv("LD_PRELOAD");
@@ -350,7 +352,9 @@ __attribute__((visibility("default"))) void register_fil_tracer() {
   // C threads inherit their callstack from the creating Python thread. That's
   // fine. However, if a tracer is being registered, that means this is not a
   // pure C thread, it's a new Python thread with its own callstack.
+  increment_reentrancy();
   pymemprofile_clear_current_callstack();
+  decrement_reentrancy();
   // We use 123 as a marker object for tests.
   PyEval_SetProfile(fil_tracer, PyLong_FromLong(123));
 }
@@ -590,7 +594,9 @@ SYMBOL_PREFIX(pthread_create)(pthread_t *thread, const pthread_attr_t *attr,
   }
   struct NewThreadArgs *wrapper_args =
       REAL_IMPL(malloc)(sizeof(struct NewThreadArgs));
+  increment_reentrancy();
   wrapper_args->callstack = pymemprofile_get_current_callstack();
+  decrement_reentrancy();
   wrapper_args->start_routine = start_routine;
   wrapper_args->arg = arg;
   int result = underlying_real_pthread_create(
