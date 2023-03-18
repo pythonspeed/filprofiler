@@ -1,4 +1,11 @@
 # Release notes
+
+## 2023.3.1 (2023-3-18)
+
+### Bugfixes
+
+- Fixed a reentrancy bug that could cause profiling to fail with a BorrowMutError. ([#485](https://github.com/pythonspeed/filprofiler/issues/485))
+
 ## 2023.3.0 (2023-3-1)
 
 ### Changes

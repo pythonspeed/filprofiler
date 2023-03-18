@@ -1,1 +1,0 @@
-Fixed a reentrancy bug that could cause profiling to fail with a BorrowMutError.
