@@ -24,7 +24,7 @@ Python: {sys.version}
 def render_report(output_path: str, now: datetime) -> str:
     """Write out the HTML index and improve the SVGs."""
     index_path = os.path.join(output_path, "index.html")
-    with open(index_path, "w") as index:
+    with open(index_path, "w", encoding="utf-8") as index:
         index.write(
             """
 <html>
