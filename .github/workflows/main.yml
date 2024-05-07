@@ -53,7 +53,7 @@ jobs:
         if: contains(matrix.os, 'ubuntu')
         run: |
             sudo apt-get update
-            sudo apt-get install -y gfortran
+            sudo apt-get install -y gfortran ninja-build
       - name: Install gfortran 2
         if: contains(matrix.os, 'macos')
         run: |
