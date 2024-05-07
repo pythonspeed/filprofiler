@@ -190,15 +190,21 @@ def test_profiling_disables_threadpools(tmpdir, profile_func):
     os.chdir(tmpdir)
 
     import numexpr
-    import blosc
+
+    try:
+        import blosc
+    except ImportError:
+        blosc = None
 
     numexpr.set_num_threads(3)
-    blosc.set_nthreads(3)
+    if blosc is not None:
+        blosc.set_nthreads(3)
     with threadpoolctl.threadpool_limits(3, "blas"):
 
         def check():
             assert numexpr.set_num_threads(2) == 1
-            assert blosc.set_nthreads(2) == 1
+            if blosc is not None:
+                assert blosc.set_nthreads(2) == 1
 
             for d in threadpoolctl.threadpool_info():
                 assert d["num_threads"] == 1, d
@@ -207,7 +213,8 @@ def test_profiling_disables_threadpools(tmpdir, profile_func):
 
         # Resets when done:
         assert numexpr.set_num_threads(2) == 3
-        assert blosc.set_nthreads(2) == 3
+        if blosc is not None:
+            assert blosc.set_nthreads(2) == 3
 
         for d in threadpoolctl.threadpool_info():
             if d["user_api"] == "blas":
