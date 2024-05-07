@@ -13,6 +13,7 @@ ipykernel
 nbconvert
 jinja2<3.1  # compatibility issues with jinja2.Markup in nbconvert
 numexpr
-blosc
+blosc; python_version<'3.12'  # no wheels available
 psutil
 flake8
+meson  # for f2py
