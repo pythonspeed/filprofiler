@@ -54,13 +54,10 @@ jobs:
         run: |
             sudo apt-get update
             sudo apt-get install -y gfortran ninja-build
-      - name: Install gfortran 2
-        if: contains(matrix.os, 'macos')
-        run: |
-          set -euo pipefail
-          brew install gcc@9 || true
-          gfortran --version || sudo ln -s /usr/local/bin/gfortran-9 /usr/local/bin/gfortran
-          gfortran --version
+      - if: contains(matrix.os, 'macos')
+        uses: fortran-lang/setup-fortran@v1
+        with:
+          compiler: gcc
       - name: "Install dependencies and code"
         run: |
           set -euo pipefail
