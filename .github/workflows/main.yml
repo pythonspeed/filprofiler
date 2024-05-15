@@ -54,10 +54,6 @@ jobs:
         run: |
             sudo apt-get update
             sudo apt-get install -y gfortran ninja-build
-      - if: contains(matrix.os, 'macos')
-        uses: fortran-lang/setup-fortran@v1
-        with:
-          compiler: gcc
       - name: "Install dependencies and code"
         run: |
           set -euo pipefail
