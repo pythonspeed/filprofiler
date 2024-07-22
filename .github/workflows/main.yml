@@ -46,6 +46,9 @@ jobs:
         if: startsWith(matrix.os, 'mac') && (matrix.python-version == '3.9')
         run: |
           rustup target add aarch64-apple-darwin
+      - name: "Install gfortran"
+        if: startsWith(matrix.os, 'mac')
+        run: |
           brew install gcc
           gfortran --version || sudo ln -s `which gfortran-12` /usr/local/bin/gfortran
       - uses: Swatinem/rust-cache@v1
