@@ -17,3 +17,4 @@ blosc; python_version<'3.12'  # no wheels available
 psutil
 flake8
 meson  # for f2py
+ninja  # for f2py
