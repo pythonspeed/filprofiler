@@ -53,7 +53,7 @@ jobs:
         if: contains(matrix.os, 'ubuntu')
         run: |
             sudo apt-get update
-            sudo apt-get install -y gfortran ninja-build
+            sudo apt-get install -y gfortran ninja-build lld
       - name: "Install dependencies and code"
         run: |
           set -euo pipefail
@@ -140,7 +140,7 @@ jobs:
     if: startsWith(github.event.ref, 'refs/tags')
     env:
       CIBW_ARCHS_LINUX: aarch64
-      CIBW_BEFORE_ALL_LINUX: "curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain stable -y"
+      CIBW_BEFORE_ALL_LINUX: "yum install -y lld; curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain stable -y"
       CIBW_BEFORE_BUILD: "touch filpreload/src/_filpreload.c"  # force rebuild of Python code with new interpreter
       CIBW_ENVIRONMENT: 'PATH="$PATH:$HOME/.cargo/bin"'
       CIBW_SKIP: "cp27-* cp34-* cp35-* cp36-* cp311-* pp* *-musllinux*"
