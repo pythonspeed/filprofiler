@@ -23,7 +23,7 @@ jobs:
     name: "${{ matrix.os }}: Python ${{ matrix.python-version }}"
     strategy:
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
         os: ["ubuntu-20.04", "macos-latest"]
 
     runs-on: "${{ matrix.os }}"
@@ -84,14 +84,14 @@ jobs:
         with:
           output-dir: dist
       - name: "Build manylinux wheels"
-        if: startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.8')
+        if: startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.9')
         run: |
             set -euo pipefail
             . venv/bin/activate
             make manylinux-wheel
             # Test wheel
             deactivate
-            python3.8 -m venv venv2
+            python3.9 -m venv venv2
             . venv2/bin/activate
             pip install -r requirements-dev.txt
             pip install dist/*-cp38-*manylinux*.whl
@@ -102,7 +102,7 @@ jobs:
           name: "${{ matrix.os }}-${{ matrix.python-version }}-wheel"
           path: dist/*.whl
       # - name: Publish distribution 📦 to Test PyPI
-      #   if: (startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.8')) || startsWith(matrix.os, 'mac')
+      #   if: (startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.9')) || startsWith(matrix.os, 'mac')
       #   env:
       #     TWINE_USERNAME: __token__
       #     TWINE_PASSWORD: ${{ secrets.TEST_PYPI_TOKEN }}
@@ -112,7 +112,7 @@ jobs:
       #       twine check dist/*.whl
       #       twine upload --repository testpypi dist/*.whl
       - name: Publish distribution 📦 to PyPI
-        if: startsWith(github.event.ref, 'refs/tags') && ((startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.8')) || (startsWith(matrix.os, 'mac') && (matrix.python-version == '3.9')))
+        if: startsWith(github.event.ref, 'refs/tags') && ((startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.9')) || (startsWith(matrix.os, 'mac') && (matrix.python-version == '3.9')))
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
