@@ -45,6 +45,7 @@ jobs:
       - name: "Install rust for arm64"
         if: startsWith(matrix.os, 'mac') && (matrix.python-version == '3.9')
         run: |
+          rustup target add x86_64-apple-darwin
           rustup target add aarch64-apple-darwin
       - name: "Install gfortran"
         if: startsWith(matrix.os, 'mac')
