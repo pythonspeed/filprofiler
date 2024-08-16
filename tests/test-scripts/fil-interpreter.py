@@ -15,7 +15,7 @@ import multiprocessing
 
 import pytest
 import numpy as np
-import numpy.core.numeric
+import numpy._core.numeric
 from pampy import _ as ANY, match
 from IPython.core.displaypub import CapturingDisplayPublisher
 from IPython.core.interactiveshell import InteractiveShell
@@ -54,7 +54,7 @@ def test_temporary_profiling(tmpdir):
     assert result == 1234
 
     # Allocations were tracked:
-    path = ((__file__, "f", 49), (numpy.core.numeric.__file__, "ones", ANY))
+    path = ((__file__, "f", 49), (numpy._core.numeric.__file__, "ones", ANY))
     allocations = get_allocations(tmpdir)
     assert match(allocations, {path: big}, as_mb) == pytest.approx(32, 0.1)
 
@@ -100,7 +100,7 @@ arr = np.ones((1024, 1024, 4), dtype=np.uint64)  # 32MB
     # Allocations were tracked:
     path = (
         (re.compile("<ipython-input-1-.*"), "__magic_run_with_fil", 3),
-        (numpy.core.numeric.__file__, "ones", ANY),
+        (numpy._core.numeric.__file__, "ones", ANY),
     )
     assert match(allocations, {path: big}, as_mb) == pytest.approx(32, 0.1)
 
@@ -133,7 +133,7 @@ arr = np.ones((1024, 1024, 8), dtype=np.uint64)  # 64MB
     # Allocations were tracked:
     path = (
         (re.compile("<ipython-input-1-.*"), "__magic_run_with_fil", 3),
-        (numpy.core.numeric.__file__, "ones", ANY),
+        (numpy._core.numeric.__file__, "ones", ANY),
     )
     assert match(allocations, {path: big}, as_mb) == pytest.approx(16, 0.1)
 
@@ -167,7 +167,7 @@ f()
     path = (
         (re.compile("<ipython-input-1-.*"), "__magic_run_with_fil", 5),
         (re.compile("<ipython-input-1-.*"), "f", 4),
-        (numpy.core.numeric.__file__, "ones", ANY),
+        (numpy._core.numeric.__file__, "ones", ANY),
     )
     assert match(allocations, {path: big}, as_mb) == pytest.approx(16, 0.1)
 
