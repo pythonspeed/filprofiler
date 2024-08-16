@@ -1,6 +1,6 @@
 pytest
 pampy
-numpy
+numpy>1
 #scikit-image
 cython
 black
