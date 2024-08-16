@@ -68,7 +68,8 @@ data_kernelspec/kernel.json: generate-kernelspec.py
 .PHONY: benchmark
 benchmark:
 	make benchmarks/results/*.json
-	python setup.py --version > benchmarks/results/version.txt
+	pip install setuptools_scm
+	python -m setuptools_scm > benchmarks/results/version.txt
 	git diff --word-diff benchmarks/results/
 
 .PHONY: benchmarks/results/pystone.json
