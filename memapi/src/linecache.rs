@@ -59,7 +59,7 @@ mod tests {
 
             Python::with_gil(|py| {
                 let blah = vec!["arr\n", "boo"];
-                let linecache = PyModule::import(py, "linecache")?;
+                let linecache = PyModule::import_bound(py, "linecache")?;
                 linecache
                     .getattr("cache")?.set_item("blah", (8, 0, blah, "blah"))?;
                 Ok::<(), PyErr>(())
