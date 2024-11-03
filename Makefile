@@ -37,7 +37,7 @@ test-python-no-deps:
 	cythonize -3 -i tests/test-scripts/pymalloc.pyx
 	c++ -shared -fPIC -lpthread tests/test-scripts/cpp.cpp -o tests/test-scripts/cpp.so
 	cc -shared -fPIC -lpthread tests/test-scripts/malloc_on_thread_exit.c -o tests/test-scripts/malloc_on_thread_exit.so
-	cd tests/test-scripts && python -m numpy.f2py -c fortran.f90 -m fortran
+	cd tests/test-scripts && python -m numpy.f2py --backend meson -c fortran.f90 -m fortran
 	env RUST_BACKTRACE=1 py.test -v tests/
 
 .PHONY: wheel
