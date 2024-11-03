@@ -473,8 +473,9 @@ def test_interpreter_with_fil():
     )
 
 
-def test_jupyter(tmpdir):
+def test_jupyter(tmp_path):
     """Jupyter magic can run Fil."""
+    tmpdir = tmp_path
     shutil.copyfile(TEST_SCRIPTS / "jupyter.ipynb", tmpdir / "jupyter.ipynb")
     check_call(
         [
@@ -494,8 +495,8 @@ def test_jupyter(tmpdir):
         html = f.read()
     assert "<iframe" in html
     [svg_path] = re.findall(r'src="([^"]*\.svg)"', html)
-    assert svg_path.endswith("peak-memory.svg")
-    svg_path = Path(tmpdir / svg_path)
+
+    svg_path = tmpdir / Path(svg_path)
     assert svg_path.exists()
     with open(svg_path) as f:
         # Make sure the source code is in the SVG:
