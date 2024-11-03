@@ -8,7 +8,7 @@
 
 ### Changes
 
-* Added support for Python 3.12 and 3.13.
+* Added support for Python 3.12.
 * Dropped support for Python 3.7 and 3.8.
 
 ## 2023.3.1 (2023-3-18)
