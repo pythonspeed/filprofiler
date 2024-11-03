@@ -46,7 +46,7 @@ wheel:
 
 .PHONY: manylinux-wheel
 manylinux-wheel:
-	docker run -u $(shell id -u):$(shell id -g) -v $(PWD):/src quay.io/pypa/manylinux2014_x86_64:latest /src/wheels/build-wheels.sh
+	docker run -v $(PWD):/src quay.io/pypa/manylinux2014_x86_64:latest /src/wheels/build-wheels.sh
 
 .PHONY: clean
 clean:
