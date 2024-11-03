@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+yum install -y lld
 
 mkdir /tmp/home
 mkdir /tmp/wheel
