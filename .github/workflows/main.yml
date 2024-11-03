@@ -23,7 +23,7 @@ jobs:
     name: "${{ matrix.os }}: Python ${{ matrix.python-version }}"
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
         os: ["ubuntu-20.04", "macos-latest"]
 
     runs-on: "${{ matrix.os }}"
@@ -75,7 +75,7 @@ jobs:
           make test
       - name: "Build macOS wheels"
         if: startsWith(matrix.os, 'mac') && (matrix.python-version == '3.9')
-        uses: pypa/cibuildwheel@v2.19.2
+        uses: pypa/cibuildwheel@v2.21.3
         env:
           MACOSX_DEPLOYMENT_TARGET: "11"
           CIBW_ARCHS_MACOS: "x86_64 arm64"
@@ -149,7 +149,7 @@ jobs:
       CIBW_BEFORE_ALL_LINUX: "yum install -y lld; curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain stable -y"
       CIBW_BEFORE_BUILD: "touch filpreload/src/_filpreload.c"  # force rebuild of Python code with new interpreter
       CIBW_ENVIRONMENT: 'PATH="$PATH:$HOME/.cargo/bin"'
-      CIBW_SKIP: "cp27-* cp34-* cp35-* cp36-* cp37-* pp* *-musllinux*"
+      CIBW_SKIP: "cp27-* cp34-* cp35-* cp36-* cp37-* cp38-* pp* *-musllinux*"
       CIBW_TEST_COMMAND: python -m filprofiler run {project}/benchmarks/pystone.py
     steps:
       - uses: actions/checkout@v3
@@ -162,7 +162,7 @@ jobs:
         with:
           platforms: arm64
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.19.2
+        uses: pypa/cibuildwheel@v2.21.3
         with:
           output-dir: dist
       - uses: actions/upload-artifact@v3
