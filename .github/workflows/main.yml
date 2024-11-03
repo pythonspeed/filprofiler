@@ -143,7 +143,7 @@ jobs:
   arm-wheels:
     name: "Wheels for ARM64"
     runs-on: "ubuntu-latest"
-    if: startsWith(github.event.ref, 'refs/tags')
+    #if: startsWith(github.event.ref, 'refs/tags')
     env:
       CIBW_ARCHS_LINUX: aarch64
       CIBW_MANYLINUX_AARCH64_IMAGE: "manylinux_2_28"
