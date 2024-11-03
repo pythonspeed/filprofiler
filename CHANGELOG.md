@@ -1,6 +1,12 @@
 # Release notes
 
-## 2024.11.0 (2024-11-03)
+## 2024.11.2 (2024-11-03)
+
+### Changes
+
+* Added support for Python 3.13.
+
+## 2024.11.1 (2024-11-03)
 
 ### Regressions
 
