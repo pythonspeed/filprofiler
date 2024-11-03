@@ -8,7 +8,7 @@ In order to reduce memory usage, you first need to figure out:
 
 That's exactly what Fil will help you find.
 Fil an open source memory profiler designed for data processing applications written in Python, and includes native support for Jupyter.
-Fil runs on Linux and macOS, and supports CPython 3.7 and later.
+Fil runs on Linux and macOS, and supports CPython 3.9 and later.
 
 ## Getting help
 
