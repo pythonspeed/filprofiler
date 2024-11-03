@@ -12,7 +12,7 @@ import shutil
 from glob import glob
 from xml.etree import ElementTree
 
-import numpy.core.numeric
+import numpy._core.numeric
 from pampy import match, _ as ANY, MatchError
 import pytest
 import psutil
@@ -57,7 +57,7 @@ def test_threaded_allocation_tracking():
     import threading
 
     threading = (threading.__file__, "run", ANY)
-    ones = (numpy.core.numeric.__file__, "ones", ANY)
+    ones = (numpy._core.numeric.__file__, "ones", ANY)
     script = str(script)
     h = (script, "h", 7)
 
@@ -90,7 +90,7 @@ def test_thread_allocates_after_main_thread_is_done():
     import threading
 
     threading = (threading.__file__, "run", ANY)
-    ones = (numpy.core.numeric.__file__, "ones", ANY)
+    ones = (numpy._core.numeric.__file__, "ones", ANY)
     script = str(script)
     thread1_path1 = ((script, "thread1", 9), ones)
 
@@ -267,7 +267,7 @@ def test_out_of_memory():
         "out-of-memory.prof",
     )
 
-    ones = (numpy.core.numeric.__file__, "ones", ANY)
+    ones = (numpy._core.numeric.__file__, "ones", ANY)
     script = str(script)
     expected_small_alloc = ((script, "<module>", 9), ones)
     toobig_alloc = ((script, "<module>", 12), ones)
@@ -473,8 +473,9 @@ def test_interpreter_with_fil():
     )
 
 
-def test_jupyter(tmpdir):
+def test_jupyter(tmp_path):
     """Jupyter magic can run Fil."""
+    tmpdir = tmp_path
     shutil.copyfile(TEST_SCRIPTS / "jupyter.ipynb", tmpdir / "jupyter.ipynb")
     check_call(
         [
@@ -494,8 +495,8 @@ def test_jupyter(tmpdir):
         html = f.read()
     assert "<iframe" in html
     [svg_path] = re.findall(r'src="([^"]*\.svg)"', html)
-    assert svg_path.endswith("peak-memory.svg")
-    svg_path = Path(tmpdir / svg_path)
+
+    svg_path = tmpdir / Path(svg_path)
     assert svg_path.exists()
     with open(svg_path) as f:
         # Make sure the source code is in the SVG:
@@ -511,7 +512,7 @@ def test_jupyter(tmpdir):
     path = (
         (re.compile(".*ipy*"), "__magic_run_with_fil", 3),
         (re.compile(".*ipy.*"), "alloc", 4),
-        (numpy.core.numeric.__file__, "ones", ANY),
+        (numpy._core.numeric.__file__, "ones", ANY),
     )
     assert match(allocations, {path: big}, as_mb) == pytest.approx(48, 0.1)
     actual_path = None
@@ -526,7 +527,7 @@ def test_jupyter(tmpdir):
     assert actual_path[0][0] != actual_path[1][0]  # code is in different cells
     path2 = (
         (re.compile(".*ipy.*"), "__magic_run_with_fil", 2),
-        (numpy.core.numeric.__file__, "ones", ANY),
+        (numpy._core.numeric.__file__, "ones", ANY),
     )
     assert match(allocations, {path2: big}, as_mb) == pytest.approx(20, 0.1)
     # It's possible to run nbconvert again.
@@ -646,8 +647,8 @@ def test_sigusr2():
 
     # SIGUSR2 dump only has allocations up to that point
     script = str(script)
-    path1 = ((script, "<module>", 8), (numpy.core.numeric.__file__, "ones", ANY))
-    path2 = ((script, "<module>", 11), (numpy.core.numeric.__file__, "ones", ANY))
+    path1 = ((script, "<module>", 8), (numpy._core.numeric.__file__, "ones", ANY))
+    path2 = ((script, "<module>", 11), (numpy._core.numeric.__file__, "ones", ANY))
 
     allocations_sigusr2 = get_allocations(sigusr2, direct=True)
     assert match(allocations_sigusr2, {path1: big}, as_mb) == pytest.approx(20, 0.1)

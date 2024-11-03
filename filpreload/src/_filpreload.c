@@ -1,5 +1,8 @@
 #include "Python.h"
 #include "ceval.h"
+#include "pyframe.h"
+#include "pylifecycle.h"
+#include "pystate.h"
 #if PY_MINOR_VERSION < 11
 #include "code.h"
 #else
@@ -54,9 +57,9 @@ PyCodeObject *PyFrame_GetCode(PyFrameObject *frame) {
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
-    // Underlying APIs we're wrapping:
-    static void *(*underlying_real_mmap)(void *addr, size_t length, int prot,
-                                         int flags, int fd, off_t offset) = 0;
+// Underlying APIs we're wrapping:
+static void *(*underlying_real_mmap)(void *addr, size_t length, int prot,
+                                     int flags, int fd, off_t offset) = 0;
 static int (*underlying_real_pthread_create)(pthread_t *thread,
                                              const pthread_attr_t *attr,
                                              void *(*start_routine)(void *),
@@ -265,6 +268,9 @@ static void finish_call() {
 __attribute__((visibility("hidden"))) int
 fil_tracer(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
   switch (what) {
+  case PyTrace_LINE:
+    current_line_number = frame->f_lineno;
+    break;
   case PyTrace_CALL:
     /*
       We want an efficient identifier for filename+fuction name. So we register
@@ -356,7 +362,7 @@ __attribute__((visibility("default"))) void register_fil_tracer() {
   pymemprofile_clear_current_callstack();
   decrement_reentrancy();
   // We use 123 as a marker object for tests.
-  PyEval_SetProfile(fil_tracer, PyLong_FromLong(123));
+  PyEval_SetTrace(fil_tracer, PyLong_FromLong(123));
 }
 
 /// Dump the current peak memory usage to disk.
@@ -518,7 +524,6 @@ fil_mmap_impl(void *addr, size_t length, int prot, int flags, int fd,
   }
 
   void *result = underlying_real_mmap(addr, length, prot, flags, fd, offset);
-
   // For now we only track anonymous mmap()s:
   if (result != MAP_FAILED && (flags & MAP_ANONYMOUS) &&
       should_track_memory()) {
@@ -537,19 +542,8 @@ SYMBOL_PREFIX(mmap)(void *addr, size_t length, int prot, int flags, int fd,
 }
 #endif
 
-// Old glibc that Conda uses defines aligned_alloc() using inline that doesn't
-// match this signature, which messes up the SYMBOL_PREFIX() stuff on Linux. So,
-// we do reimplemented_aligned_alloc, the name macOS technique uses, and then
-// rely on symbol alias (see --defsym in setup.py) to fix it.
-//
-// On macOS, aligned_alloc is only in macOS 10.15 or later, we need to define
-// it.
-#ifdef __APPLE__
-void *aligned_alloc(size_t alignment, size_t size);
-#endif
-
 __attribute__((visibility("default"))) void *
-reimplemented_aligned_alloc(size_t alignment, size_t size) {
+SYMBOL_PREFIX(aligned_alloc)(size_t alignment, size_t size) {
   increment_reentrancy();
   void *result = REAL_IMPL(aligned_alloc)(alignment, size);
   decrement_reentrancy();

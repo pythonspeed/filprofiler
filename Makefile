@@ -37,7 +37,7 @@ test-python-no-deps:
 	cythonize -3 -i tests/test-scripts/pymalloc.pyx
 	c++ -shared -fPIC -lpthread tests/test-scripts/cpp.cpp -o tests/test-scripts/cpp.so
 	cc -shared -fPIC -lpthread tests/test-scripts/malloc_on_thread_exit.c -o tests/test-scripts/malloc_on_thread_exit.so
-	cd tests/test-scripts && python -m numpy.f2py -c fortran.f90 -m fortran
+	cd tests/test-scripts && python -m numpy.f2py --backend meson -c fortran.f90 -m fortran
 	env RUST_BACKTRACE=1 py.test -v tests/
 
 .PHONY: wheel
@@ -46,7 +46,7 @@ wheel:
 
 .PHONY: manylinux-wheel
 manylinux-wheel:
-	docker run -u $(shell id -u):$(shell id -g) -v $(PWD):/src quay.io/pypa/manylinux2014_x86_64:latest /src/wheels/build-wheels.sh
+	docker run -v $(PWD):/src quay.io/pypa/manylinux_2_28_x86_64 /src/wheels/build-wheels.sh
 
 .PHONY: clean
 clean:
@@ -68,7 +68,8 @@ data_kernelspec/kernel.json: generate-kernelspec.py
 .PHONY: benchmark
 benchmark:
 	make benchmarks/results/*.json
-	python setup.py --version > benchmarks/results/version.txt
+	pip install setuptools_scm
+	python -m setuptools_scm > benchmarks/results/version.txt
 	git diff --word-diff benchmarks/results/
 
 .PHONY: benchmarks/results/pystone.json

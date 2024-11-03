@@ -182,7 +182,7 @@ impl Callstack {
 
     pub fn start_call(&mut self, parent_line_number: u32, callsite_id: CallSiteId) {
         if parent_line_number != 0 {
-            if let Some(mut call) = self.calls.last_mut() {
+            if let Some(call) = self.calls.last_mut() {
                 call.line_number = LineNumberInfo::LineNumber(parent_line_number);
             }
         }

@@ -66,7 +66,7 @@ def start_tracing(output_path: Union[str, Path]):
     """Start tracing allocations."""
     preload.fil_reset(str(output_path).encode("utf-8"))
     preload.fil_start_tracking()
-    threading.setprofile(_start_thread_trace)
+    threading.settrace(_start_thread_trace)
     preload.register_fil_tracer()
 
 
@@ -88,8 +88,8 @@ def stop_tracing(output_path: str) -> str:
 
     Returns path to the index HTML page of the report.
     """
-    sys.setprofile(None)
-    threading.setprofile(None)
+    sys.settrace(None)
+    threading.settrace(None)
     preload.fil_stop_tracking()
     result = create_report(output_path)
     # Clear allocations; we don't need them anymore, and they're just wasting

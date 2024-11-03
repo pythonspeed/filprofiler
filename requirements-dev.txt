@@ -1,6 +1,6 @@
 pytest
 pampy
-numpy
+numpy>1
 #scikit-image
 cython
 black
@@ -16,3 +16,5 @@ numexpr
 blosc
 psutil
 flake8
+meson  # for f2py
+ninja  # for f2py

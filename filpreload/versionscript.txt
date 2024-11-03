@@ -11,7 +11,6 @@
     munmap;
     posix_memalign;
     aligned_alloc;
-    malloc_usable_size;
     pthread_create;
     fork;
   local: *;

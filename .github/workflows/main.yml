@@ -23,7 +23,7 @@ jobs:
     name: "${{ matrix.os }}: Python ${{ matrix.python-version }}"
     strategy:
       matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
         os: ["ubuntu-20.04", "macos-latest"]
 
     runs-on: "${{ matrix.os }}"
@@ -45,22 +45,21 @@ jobs:
       - name: "Install rust for arm64"
         if: startsWith(matrix.os, 'mac') && (matrix.python-version == '3.9')
         run: |
+          rustup target add x86_64-apple-darwin
           rustup target add aarch64-apple-darwin
-      # - uses: Swatinem/rust-cache@v1
-      #   with:
-      #     key: "${{ matrix.os }}-${{ matrix.python-version }}"
+      - name: "Install gfortran"
+        if: startsWith(matrix.os, 'mac')
+        run: |
+          brew install gcc
+          gfortran --version || sudo ln -s `which gfortran-12` /usr/local/bin/gfortran
+      - uses: Swatinem/rust-cache@v1
+        with:
+          key: "${{ matrix.os }}-${{ matrix.python-version }}"
       - name: "Install gfortran"
         if: contains(matrix.os, 'ubuntu')
         run: |
             sudo apt-get update
-            sudo apt-get install -y gfortran
-      - name: Install gfortran 2
-        if: contains(matrix.os, 'macos')
-        run: |
-          set -euo pipefail
-          brew install gcc@9 || true
-          gfortran --version || sudo ln -s /usr/local/bin/gfortran-9 /usr/local/bin/gfortran
-          gfortran --version
+            sudo apt-get install -y gfortran ninja-build lld
       - name: "Install dependencies and code"
         run: |
           set -euo pipefail
@@ -76,27 +75,27 @@ jobs:
           make test
       - name: "Build macOS wheels"
         if: startsWith(matrix.os, 'mac') && (matrix.python-version == '3.9')
-        uses: pypa/cibuildwheel@v2.12.0
+        uses: pypa/cibuildwheel@v2.21.3
         env:
-          MACOSX_DEPLOYMENT_TARGET: "10.15"
+          MACOSX_DEPLOYMENT_TARGET: "11"
           CIBW_ARCHS_MACOS: "x86_64 arm64"
-          CIBW_SKIP: "cp37-macosx_arm64 cp36* pp*"
+          CIBW_SKIP: "cp37-macosx_arm64 cp36* cp37* cp38* cp39* cp313* pp*"
           CIBW_BEFORE_BUILD: "touch filpreload/src/_filpreload.c"  # force rebuild of Python code with new interpreter
           CIBW_TEST_COMMAND: python -m filprofiler run {project}/benchmarks/pystone.py
         with:
           output-dir: dist
       - name: "Build manylinux wheels"
-        if: startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.8')
+        if: startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.9')
         run: |
             set -euo pipefail
             . venv/bin/activate
             make manylinux-wheel
             # Test wheel
             deactivate
-            python3.8 -m venv venv2
+            python3.9 -m venv venv2
             . venv2/bin/activate
             pip install -r requirements-dev.txt
-            pip install dist/*-cp38-*manylinux*.whl
+            pip install dist/*-cp39-*manylinux*.whl
             mv filprofiler filprofiler.disabled
             make test-python-no-deps
       - uses: actions/upload-artifact@v3
@@ -104,7 +103,7 @@ jobs:
           name: "${{ matrix.os }}-${{ matrix.python-version }}-wheel"
           path: dist/*.whl
       # - name: Publish distribution 📦 to Test PyPI
-      #   if: (startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.8')) || startsWith(matrix.os, 'mac')
+      #   if: (startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.9')) || startsWith(matrix.os, 'mac')
       #   env:
       #     TWINE_USERNAME: __token__
       #     TWINE_PASSWORD: ${{ secrets.TEST_PYPI_TOKEN }}
@@ -114,7 +113,7 @@ jobs:
       #       twine check dist/*.whl
       #       twine upload --repository testpypi dist/*.whl
       - name: Publish distribution 📦 to PyPI
-        if: startsWith(github.event.ref, 'refs/tags') && ((startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.8')) || (startsWith(matrix.os, 'mac') && (matrix.python-version == '3.9')))
+        if: startsWith(github.event.ref, 'refs/tags') && ((startsWith(matrix.os, 'ubuntu') && (matrix.python-version == '3.9')) || (startsWith(matrix.os, 'mac') && (matrix.python-version == '3.9')))
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
@@ -147,10 +146,10 @@ jobs:
     if: startsWith(github.event.ref, 'refs/tags')
     env:
       CIBW_ARCHS_LINUX: aarch64
-      CIBW_BEFORE_ALL_LINUX: "curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain stable -y"
+      CIBW_BEFORE_ALL_LINUX: "yum install -y lld; curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain stable -y"
       CIBW_BEFORE_BUILD: "touch filpreload/src/_filpreload.c"  # force rebuild of Python code with new interpreter
       CIBW_ENVIRONMENT: 'PATH="$PATH:$HOME/.cargo/bin"'
-      CIBW_SKIP: "cp27-* cp34-* cp35-* cp36-* cp311-* pp* *-musllinux*"
+      CIBW_SKIP: "cp27-* cp34-* cp35-* cp36-* cp37-* cp38-* cp313-* pp* *-musllinux*"
       CIBW_TEST_COMMAND: python -m filprofiler run {project}/benchmarks/pystone.py
     steps:
       - uses: actions/checkout@v3
@@ -163,7 +162,7 @@ jobs:
         with:
           platforms: arm64
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.12.0
+        uses: pypa/cibuildwheel@v2.21.3
         with:
           output-dir: dist
       - uses: actions/upload-artifact@v3
