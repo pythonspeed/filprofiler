@@ -23,7 +23,7 @@ jobs:
     name: "${{ matrix.os }}: Python ${{ matrix.python-version }}"
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
         os: ["ubuntu-20.04", "macos-latest"]
 
     runs-on: "${{ matrix.os }}"
@@ -79,7 +79,7 @@ jobs:
         env:
           MACOSX_DEPLOYMENT_TARGET: "11"
           CIBW_ARCHS_MACOS: "x86_64 arm64"
-          CIBW_SKIP: "cp37-macosx_arm64 cp36* cp37* cp38* cp39* cp313* pp*"
+          CIBW_SKIP: "cp37-macosx_arm64 cp36* cp37* cp38* cp39* pp*"
           CIBW_BEFORE_BUILD: "touch filpreload/src/_filpreload.c"  # force rebuild of Python code with new interpreter
           CIBW_TEST_COMMAND: python -m filprofiler run {project}/benchmarks/pystone.py
         with:
@@ -150,7 +150,7 @@ jobs:
       CIBW_BEFORE_ALL_LINUX: "yum install -y lld && curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain stable -y"
       CIBW_BEFORE_BUILD: "touch filpreload/src/_filpreload.c"  # force rebuild of Python code with new interpreter
       CIBW_ENVIRONMENT: 'PATH="$PATH:$HOME/.cargo/bin"'
-      CIBW_SKIP: "cp27-* cp34-* cp35-* cp36-* cp37-* cp38-* cp313-* pp* *-musllinux*"
+      CIBW_SKIP: "cp36-* cp37-* cp38-* pp* *-musllinux*"
       CIBW_TEST_COMMAND: python -m filprofiler run {project}/benchmarks/pystone.py
     steps:
       - uses: actions/checkout@v3

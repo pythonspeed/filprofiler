@@ -1,3 +1,4 @@
+#define Py_BUILD_CORE 1
 #include "Python.h"
 #include "ceval.h"
 #include "pyframe.h"
@@ -27,7 +28,8 @@
 #include <errno.h>
 
 #if PY_MINOR_VERSION < 9
-PyFrameObject *PyFrame_GetBack(PyFrameObject *frame) {
+    PyFrameObject *
+    PyFrame_GetBack(PyFrameObject *frame) {
   if (frame->f_back != NULL) {
     Py_INCREF(frame->f_back);
   }

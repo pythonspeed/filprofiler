@@ -25,12 +25,12 @@ version = "0.11"
 default-features = false
 
 [dependencies.psutil]
-version = "3.2"
+version = "3.3"
 default-features = false
 features = ["memory", "process"]
 
 [dependencies.pyo3]
-version = "0.20"
+version = "0.22"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 cgroups-rs = "0.3.2"
