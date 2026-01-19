@@ -26,6 +26,10 @@ Fil runs on Linux and macOS, and supports CPython 3.9 and later.
 >
 > —Peter Sobot
 
+## A note on the implementation
+
+This uses a mixture of C and Rust, mostly for historic reasons: this was the first Rust project I wrote, starting in 2020. If you want to do something similar you shouldn't need any C, Rust with PyO3 will suffice.
+
 ## License
 
 Copyright 2021 Hyphenated Enterprises LLC
