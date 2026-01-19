@@ -88,7 +88,7 @@ fn set_current_callstack(callstack: &Callstack) {
     })
 }
 
-extern "C" {
+unsafe extern "C" {
     fn _exit(exit_code: std::os::raw::c_int);
     fn free(address: *mut c_void);
 }
@@ -252,28 +252,28 @@ fn dump_peak_to_flamegraph(path: &str) {
     dump_to_flamegraph(path, true, "peak-memory", "Peak Tracked Memory Usage", true);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn pymemprofile_add_allocation(address: usize, size: usize, line_number: u16) {
     add_allocation(address, size, line_number, false).unwrap_or(());
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn pymemprofile_free_allocation(address: usize) {
     free_allocation(address);
 }
 
 /// Returns allocation size, or 0 if not stored. Useful for tests, mostly.
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn pymemprofile_get_allocation_size(address: usize) -> usize {
     get_allocation_size(address)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn pymemprofile_add_anon_mmap(address: usize, size: usize, line_number: u16) {
     add_allocation(address, size, line_number, true).unwrap_or(());
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe extern "C" fn pymemprofile_add_function_location(
     filename: *const c_char,
     filename_length: u64,
@@ -299,7 +299,7 @@ unsafe extern "C" fn pymemprofile_add_function_location(
 
 /// # Safety
 /// Intended for use from C APIs, what can I say.
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe extern "C" fn pymemprofile_start_call(
     parent_line_number: u16,
     function_id: u64,
@@ -309,14 +309,14 @@ unsafe extern "C" fn pymemprofile_start_call(
     start_call(function_id, parent_line_number, line_number);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn pymemprofile_finish_call() {
     finish_call();
 }
 
 /// # Safety
 /// Intended for use from C.
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe extern "C" fn pymemprofile_reset(default_path: *const c_char) {
     let path = unsafe { CStr::from_ptr(default_path) }
         .to_str()
@@ -327,7 +327,7 @@ unsafe extern "C" fn pymemprofile_reset(default_path: *const c_char) {
 
 /// # Safety
 /// Intended for use from C.
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe extern "C" fn pymemprofile_dump_peak_to_flamegraph(path: *const c_char) {
     let path = unsafe { CStr::from_ptr(path) }
         .to_str()
@@ -338,7 +338,7 @@ unsafe extern "C" fn pymemprofile_dump_peak_to_flamegraph(path: *const c_char) {
 
 /// # Safety
 /// Intended for use from C.
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe extern "C" fn pymemprofile_get_current_callstack() -> *mut c_void {
     let callstack = get_current_callstack();
     let callstack = Box::new(callstack);
@@ -347,7 +347,7 @@ unsafe extern "C" fn pymemprofile_get_current_callstack() -> *mut c_void {
 
 /// # Safety
 /// Intended for use from C.
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe extern "C" fn pymemprofile_set_current_callstack(callstack: *mut c_void) {
     // The callstack is a Box created via pymemprofile_get_callstack()
     let callstack = unsafe { Box::<Callstack>::from_raw(callstack as *mut Callstack) };
@@ -356,7 +356,7 @@ unsafe extern "C" fn pymemprofile_set_current_callstack(callstack: *mut c_void) 
 
 /// # Safety
 /// Intended for use from C.
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe extern "C" fn pymemprofile_clear_current_callstack() {
     let callstack = Callstack::new();
     set_current_callstack(&callstack);
@@ -375,7 +375,7 @@ where
 
 /// C APIs in _filpreload.c.
 type CCallback = extern "C" fn(*mut c_void);
-extern "C" {
+unsafe extern "C" {
     // Call function conditonally in non-reentrant way.
     fn call_if_tracking(f: CCallback, user_data: *mut c_void) -> c_void;
 
@@ -408,14 +408,14 @@ impl pymemprofile_api::mmap::MmapAPI for FilMmapAPI {
 
 /// On macOS we're using reimplemented_* prefix.
 #[cfg(target_os = "macos")]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn reimplemented_munmap(addr: *mut c_void, len: usize) -> c_int {
     return unsafe { pymemprofile_api::mmap::munmap_wrapper(addr, len, &FilMmapAPI {}) };
 }
 
 /// On Linux we're using same name as the API we're replacing.
 #[cfg(target_os = "linux")]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn munmap(addr: *mut c_void, len: usize) -> c_int {
     return unsafe { pymemprofile_api::mmap::munmap_wrapper(addr, len, &FilMmapAPI {}) };
 }
