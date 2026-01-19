@@ -57,9 +57,9 @@ mod tests {
             pyo3::prepare_freethreaded_python();
             let mut cache = LineCacher::default();
 
-            Python::with_gil(|py| {
+            Python::attach(|py| {
                 let blah = vec!["arr\n", "boo"];
-                let linecache = PyModule::import_bound(py, "linecache")?;
+                let linecache = PyModule::import(py, "linecache")?;
                 linecache
                     .getattr("cache")?.set_item("blah", (8, 0, blah, "blah"))?;
                 Ok::<(), PyErr>(())
