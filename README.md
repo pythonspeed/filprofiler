@@ -19,7 +19,7 @@ Fil runs on Linux and macOS, and supports CPython 3.9 and later.
 ## What users are saying
 
 > "Within minutes of using your tool, I was able to identify a major memory bottleneck that I never would have thought existed.  The ability to track memory allocated via the Python interface and also C allocation is awesome, especially for my NumPy / Pandas programs."
-> 
+>
 > —Derrick Kondo
 
 > "Fil has just pointed straight at the cause of a memory issue that's been costing my team tons of time and compute power. Thanks again for such an excellent tool!"
@@ -32,7 +32,7 @@ This uses a mixture of C and Rust, mostly for historic reasons: this was the fir
 
 ## License
 
-Copyright 2021 Hyphenated Enterprises LLC
+Copyright 2026 Hyphenated Enterprises LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
