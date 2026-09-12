@@ -32,11 +32,11 @@ jobs:
       PYTHONFAULTHANDLER: "true"
 
     steps:
-      - uses: "actions/checkout@v3"
+      - uses: "actions/checkout@v7"
         with:
           # We need tags to get the correct code version:
           fetch-depth: 0
-      - uses: "actions/setup-python@v4"
+      - uses: "actions/setup-python@v7"
         with:
           python-version: "${{ matrix.python-version }}"
       - uses: "actions-rs/toolchain@v1"
@@ -52,7 +52,7 @@ jobs:
         run: |
           brew install gcc
           gfortran --version || sudo ln -s `which gfortran-12` /usr/local/bin/gfortran
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
         with:
           key: "${{ matrix.os }}-${{ matrix.python-version }}"
       - name: "Install gfortran"
@@ -98,7 +98,7 @@ jobs:
             pip install dist/*-cp39-*manylinux*.whl
             mv filprofiler filprofiler.disabled
             make test-python-no-deps
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v7
         with:
           name: "${{ matrix.os }}-${{ matrix.python-version }}-wheel"
           path: dist/*.whl
@@ -126,7 +126,7 @@ jobs:
     name: "Documentation check and publish"
     runs-on: "ubuntu-latest"
     steps:
-      - uses: "actions/checkout@v3"
+      - uses: "actions/checkout@v7"
       - name: "Run mdbook"
         run: |
           set -euo pipefail
@@ -153,20 +153,20 @@ jobs:
       CIBW_SKIP: "cp36-* cp37-* cp38-* pp* *-musllinux*"
       CIBW_TEST_COMMAND: python -m filprofiler run {project}/benchmarks/pystone.py
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
         with:
           # We need tags to get the correct code version:
           fetch-depth: 0
       - name: Set up QEMU
         if: runner.os == 'Linux'
-        uses: docker/setup-qemu-action@v2
+        uses: docker/setup-qemu-action@v4
         with:
           platforms: arm64
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.21.3
         with:
           output-dir: dist
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v7
         with:
           name: "arm64-wheel"
           path: dist/*.whl
